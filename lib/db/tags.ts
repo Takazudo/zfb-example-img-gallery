@@ -1,12 +1,31 @@
 import type { Env } from "../env";
-import type { Paged, PhotoCard, Tag, TagWithCount } from "../types";
+import type { Paged, PhotoCard, TagWithCount } from "../types";
 import { PHOTO_PAGE_SIZE, resolvePage } from "./photos";
 
 /** Maximum number of canonical tags that may be attached to one photo. */
 export const MAX_TAGS_PER_PHOTO = 10;
 
+/** Minimum number of Unicode code points in one canonical tag. */
+export const TAG_MIN_CODEPOINTS = 1;
+
 /** Maximum number of Unicode code points in one canonical tag. */
 export const TAG_MAX_CODEPOINTS = 32;
+
+/** URL delimiters and C0/C1 controls cannot safely inhabit a path segment. */
+const FORBIDDEN_TAG_CHARS = /[\/%?#\u0000-\u001F\u007F-\u009F]/;
+
+export type TagSummary = { id: number; name: string; photo_count: number };
+export type TagRow = { id: number; name: string };
+export type TaggedPhoto = {
+  id: number;
+  title: string;
+  r2_key: string;
+  thumb_key: string | null;
+  width: number;
+  height: number;
+  created_at: string;
+  username: string;
+};
 
 export interface TagParseResult {
   /** Accepted, normalised, deduped, capped at MAX_TAGS_PER_PHOTO. */
@@ -16,17 +35,19 @@ export interface TagParseResult {
 }
 
 /** Normalise one tag fragment, or null when it is empty or invalid. */
-export function normalizeTag(raw: string): string | null {
+export function normalizeTagName(raw: string): string | null {
   let tag = raw.trim();
   if (tag.startsWith("#")) tag = tag.slice(1);
-  tag = tag.normalize("NFKC").toLowerCase().trim();
-  tag = tag.replace(/\s+/g, "-");
-  if (tag === "") return null;
-  if (/[/%?#]/.test(tag)) return null;
-  if (/[\u0000-\u001F\u007F]/.test(tag)) return null;
-  if ([...tag].length > TAG_MAX_CODEPOINTS) return null;
+  tag = tag.normalize("NFKC").toLowerCase().replace(/\s+/g, "-").trim();
+  if (tag.length === 0) return null;
+  if (FORBIDDEN_TAG_CHARS.test(tag)) return null;
+  const codePoints = [...tag].length;
+  if (codePoints < TAG_MIN_CODEPOINTS || codePoints > TAG_MAX_CODEPOINTS) return null;
   return tag;
 }
+
+/** Backwards-compatible name used by the upload form and foundation tests. */
+export const normalizeTag = normalizeTagName;
 
 /** Parse a comma-separated free-form tag field into validated canonical names. */
 export function normalizeTagInput(input: string): TagParseResult {
@@ -36,7 +57,7 @@ export function normalizeTagInput(input: string): TagParseResult {
 
   for (const fragment of input.split(",")) {
     const raw = fragment.trim();
-    const normalized = normalizeTag(raw);
+    const normalized = normalizeTagName(raw);
     if (normalized === null) {
       // Empty fragments are intentionally dropped; only invalid non-empty
       // fragments need to be called out in the upload form.
@@ -78,14 +99,21 @@ export async function listAllTags(env: Env): Promise<TagWithCount[]> {
   return result.results;
 }
 
-/** Look up a tag by a URL segment after canonical normalisation. */
-export async function getTagByName(env: Env, rawName: string): Promise<Tag | null> {
-  const name = normalizeTag(rawName);
-  if (name === null) return null;
-  return env.DB
-    .prepare("SELECT id, name FROM tags WHERE name = ?")
-    .bind(name)
-    .first<Tag>();
+/** Every tag in the table, including tags with no remaining photos. */
+export async function listAllTagsWithCounts(env: Env): Promise<TagSummary[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT t.id AS id, t.name AS name, COUNT(pt.photo_id) AS photo_count
+       FROM tags t
+       LEFT JOIN photo_tags pt ON pt.tag_id = t.id
+      GROUP BY t.id, t.name
+      ORDER BY photo_count DESC, t.name ASC`,
+  ).all<TagSummary>();
+  return results;
+}
+
+/** Look up a tag by its already-normalised name. */
+export async function getTagByName(env: Env, name: string): Promise<TagRow | null> {
+  return env.DB.prepare("SELECT id, name FROM tags WHERE name = ?").bind(name).first<TagRow>();
 }
 
 /** Count photos attached to one tag. */
@@ -116,4 +144,43 @@ export async function listTagPhotoPage(
     .bind(tagId, pageMeta.pageSize, pageMeta.offset)
     .all<PhotoCard>();
   return { ...pageMeta, items: result.results };
+}
+
+/** One page of photos carrying this tag, newest first. */
+export async function listPhotosByTag(
+  env: Env,
+  tagId: number,
+  limit: number,
+  offset: number,
+): Promise<TaggedPhoto[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT p.id AS id, p.title AS title, p.r2_key AS r2_key, p.thumb_key AS thumb_key,
+            p.width AS width, p.height AS height, p.created_at AS created_at,
+            u.username AS username
+       FROM photos p
+       JOIN photo_tags pt ON pt.photo_id = p.id
+       JOIN users u ON u.id = p.user_id
+      WHERE pt.tag_id = ?
+      ORDER BY p.created_at DESC, p.id DESC
+      LIMIT ? OFFSET ?`,
+  )
+    .bind(tagId, limit, offset)
+    .all<TaggedPhoto>();
+  return results;
+}
+
+/** Parse a tag page parameter with the stricter route contract. */
+export function parseTagPage(raw: unknown): number {
+  if (typeof raw === "number") {
+    return Number.isSafeInteger(raw) && raw >= 1 ? raw : 1;
+  }
+  if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) return 1;
+
+  const parsed = Number(raw.trim());
+  return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : 1;
+}
+
+/** Resolve a tag page using the shared page-size and offset semantics. */
+export function resolveTagPage(raw: unknown, totalItems: number) {
+  return resolvePage(parseTagPage(raw), totalItems, PHOTO_PAGE_SIZE);
 }
