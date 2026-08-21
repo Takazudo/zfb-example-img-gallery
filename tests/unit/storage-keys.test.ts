@@ -24,7 +24,7 @@ describe("storage keys", () => {
 describe("contentLengthExceedsLimit", () => {
   it.each([
     [undefined, false], ["abc", false], ["-1", false], [String(MAX_UPLOAD_BYTES), false],
-    [String(MAX_UPLOAD_BYTES + 1), true],
+    [String(MAX_UPLOAD_BYTES + 1), true], ["9".repeat(400), true],
   ])("handles %s", (contentLength, expected) => {
     const headers = contentLength === undefined ? undefined : { "content-length": contentLength };
     expect(contentLengthExceedsLimit(new Request("https://example.test", { headers }))).toBe(expected);

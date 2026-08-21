@@ -7,8 +7,8 @@
  *     stale D1 data and would never invoke the Worker.
  * (2) dist/404.html is the only HTML file emitted — the single deliberate SSG
  *     page, required by `not_found_handling = "404-page"`.
- * (3) No client JS bundle ships and no <script> tag appears in the emitted
- *     HTML. This demo's whole point is zero client JavaScript.
+ * (3) No client JS bundle ships and no <script> tag appears in the emitted SSG
+ *     HTML. Dynamic photo detail may contain non-executable JSON-LD only.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";

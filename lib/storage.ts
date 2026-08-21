@@ -54,7 +54,9 @@ export function contentLengthExceedsLimit(request: Request): boolean {
   const raw = request.headers.get("content-length");
   if (raw === null || !/^\d+$/.test(raw)) return false;
   const length = Number(raw);
-  return Number.isFinite(length) && Number.isInteger(length) && length >= 0 && length > MAX_UPLOAD_BYTES;
+  // A syntactically numeric value can still overflow to Infinity. Treat that
+  // as oversized instead of falling through to request.formData().
+  return !Number.isSafeInteger(length) || length > MAX_UPLOAD_BYTES;
 }
 
 export type StoreResult =

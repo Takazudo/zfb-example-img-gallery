@@ -404,7 +404,8 @@ async function checkNavigationAndSite() {
     if (["/", "/register", "/login"].includes(path)) {
       assert(navigate.text !== notFoundHtml, `${path} navigation returned dist/404.html`);
     }
-    assert(!/<script\b/i.test(navigate.text), `${path} response contains a script tag`);
+    const executableScript = /<script\b(?![^>]*\btype=["']application\/ld\+json["'])[^>]*>/i;
+    assert(!executableScript.test(navigate.text), `${path} response contains an executable script tag`);
   }
 
   const root = await http("/");

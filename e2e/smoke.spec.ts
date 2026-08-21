@@ -26,7 +26,7 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   await page.fill('input[name="password"]', password);
   await Promise.all([
     page.waitForURL((url) => url.pathname !== "/register"),
-    page.click('button[type="submit"]'),
+    page.click('form[action="/register"] button[type="submit"]'),
   ]);
   expect(new URL(page.url()).pathname).not.toBe("/register");
 
@@ -37,7 +37,7 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
     await page.fill('input[name="password"]', password);
     await Promise.all([
       page.waitForURL((url) => url.pathname !== "/login"),
-      page.click('button[type="submit"]'),
+      page.click('form[action="/login"] button[type="submit"]'),
     ]);
     cookies = await page.context().cookies();
   }
@@ -56,7 +56,7 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   await page.fill('input[name="tags"]', `#E2E Smoke, ${uniqueTag}`);
   await Promise.all([
     page.waitForURL(/\/photos\/\d+$/),
-    page.click('button[type="submit"]'),
+    page.click('form[action="/upload"] button[type="submit"]'),
   ]);
   const photoPath = new URL(page.url()).pathname;
 
@@ -66,38 +66,61 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   await expect(gridPhoto.locator("img")).toHaveAttribute("width", /\d+/);
   await expect(gridPhoto.locator("img")).toHaveAttribute("height", /\d+/);
 
+  // Exercise both bare collection roots through real browser navigations.
+  // Their `/*` entries in `run_worker_first` do not match the roots, so this
+  // catches the otherwise easy-to-miss Static Assets 404-page regression.
+  await page.goto("/authors");
+  await expect(page.locator("h1")).toHaveText("Authors");
+  await expect(page.locator(`main a[href="/authors/${username}"]`)).toBeVisible();
+
+  await page.goto(`/authors/${username}`);
+  await expect(page.locator("h1")).toHaveText(`@${username}`);
+  await expect(page.locator(`a[href="${photoPath}"]`)).toBeVisible();
+
   await page.goto(photoPath);
   await expect(page.locator("h1")).toContainText(title);
-  await expect(page.locator(`a[href="/authors/${username}"]`)).toHaveText(`@${username}`);
+  await expect(
+    page.getByTestId("photo-detail-aside").locator(`a[href="/authors/${username}"]`),
+  ).toHaveText(`@${username}`);
   await expect(page.locator("p.whitespace-pre-wrap")).toHaveText(description);
   await expect(page.locator("p.whitespace-pre-wrap em, p.whitespace-pre-wrap strong")).toHaveCount(0);
   await expect(page.locator('a[href="/tags/e2e-smoke"]')).toBeVisible();
   await expect(page.locator(`a[href="/tags/${uniqueTag}"]`)).toBeVisible();
 
+  const ogImage = await page.locator('meta[property="og:image"]').getAttribute("content");
+  expect(ogImage).toBeTruthy();
+  expect(ogImage!).toMatch(/^https?:\/\//);
+  const ogUrl = new URL(ogImage!);
+  expect(ogUrl.pathname).toBe(`/og/v1/${photoPath.split("/").at(-1)}.jpg`);
+
+  await page.goto("/tags");
+  await expect(page.locator("h1")).toHaveText("Tags");
+  await expect(page.locator('a[href="/tags/e2e-smoke"]')).toBeVisible();
+
   await page.goto("/tags/e2e-smoke");
   await expect(page.locator("h1")).toHaveText("#e2e-smoke");
   await expect(page.locator(`a[href="${photoPath}"]`)).toBeVisible();
 
-  const ogImage = await page.locator('meta[property="og:image"]').getAttribute("content");
-  expect(ogImage).toBeTruthy();
-  expect(ogImage!).toMatch(/^https?:\/\//);
-  // The tag is authoritative for the path and generation. Local zfb keeps the
+  // The meta tag is authoritative for the path and generation. Local zfb keeps the
   // production canonical origin, so retain that path while addressing the
   // request to this test's wrangler server.
-  const localOgImage = new URL(new URL(ogImage!).pathname, page.url()).toString();
+  const localOgImage = new URL(ogUrl.pathname, page.url()).toString();
   const response = await page.request.get(localOgImage);
   expect(response.status()).toBe(200);
   expect(response.headers()["content-type"]).toContain("image/jpeg");
 });
 
 test("serves the gallery without client JavaScript", async ({ page }) => {
+  const executableScripts = page.locator('script:not([type="application/ld+json"])');
+
   await page.goto("/");
-  await expect(page.locator("script")).toHaveCount(0);
+  await expect(executableScripts).toHaveCount(0);
 
   const photoHref = await page.locator('a[href^="/photos/"]').first().getAttribute("href");
   await page.goto(photoHref ?? "/photos/1");
-  await expect(page.locator("script")).toHaveCount(0);
+  await expect(executableScripts).toHaveCount(0);
+  await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(1);
 
   await page.goto("/tags");
-  await expect(page.locator("script")).toHaveCount(0);
+  await expect(executableScripts).toHaveCount(0);
 });

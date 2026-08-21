@@ -34,6 +34,11 @@ jobs:
           if [ -z "$PROD" ] || [ "$PROD" = "null" ] || [ -z "$PREV" ] || [ "$PREV" = "null" ]; then
             echo "::error::could not resolve both database IDs"; exit 1
           fi
+          jq -n \
+            --arg production "$PROD" \
+            --arg preview "$PREV" \
+            '{"img-gallery": $production, "img-gallery-preview": $preview}' \
+            > d1-ids.json
           {
             echo "## Paste into wrangler.toml"
             echo '```toml'
@@ -43,3 +48,10 @@ jobs:
             echo "database_id = \"$PREV\"   # img-gallery-preview"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload D1 database IDs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: d1-ids
+          path: d1-ids.json
+          retention-days: 7

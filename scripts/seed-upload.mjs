@@ -149,7 +149,7 @@ async function loginAndCheck(page, email, password) {
   }
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="password"]', password);
-  await page.click('button[type="submit"]');
+  await page.click('form[action="/login"] button[type="submit"]');
   await page.goto("/upload", { waitUntil: "domcontentloaded" });
   return (await page.locator('input[name="photo"]').count()) > 0;
 }
@@ -163,7 +163,7 @@ async function ensureLoggedIn(page, email, password) {
   await page.fill('input[name="password"]', password);
   // A duplicate registration deliberately re-renders /register with 409;
   // clicking need not be paired with a URL assertion here.
-  await page.click('button[type="submit"]');
+  await page.click('form[action="/register"] button[type="submit"]');
   await page.waitForLoadState("domcontentloaded").catch(() => {});
 
   if (!(await loginAndCheck(page, email, password))) {
@@ -187,7 +187,7 @@ async function uploadOne(page, photo) {
   await page.fill('input[name="tags"]', normalizeSeedTags(photo.tags).join(", "));
   await Promise.all([
     page.waitForURL(/\/photos\/\d+(?:[/?#]|$)/u, { timeout: SUBMIT_TIMEOUT }),
-    page.click('button[type="submit"]'),
+    page.click('form[action="/upload"] button[type="submit"]'),
   ]);
 }
 

@@ -25,13 +25,11 @@ The mandatory topic-worker command selects unit, ssr, and handlers. pnpm test:al
 
 ### Browser lane
 
-The intended browser lane is one @smoke Playwright spec in CI:
+The browser lane is one `@smoke` Playwright spec in CI:
 
 register → login → upload → photo appears on page 1 → detail page → tag page lists it → the detail page's og:image URL returns 200 with image/jpeg.
 
-CI should intercept outbound image requests with a 1×1 PNG. Failure artefacts should be uploaded on failure() || cancelled().
-
-TODO: e2e/, playwright.config.ts, and scripts/smoke.mjs are not present in this checkout yet, so no browser-level result may be claimed until the integration work adds and runs that lane.
+The spec intercepts outbound image requests with a 1×1 PNG. `.github/workflows/deploy.yml` runs it with one Chromium worker before deployment and uploads Playwright diagnostics when the job fails or is cancelled. `scripts/smoke.mjs` provides the separate post-deploy production check.
 
 ### SSR invariants
 
@@ -39,17 +37,16 @@ These are the invariants that can fail silently and belong in the build/integrat
 
 - Every page except pages/404.tsx exports the literal prerender = false.
 - dist/404.html is the only HTML file emitted by the build.
-- No client-JS bundle and no <script> tag ships.
+- No client-JS bundle or executable `<script>` tag ships. Photo detail deliberately includes one non-executable `application/ld+json` SEO block.
 - A navigation-header (sec-fetch-mode: navigate) request against every bare collection root in run_worker_first — /, /authors, and /tags — is answered by the Worker, not by dist/404.html. This is the failure that looks fine to curl and is broken for real browser navigation.
 
-TODO: the current checkout has no browser/integration assertion script for these deployment-level invariants; add it with the pending integration lane.
+`scripts/assert-ssr-invariants.mjs` checks the source and built-output invariants. The test suite also covers collection-root navigation headers through the Worker entry point.
 
 ## Deliberate deltas
 
 - **T0 + T1 only.** There is no T2 end-to-end split and no T3 scheduled re-exam; nothing in this standalone recipe is heavy or registry-coupled enough to earn either tier.
 - **Miniflare is scoped, not default.** Use the real Worker runtime for storage and SQL semantics only. Everything else uses stubs because booting a Worker runtime per test file is an order of magnitude slower than the inner-loop budget.
-- **Exactly one computed-style check per layout-owning surface.** CSS correctness cannot be established by unit tests. The design-system work and the detail page should each run one verify-styles.mjs computed-style invocation at 375, 800, and 1200 pixels: one URL, one selector, all breakpoints, one invocation. This is not a general Playwright suite.
-- TODO: verify-styles.mjs is not present in this checkout yet. Until it lands, do not claim that the computed-style check has run.
+- **Exactly one computed-style check per layout-owning surface.** CSS correctness cannot be established by unit tests. The design-system work and the detail page should each run one shared-tooling `verify-styles.mjs` computed-style invocation at 375, 800, and 1200 pixels: one URL, one selector, all breakpoints, one invocation. This verifier is deliberately not committed as a regression gate; record the exact command and width-specific results when performing this L5 verification.
 - **A test script exists here.** The upstream toolchain's internal examples/ rule forbids that workspace's recursive test lane; it does not apply to this standalone recipe repository.
 - **gravity: "auto" is not asserted locally.** Local wrangler dev implements only width, height, rotate, and format of the Images binding. Local assertions cover exact output dimensions and content type; salient-band cropping is verified once against a deployed preview.
 

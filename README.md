@@ -207,7 +207,7 @@ The [Cloudflare setup runbook](docs/cloudflare-setup.md) is the source of truth 
 
 On a push to `main`, GitHub Actions installs with the frozen lockfile, runs `pnpm typecheck`, `pnpm test`, and `pnpm build`, applies remote migrations to `img-gallery`, and runs `pnpm exec wrangler deploy` for the production environment. On a pull request it performs the same checks, applies migrations to `img-gallery-preview` with `--env preview`, and uploads a preview version with `--preview-alias pr-<N>`; it does not touch production resources. Migrations are applied by CI rather than by hand.
 
-The current workflow does not yet contain the browser smoke files; the integration work must add that lane before claiming a browser-level CI result. See [TESTING.md](TESTING.md).
+The workflow runs the `@smoke` Playwright lane before either deployment, uploads its diagnostics on failure or cancellation, and runs `scripts/smoke.mjs` against production after a successful main-branch deploy. See [TESTING.md](TESTING.md).
 
 ## Testing
 
@@ -218,7 +218,7 @@ pnpm exec tsc --noEmit
 pnpm exec vitest run --project unit --project ssr --project handlers
 ```
 
-The browser-driven smoke lane belongs in CI once the pending integration files land. Its strategy and agent rules are documented in [TESTING.md](TESTING.md).
+The browser-driven `@smoke` lane is part of the T1 CI gate. Its strategy and agent rules are documented in [TESTING.md](TESTING.md).
 
 ## zfb upgrade procedure
 
