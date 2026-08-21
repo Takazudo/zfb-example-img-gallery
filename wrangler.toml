@@ -1,5 +1,8 @@
 name = "zfb-example-img-gallery"
-compatibility_date = "2026-08-01"
+# Wrangler 4.85.0's bundled local runtime supports compatibility dates through
+# 2026-05-01. Keep this pinned until the project can deliberately upgrade the
+# Wrangler dependency; a newer date prevents local dev from starting.
+compatibility_date = "2026-05-01"
 
 # REQUIRED. The zfb Cloudflare adapter threads `env` to SSR routes via
 # `AsyncLocalStorage` from `node:async_hooks`; without `nodejs_compat` the
@@ -29,7 +32,6 @@ run_worker_first = [
   "/tags", "/tags/*",
   "/img/*",
   "/og/*",
-  "/og/v1/*",
   "/robots.txt", "/sitemap.xml",
   "/register", "/login", "/logout", "/settings", "/upload",
 ]
