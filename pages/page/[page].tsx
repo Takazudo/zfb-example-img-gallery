@@ -1,18 +1,40 @@
 import { getCloudflareContext } from "@takazudo/zfb-adapter-cloudflare";
-import { EmptyState } from "../components/empty-state";
-import { Pagination } from "../components/pagination";
-import { PhotoCard } from "../components/photo-card";
-import { PhotoGrid } from "../components/photo-grid";
-import GalleryLayout from "../layouts/gallery-layout";
-import { getSessionUser } from "../lib/auth";
-import { listPhotoPage } from "../lib/db/photos";
-import type { Env } from "../lib/env";
-import { buildPageSeo } from "../lib/seo";
-import { SITE_NAME } from "../lib/site";
+import { EmptyState } from "../../components/empty-state";
+import { Pagination } from "../../components/pagination";
+import { PhotoCard } from "../../components/photo-card";
+import { PhotoGrid } from "../../components/photo-grid";
+import GalleryLayout from "../../layouts/gallery-layout";
+import { getSessionUser } from "../../lib/auth";
+import { listPhotoPage } from "../../lib/db/photos";
+import type { Env } from "../../lib/env";
+import { buildPageSeo } from "../../lib/seo";
+import { SITE_NAME } from "../../lib/site";
 
 export const prerender = false;
 
 const GRID_SIZES = "(max-width: 30rem) 100vw, 240px";
+
+/**
+ * Parse a `/page/<segment>` URL segment into a requested 1-based page number.
+ *
+ * Malformed input degrades to page 1; a well-formed but absurdly large number
+ * degrades to the last page via MAX_SAFE_INTEGER so the query module's clamp
+ * handles it, rather than silently bouncing the visitor back to page 1.
+ */
+export function parsePageParam(raw: string | undefined): number {
+  if (typeof raw !== "string" || !/^\d+$/.test(raw)) return 1;
+  const n = Number(raw);
+  if (n < 1) return 1;
+  if (!Number.isSafeInteger(n)) return Number.MAX_SAFE_INTEGER;
+  return n;
+}
+
+type PageProps = { params?: Record<string, string | undefined> };
+
+function lastPathSegment(pathname: string): string | undefined {
+  const parts = pathname.split("/").filter(Boolean);
+  return parts.at(-1);
+}
 
 function renderPhotoGrid(items: Awaited<ReturnType<typeof listPhotoPage>>["items"]) {
   return (
@@ -40,21 +62,30 @@ function renderPhotoGrid(items: Awaited<ReturnType<typeof listPhotoPage>>["items
   );
 }
 
-export default async function TopPage() {
+export default async function PhotoGridPage({ params }: PageProps = {}) {
   const { env, request } = getCloudflareContext<Env>();
+  const rawPage = params?.page ?? lastPathSegment(new URL(request.url).pathname);
   const [sessionUser, result] = await Promise.all([
     getSessionUser(env, request),
-    listPhotoPage(env, 1),
+    listPhotoPage(env, parsePageParam(rawPage)),
   ]);
   const user = sessionUser
     ? { username: sessionUser.username, avatarKey: sessionUser.avatar_key }
     : null;
-  const seo = buildPageSeo({ request, title: SITE_NAME, path: "/" });
+  const effectivePage = result.page;
+  const canonicalPath = effectivePage === 1 ? "/" : `/page/${effectivePage}`;
+  const seo = buildPageSeo({
+    request,
+    title: effectivePage === 1 ? SITE_NAME : `Page ${effectivePage}`,
+    path: canonicalPath,
+  });
 
   return (
     <GalleryLayout user={user} activePath="/" seo={seo}>
       <section class="flex flex-col gap-vsp-md">
-        <h1 class="text-display font-semibold tracking-tight">{SITE_NAME}</h1>
+        <h1 class="text-display font-semibold tracking-tight">
+          {effectivePage === 1 ? SITE_NAME : `${SITE_NAME} — Page ${effectivePage}`}
+        </h1>
         {result.totalItems === 0 ? (
           <EmptyState
             title="No photos yet"
@@ -67,7 +98,7 @@ export default async function TopPage() {
             {renderPhotoGrid(result.items)}
             {result.totalPages > 1 ? (
               <Pagination
-                page={result.page}
+                page={effectivePage}
                 pageCount={result.totalPages}
                 href={(page) => (page === 1 ? "/" : `/page/${page}`)}
               />
