@@ -285,9 +285,9 @@ registration and upload paths. The six steps below are intentionally sequential.
 
 4. **Export the seed account credentials.**
 
-   The seeder reads both values from the environment and fails loudly if either is unset. The email
-   may be any fixed address; enter the password interactively so it does not appear in shell
-   history:
+   The password is required and the seeder fails before launching a browser when it is unset.
+   `SEED_TAKAZUDO_EMAIL` is optional, but setting a fixed address makes the target account
+   unambiguous. Enter the password interactively so it does not appear in shell history:
 
    ```sh
    export SEED_TAKAZUDO_EMAIL='seed@example.invalid'
@@ -305,7 +305,7 @@ registration and upload paths. The six steps below are intentionally sequential.
    ```sh
    node scripts/seed-upload.mjs --base-url http://localhost:8788
    # Or, only when intentionally seeding the deployed Worker:
-   node scripts/seed-upload.mjs --base-url https://zfb-example-img-gallery.takazudomodular.com
+   node scripts/seed-upload.mjs --base-url https://zfb-example-img-gallery.takazudomodular.com --remote
    ```
 
    The script registers `@Takazudo` (tolerating “already exists”), logs in once, and uploads all
@@ -321,14 +321,14 @@ registration and upload paths. The six steps below are intentionally sequential.
    `600w` object and set its `thumb_key`:
 
    ```sh
-   node scripts/backfill-thumbs.mjs --base-url http://localhost:8788
+   node scripts/backfill-thumbs.mjs --persist-to .wrangler/state
    ```
 
    This is a demo-seed step, not an application feature. Genuine user uploads still have no
    thumbnail and the grid falls back to the full image. If local state reports a lock, stop
-   `pnpm exec wrangler dev`, run the backfill, then restart the Worker for verification. If an
-   S3-compatible client is used for the object upload instead, use the separate R2 credentials from
-   section 2 and keep them shell-only.
+   `pnpm exec wrangler dev`, run the backfill, then restart the Worker for verification. If the
+   deployed database is the target, pass `--remote`; that mode uses the separate R2 credentials
+   from section 2 for S3-compatible object puts, and those values must remain shell-only.
 
 Run the six steps locally first to validate the complete flow. After the first production deploy,
 run the seeder and backfill once more against the live hostname to populate the production D1 and
@@ -336,8 +336,8 @@ R2 resources (the local state is not uploaded by deployment). The seeder's resum
 this safe:
 
 ```sh
-node scripts/seed-upload.mjs --base-url https://zfb-example-img-gallery.takazudomodular.com
-node scripts/backfill-thumbs.mjs --base-url https://zfb-example-img-gallery.takazudomodular.com
+node scripts/seed-upload.mjs --base-url https://zfb-example-img-gallery.takazudomodular.com --remote
+node scripts/backfill-thumbs.mjs --remote
 ```
 
 Keep `SEED_TAKAZUDO_PASSWORD` in the shell only for this operation. Do not run the live commands
@@ -347,6 +347,11 @@ against a preview URL unless the intent is to seed that PR's isolated database a
 
 The checked-in workflow is event-aware; there is nothing to click after the repository and
 configuration are ready.
+
+Before the UUIDs and repository secrets are configured, the same workflow still runs every local
+typecheck, test, build, invariant, and browser gate, then reports that Cloudflare deployment is
+deferred. This allows the bootstrap workflow itself to land on `main` without a guaranteed-red
+first deployment.
 
 - A **push to `main`** builds, checks, applies migrations to `img-gallery`, runs
   `pnpm exec wrangler deploy` for production, idempotently enables the `workers.dev` subdomain,

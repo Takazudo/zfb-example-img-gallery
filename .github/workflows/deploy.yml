@@ -29,6 +29,21 @@ jobs:
         with:
           node-version: 24
 
+      - name: Detect Cloudflare deployment readiness
+        id: cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          configured=true
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            configured=false
+          fi
+          uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+          if [ "$(grep -Ec "^database_id = \"${uuid}\"$" wrangler.toml || true)" -ne 2 ]; then
+            configured=false
+          fi
+          echo "configured=${configured}" >> "$GITHUB_OUTPUT"
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec zfb --version
       # `zfb build` does not type-check TS/TSX, so this runs first and fails fast.
@@ -61,8 +76,13 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      - name: Report deferred Cloudflare deployment
+        if: steps.cloudflare.outputs.configured != 'true'
+        run: echo "::notice::Cloudflare deployment deferred until bootstrap IDs and repository secrets are configured; all local CI gates passed."
+
       # Idempotent: wrangler tracks applied migrations in `d1_migrations`.
       - name: Apply D1 migrations (remote)
+        if: steps.cloudflare.outputs.configured == 'true'
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             pnpm exec wrangler d1 migrations apply img-gallery-preview --env preview --remote
@@ -72,7 +92,7 @@ jobs:
 
       # `--env=""` explicitly selects top-level (production) config.
       - name: Deploy production Worker
-        if: github.event_name != 'pull_request'
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name != 'pull_request'
         run: pnpm exec wrangler deploy --env=""
 
       # Wrangler's config flags are authoritative on deploy, but this explicit
@@ -80,6 +100,7 @@ jobs:
       # subdomain. Cloudflare returns 10056 when the same state is requested.
       - name: Enable workers.dev subdomain and preview URLs
         id: workers-dev
+        if: steps.cloudflare.outputs.configured == 'true'
         env:
           ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
@@ -115,14 +136,14 @@ jobs:
           fi
 
       - name: Upload PR preview version
-        if: github.event_name == 'pull_request'
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
         continue-on-error: true
         run: |
           pnpm exec wrangler versions upload --env preview \
             --preview-alias "pr-${{ github.event.pull_request.number }}"
 
       - name: Comment PR preview URL
-        if: github.event_name == 'pull_request'
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
         env:
           PREVIEW_URL: ${{ steps.workers-dev.outputs.preview_url }}
@@ -146,5 +167,5 @@ jobs:
             }
 
       - name: Smoke-test the custom domain
-        if: github.event_name != 'pull_request'
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name != 'pull_request'
         run: node scripts/smoke.mjs
