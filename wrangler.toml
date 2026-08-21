@@ -29,6 +29,8 @@ run_worker_first = [
   "/tags", "/tags/*",
   "/img/*",
   "/og/*",
+  "/og/v1/*",
+  "/robots.txt", "/sitemap.xml",
   "/register", "/login", "/logout", "/settings", "/upload",
 ]
 

@@ -1,4 +1,7 @@
 import type { ComponentChildren } from "preact";
+import { FaviconLinks, Seo } from "../components/seo";
+import type { SeoData } from "../lib/seo";
+import { SITE_NAME } from "../lib/site";
 import "../styles/global.css";
 
 /** Minimal structural shape of the signed-in user. Declared locally because auth and shared types belong to sibling tasks. */
@@ -7,13 +10,12 @@ export type LayoutUser = { username: string; avatarKey?: string | null };
 type Props = {
   title?: string;
   description?: string;
+  seo?: SeoData;
   user?: LayoutUser | null;
   activePath?: string;
   children: ComponentChildren;
 };
 
-// Provisional identity. A later sub-task introduces lib/site.ts as the source of truth.
-const SITE_NAME = "Stillframe";
 const TAGLINE = "A zfb image gallery on Cloudflare.";
 const navClass = "inline-flex min-h-[2.75rem] items-center px-hsp-xs text-small text-ink-soft transition-colors hover:text-brand";
 const actionClass = "inline-flex min-h-[2.75rem] items-center rounded-md bg-brand px-hsp-sm text-small font-semibold text-white transition-colors hover:bg-brand-strong";
@@ -22,15 +24,21 @@ function NavLink({ href, activePath, children }: { href: string; activePath?: st
   return <a href={href} aria-current={activePath === href ? "page" : undefined} class={navClass}>{children}</a>;
 }
 
-export default function GalleryLayout({ title, description = TAGLINE, user = null, activePath, children }: Props) {
+export default function GalleryLayout({ title, description = TAGLINE, seo, user = null, activePath, children }: Props) {
   return (
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{title ? `${title} — ${SITE_NAME}` : SITE_NAME}</title>
-        <meta name="description" content={description} />
-        {/* A later sub-task inserts its Seo component here. */}
+        {seo ? (
+          <Seo seo={seo} />
+        ) : (
+          <>
+            <title>{title ? `${title} — ${SITE_NAME}` : SITE_NAME}</title>
+            <meta name="description" content={description} />
+          </>
+        )}
+        <FaviconLinks />
         <link rel="stylesheet" href="/assets/app.css" />
       </head>
       <body class="flex min-h-dvh flex-col">
