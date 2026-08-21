@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@takazudo/zfb-adapter-cloudflare";
 import { Button } from "../components/button";
 import { EmptyState } from "../components/empty-state";
 import { Field } from "../components/field";
@@ -5,6 +6,8 @@ import { Pagination } from "../components/pagination";
 import { PhotoCard } from "../components/photo-card";
 import { PhotoGrid } from "../components/photo-grid";
 import { TagList } from "../components/tag-list";
+import { buildPageSeo } from "../lib/seo";
+import type { Env } from "../lib/env";
 import GalleryLayout from "../layouts/gallery-layout";
 
 export const prerender = false;
@@ -31,8 +34,15 @@ const samplePhotos = [
 ];
 
 export default function HomePage() {
+  const { request } = getCloudflareContext<Env>();
+
   return (
-    <GalleryLayout title="Gallery" activePath="/" user={null}>
+    <GalleryLayout
+      title="Gallery"
+      activePath="/"
+      user={null}
+      seo={buildPageSeo({ request, title: "Gallery" })}
+    >
       <section class="mb-vsp-lg">
         <p class="text-micro font-semibold uppercase tracking-widest text-brand">Component preview</p>
         <h1 class="mt-vsp-2xs text-display font-semibold tracking-tight">Quiet chrome, loud photographs.</h1>
