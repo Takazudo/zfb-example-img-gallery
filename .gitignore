@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.zfb/
+.zfb-build/
+.wrangler/
+.mf/
+# zfb temp file stranded on abnormal termination
+zfb-tailwind-entry-*.css
+.DS_Store
+worktrees/
+test-results/
+playwright-report/
+# Local secrets — never commit. The seed account's password is env-only.
+.env
+.env.*
+.dev.vars
+# Mirrored source images (~174 MB, re-downloadable). The manifests ARE committed.
+data/photos/*
+!data/photos/slugs.txt
+!data/photos/manifest.json

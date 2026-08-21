@@ -1,0 +1,5 @@
+# Mirrored source images: ~174 MB of WebP that never delta-compresses.
+# Never committed — re-run the mirror script to fetch them.
+2000w/
+600w/
+*.part
