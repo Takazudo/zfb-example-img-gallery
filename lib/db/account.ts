@@ -1,14 +1,22 @@
 import type { Env } from "../env";
 import type { SessionUser, User, UserCredentials } from "../types";
+import { OG_GENERATION } from "../og";
+import { listPrefixes } from "../storage";
 
 /** Lowercase and trim an email before storage or comparison. */
 export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
-/** Lowercase and trim a username before storage or comparison. */
+/** Canonical username form used for storage, URLs, and comparisons. */
 export function normalizeUsername(raw: string): string {
-  return raw.trim().toLowerCase();
+  return raw.normalize("NFKC").trim().toLowerCase();
+}
+
+type DbSource = Env | D1Database;
+
+function database(source: DbSource): D1Database {
+  return "DB" in source ? source.DB : source;
 }
 
 /** Insert a user with already-hashed credentials and return its generated id. */
@@ -60,11 +68,17 @@ export async function findUserById(env: Env, id: number): Promise<User | null> {
 }
 
 /** Return whether a username is taken, excluding one optional existing user. */
-export async function isUsernameTaken(env: Env, rawUsername: string, exceptUserId?: number): Promise<boolean> {
+export async function isUsernameTaken(
+  source: DbSource,
+  rawUsername: string,
+  exceptUserId?: number,
+): Promise<boolean> {
+  const db = database(source);
   const statement = exceptUserId === undefined
-    ? env.DB.prepare("SELECT 1 AS found FROM users WHERE username = ? LIMIT 1").bind(normalizeUsername(rawUsername))
-    : env.DB
-      .prepare("SELECT 1 AS found FROM users WHERE username = ? AND id != ? LIMIT 1")
+    ? db.prepare("SELECT 1 AS found FROM users WHERE lower(username) = lower(?) LIMIT 1")
+      .bind(normalizeUsername(rawUsername))
+    : db
+      .prepare("SELECT 1 AS found FROM users WHERE lower(username) = lower(?) AND id != ? LIMIT 1")
       .bind(normalizeUsername(rawUsername), exceptUserId);
   return (await statement.first<{ found: number }>()) !== null;
 }
@@ -125,20 +139,62 @@ export async function deleteSessionsForUser(env: Env, userId: number): Promise<v
   await env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
 }
 
-/** Rename a user after the caller has checked username uniqueness. */
-export async function updateUsername(env: Env, userId: number, rawUsername: string): Promise<void> {
-  await env.DB
-    .prepare("UPDATE users SET username = ? WHERE id = ?")
-    .bind(normalizeUsername(rawUsername), userId)
-    .run();
+/** Rename a user after the caller has checked username uniqueness.
+ *
+ * A pre-flight uniqueness query cannot close a concurrent-write race. D1
+ * reports that race as a UNIQUE constraint error; expose it as false so the
+ * route can return 409 instead of leaking a 500.
+ */
+export async function updateUsername(
+  source: DbSource,
+  userId: number,
+  rawUsername: string,
+): Promise<boolean> {
+  try {
+    await database(source)
+      .prepare("UPDATE users SET username = ? WHERE id = ?")
+      .bind(normalizeUsername(rawUsername), userId)
+      .run();
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/unique constraint failed/i.test(message)) return false;
+    throw error;
+  }
 }
 
-/** Set or clear a user's avatar R2 key. */
-export async function updateAvatarKey(env: Env, userId: number, avatarKey: string | null): Promise<void> {
-  await env.DB
+/** Set a user's avatar key and return the previous key for post-update cleanup. */
+export async function updateAvatarKey(
+  source: DbSource,
+  userId: number,
+  avatarKey: string | null,
+): Promise<string | null> {
+  const db = database(source);
+  const previous = await db
+    .prepare("SELECT avatar_key FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ avatar_key: string | null }>();
+  await db
     .prepare("UPDATE users SET avatar_key = ? WHERE id = ?")
     .bind(avatarKey, userId)
     .run();
+  return previous?.avatar_key ?? null;
+}
+
+export interface AccountUser {
+  id: number;
+  username: string;
+  email: string;
+  avatar_key: string | null;
+  created_at: string;
+}
+
+/** Read the signed-in user's complete account row. */
+export async function getAccount(source: DbSource, userId: number): Promise<AccountUser | null> {
+  return database(source)
+    .prepare("SELECT id, username, email, avatar_key, created_at FROM users WHERE id = ?")
+    .bind(userId)
+    .first<AccountUser>();
 }
 
 export interface AccountObjectKeys {
@@ -148,6 +204,12 @@ export interface AccountObjectKeys {
   photoIds: number[];
 }
 
+export interface AccountObjects {
+  photoIds: number[];
+  /** Original and thumbnail photo blobs plus the avatar, deduplicated. */
+  blobKeys: string[];
+}
+
 interface AccountPhotoRow {
   id: number;
   r2_key: string;
@@ -155,6 +217,30 @@ interface AccountPhotoRow {
 }
 
 /** Read every R2 object key owned by an account before any rows are deleted. */
+export async function collectAccountObjects(source: DbSource, userId: number): Promise<AccountObjects> {
+  const db = database(source);
+  const user = await db
+    .prepare("SELECT avatar_key FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ avatar_key: string | null }>();
+  const photos = await db
+    .prepare("SELECT id, r2_key, thumb_key FROM photos WHERE user_id = ?")
+    .bind(userId)
+    .all<AccountPhotoRow>();
+
+  const blobKeys = new Set<string>();
+  if (user?.avatar_key) blobKeys.add(user.avatar_key);
+  for (const photo of photos.results) {
+    blobKeys.add(photo.r2_key);
+    if (photo.thumb_key) blobKeys.add(photo.thumb_key);
+  }
+
+  return {
+    photoIds: photos.results.map((photo) => photo.id),
+    blobKeys: [...blobKeys],
+  };
+}
+
 export async function collectAccountObjectKeys(env: Env, userId: number): Promise<AccountObjectKeys> {
   const user = await env.DB
     .prepare("SELECT avatar_key FROM users WHERE id = ?")
@@ -174,14 +260,55 @@ export async function collectAccountObjectKeys(env: Env, userId: number): Promis
 }
 
 /** Delete all D1 rows for an account in one child-before-parent batch. */
-export async function deleteAccountRows(env: Env, userId: number): Promise<void> {
-  await env.DB.batch([
-    env.DB
+export async function deleteAccountRows(source: DbSource, userId: number): Promise<void> {
+  const db = database(source);
+  await db.batch([
+    db
       .prepare("DELETE FROM photo_tags WHERE photo_id IN (SELECT id FROM photos WHERE user_id = ?)")
       .bind(userId),
-    env.DB.prepare("DELETE FROM photos WHERE user_id = ?").bind(userId),
-    env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
-    env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId),
-    env.DB.prepare("DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM photo_tags)").bind(),
+    db.prepare("DELETE FROM photos WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM users WHERE id = ?").bind(userId),
   ]);
+}
+
+/** Split an object-key list into R2-safe batches without reordering it. */
+export function chunkKeys(keys: string[], size = 1000): string[][] {
+  if (!Number.isInteger(size) || size <= 0) throw new RangeError("chunk size must be positive");
+  const chunks: string[][] = [];
+  for (let offset = 0; offset < keys.length; offset += size) {
+    chunks.push(keys.slice(offset, offset + size));
+  }
+  return chunks;
+}
+
+export type PurgeResult = { ok: true } | { ok: false; reason: "r2-delete-failed" };
+
+/**
+ * Delete R2 objects first. D1 rows are removed only after all R2 batches have
+ * completed, so a failed/retried purge never leaves a row pointing at a
+ * missing object and remains safe when a key was already deleted.
+ */
+export async function purgeAccount(env: Env, userId: number): Promise<PurgeResult> {
+  const objects = await collectAccountObjects(env.DB, userId);
+  const keys = new Set(objects.blobKeys);
+
+  try {
+    const generations = new Set([
+      ...(await listPrefixes(env, "derived/og/")),
+      `derived/og/${OG_GENERATION}/`,
+    ]);
+    for (const generation of generations) {
+      for (const photoId of objects.photoIds) keys.add(`${generation}${photoId}.jpg`);
+    }
+
+    for (const batch of chunkKeys([...keys])) {
+      await env.BUCKET.delete(batch);
+    }
+  } catch {
+    return { ok: false, reason: "r2-delete-failed" };
+  }
+
+  await deleteAccountRows(env.DB, userId);
+  return { ok: true };
 }
