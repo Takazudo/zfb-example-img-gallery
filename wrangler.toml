@@ -1,0 +1,70 @@
+name = "zfb-example-img-gallery"
+compatibility_date = "2026-08-01"
+
+# REQUIRED. The zfb Cloudflare adapter threads `env` to SSR routes via
+# `AsyncLocalStorage` from `node:async_hooks`; without `nodejs_compat` the
+# Worker fails to start with `No such module "node:async_hooks"`.
+compatibility_flags = ["nodejs_compat"]
+
+# The SSR Worker the zfb adapter emits. The adapter also emits
+# `dist/.assetsignore` so the Worker source is never served as a public asset.
+main = "./dist/_worker.js"
+
+# These two MUST stay ABOVE the `[assets]` table. `preview_urls` is explicit
+# because it otherwise follows `workers_dev` and PR preview URLs could vanish.
+workers_dev = true
+preview_urls = true
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "404-page"
+# Glob patterns matched BEFORE the asset layer answers. Bare collection roots are
+# listed alongside their wildcards because `/authors/*` does not match `/authors`.
+# Any later sub-task adding an SSR route outside these prefixes must add it here.
+run_worker_first = [
+  "/", "/page/*",
+  "/photos/*",
+  "/authors", "/authors/*",
+  "/tags", "/tags/*",
+  "/img/*",
+  "/og/*",
+  "/register", "/login", "/logout", "/settings", "/upload",
+]
+
+# Cloudflare Images binding — an RPC to an off-Worker service, so awaiting it is
+# I/O rather than CPU. Used to cover-crop photos to 1200x630 social cards.
+[images]
+binding = "IMAGES"
+
+# Production D1. `DB` is what becomes `env.DB` in an SSR route.
+[[d1_databases]]
+binding = "DB"
+database_name = "img-gallery"
+database_id = "REPLACE_AFTER_BOOTSTRAP"
+
+# Production R2 bucket for photo, avatar and derived-card objects. Private.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "img-gallery"
+
+# Custom domain, PRODUCTION ONLY. Leave commented until bootstrap/runbook setup.
+# [[routes]]
+# pattern = "zfb-example-img-gallery.takazudomodular.com"
+# custom_domain = true
+
+# Preview bindings are non-inheritable and therefore repeated in full.
+[env.preview]
+routes = []
+
+[env.preview.images]
+binding = "IMAGES"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "img-gallery-preview"
+database_id = "REPLACE_AFTER_BOOTSTRAP"
+
+[[env.preview.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "img-gallery-preview"

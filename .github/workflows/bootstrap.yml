@@ -1,0 +1,45 @@
+name: Cloudflare bootstrap (one-time)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Provision D1 databases and R2 buckets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - run: npm install -g wrangler@4.85.0
+
+      # `create` errors when the resource already exists. Tolerate that so the
+      # workflow is re-runnable; canonical IDs are read from `list` below.
+      - name: Create resources (idempotent)
+        run: |
+          wrangler d1 create img-gallery || true
+          wrangler d1 create img-gallery-preview || true
+          wrangler r2 bucket create img-gallery || true
+          wrangler r2 bucket create img-gallery-preview || true
+
+      - name: Read D1 database IDs
+        run: |
+          wrangler d1 list --json > d1-list.json
+          PROD=$(jq -r '.[] | select(.name == "img-gallery") | .uuid' d1-list.json)
+          PREV=$(jq -r '.[] | select(.name == "img-gallery-preview") | .uuid' d1-list.json)
+          if [ -z "$PROD" ] || [ "$PROD" = "null" ] || [ -z "$PREV" ] || [ "$PREV" = "null" ]; then
+            echo "::error::could not resolve both database IDs"; exit 1
+          fi
+          {
+            echo "## Paste into wrangler.toml"
+            echo '```toml'
+            echo "# [[d1_databases]]"
+            echo "database_id = \"$PROD\"   # img-gallery"
+            echo "# [[env.preview.d1_databases]]"
+            echo "database_id = \"$PREV\"   # img-gallery-preview"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
