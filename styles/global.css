@@ -1,8 +1,92 @@
-/* Minimal stub. The design-system sub-task owns the real token set. Do not add
-   UI-level class names here; UI styling lives as utility classes on components. */
+/*
+ * Design tokens + base layer.
+ *
+ * Tokens ONLY. UI-level class names do not belong here — every visual
+ * decision that is not an element default is expressed as utility
+ * classes on a Preact component.
+ */
+
 @import "tailwindcss";
 
 @theme {
-  --color-ink: oklch(0.21 0.03 264);
-  --color-paper: oklch(0.99 0.004 90);
+  /* ── Ink & surfaces (oklch: perceptually uniform) ─────────────── */
+  --color-ink: oklch(0.22 0.012 260);
+  --color-ink-soft: oklch(0.48 0.012 260);
+  --color-ink-faint: oklch(0.64 0.01 260);
+  --color-paper: oklch(0.985 0.003 95);
+  --color-surface: oklch(1 0 0);
+  --color-surface-sunken: oklch(0.962 0.004 95);
+  --color-line: oklch(0.9 0.006 95);
+  --color-line-strong: oklch(0.78 0.008 95);
+  /* ── Accent ───────────────────────────────────────────────────── */
+  --color-brand: oklch(0.5 0.1 215);
+  --color-brand-strong: oklch(0.41 0.1 215);
+  --color-brand-soft: oklch(0.955 0.022 215);
+  --color-accent: oklch(0.68 0.15 55);
+  --color-success: oklch(0.62 0.13 155);
+  --color-success-soft: oklch(0.96 0.035 155);
+  --color-danger: oklch(0.57 0.17 25);
+  --color-danger-soft: oklch(0.96 0.035 25);
+  /* ── Horizontal spacing axis ──────────────────────────────────── */
+  --spacing-hsp-2xs: 0.25rem;
+  --spacing-hsp-xs: 0.5rem;
+  --spacing-hsp-sm: 0.75rem;
+  --spacing-hsp-md: 1.25rem;
+  --spacing-hsp-lg: 2rem;
+  --spacing-hsp-xl: 3.5rem;
+  /* ── Vertical spacing axis ────────────────────────────────────── */
+  --spacing-vsp-2xs: 0.25rem;
+  --spacing-vsp-xs: 0.5rem;
+  --spacing-vsp-sm: 0.875rem;
+  --spacing-vsp-md: 1.5rem;
+  --spacing-vsp-lg: 2.5rem;
+  --spacing-vsp-xl: 4rem;
+  /* Fluid page gutter. Every full-width surface uses px-gutter so the
+     header, the grid and the footer share one side inset. */
+  --spacing-gutter: clamp(1rem, 0.5rem + 2vw, 4rem);
+  /* ── Type scale ───────────────────────────────────────────────── */
+  --text-display: 2.25rem;
+  --text-display--line-height: 1.1;
+  --text-title: 1.625rem;
+  --text-title--line-height: 1.2;
+  --text-heading: 1.125rem;
+  --text-heading--line-height: 1.35;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.5;
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.4;
+  /* ── Radius ───────────────────────────────────────────────────── */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.875rem;
+  --radius-pill: 999px;
+  /* ── Elevation (chrome only — never under a photograph) ───────── */
+  --shadow-card:
+    0 0.5px 1px oklch(0.22 0.012 260 / 0.05), 0 2px 4px oklch(0.22 0.012 260 / 0.05);
+  --shadow-raised:
+    0 1px 2px oklch(0.22 0.012 260 / 0.06), 0 4px 8px oklch(0.22 0.012 260 / 0.06),
+    0 12px 24px oklch(0.22 0.012 260 / 0.07);
+  /* ── Fonts ────────────────────────────────────────────────────── */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.6;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  /* Visible keyboard focus on every interactive element. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
 }
