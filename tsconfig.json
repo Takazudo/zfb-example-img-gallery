@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "strict": true,
+    "allowSyntheticDefaultImports": true,
+    "verbatimModuleSyntax": false,
+    "resolveJsonModule": true,
+    "types": ["node", "@cloudflare/workers-types"],
+    "noEmit": true,
+    "skipLibCheck": true,
+    "baseUrl": "."
+  },
+  "include": [
+    "pages/**/*", "components/**/*", "layouts/**/*", "lib/**/*", "styles/**/*",
+    "tests/**/*", "zfb.config.ts", "vitest.config.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

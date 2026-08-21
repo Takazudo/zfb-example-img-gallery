@@ -1,0 +1,44 @@
+{
+  "name": "zfb-example-img-gallery",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.1",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "predev": "rm -rf dist .zfb .zfb-build",
+    "dev": "zfb dev",
+    "build": "zfb build && node scripts/stable-css.mjs",
+    "preview": "zfb preview",
+    "typecheck": "zfb check",
+    "test": "vitest run --project unit --project ssr --project handlers",
+    "test:all": "vitest run",
+    "//cf": "Binding-realistic dev loop. Port 8788 is the base URL the seeding script defaults to. --persist-to pins ONE local state dir so dev, the CLI and the seeder all address the same D1/R2.",
+    "dev:cf:setup": "wrangler d1 migrations apply img-gallery --local --persist-to .wrangler/state && pnpm build",
+    "dev:cf": "pnpm dev:cf:setup && concurrently --names 'wrangler,watch' --kill-others 'wrangler dev --port 8788 --persist-to .wrangler/state' \"chokidar 'pages/**/*.tsx' 'components/**/*.tsx' 'layouts/**/*.tsx' 'lib/**/*.ts' 'styles/**/*.css' --command 'pnpm build' --initial false --debounce 200\""
+  },
+  "dependencies": {
+    "@takazudo/zfb": "2.8.0",
+    "@takazudo/zfb-adapter-cloudflare": "2.8.0",
+    "@takazudo/zfb-runtime": "2.8.0",
+    "preact": "^10.22.0",
+    "preact-render-to-string": "^6.5.0"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.900.0",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260812.1",
+    "@huggingface/transformers": "4.2.0",
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^22.0.0",
+    "chokidar-cli": "^3.0.0",
+    "concurrently": "^9.2.1",
+    "sharp": "^0.34.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0",
+    "wrangler": "4.85.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "onnxruntime-node", "sharp", "workerd"]
+  }
+}
