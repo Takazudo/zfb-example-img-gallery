@@ -95,9 +95,19 @@ jobs:
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name != 'pull_request'
         run: pnpm exec wrangler deploy --env=""
 
+      - name: Upload PR preview version
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
+        run: |
+          pnpm exec wrangler versions upload --env preview \
+            --preview-alias "pr-${{ github.event.pull_request.number }}"
+
+      # `versions upload` deliberately leaves trigger configuration untouched.
+      # Apply workers_dev/preview_urls from wrangler.toml after the script exists.
+      - name: Apply PR preview triggers
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
+        run: pnpm exec wrangler triggers deploy --env preview
+
       # Preview URLs follow <alias>-<worker>.<account-subdomain>.workers.dev.
-      # Wrangler applies workers_dev/preview_urls from wrangler.toml during the
-      # version upload; this read only supplies the sticky PR comment URL.
       - name: Resolve PR preview URL
         id: workers-dev
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
@@ -117,11 +127,33 @@ jobs:
           fi
           echo "preview_url=https://pr-${PR_NUMBER}-zfb-example-img-gallery-preview.${subdomain}.workers.dev" >> "$GITHUB_OUTPUT"
 
-      - name: Upload PR preview version
+      - name: Smoke-test PR preview
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
+        env:
+          PREVIEW_URL: ${{ steps.workers-dev.outputs.preview_url }}
         run: |
-          pnpm exec wrangler versions upload --env preview \
-            --preview-alias "pr-${{ github.event.pull_request.number }}"
+          set -euo pipefail
+          preview_body=$(mktemp)
+          trap 'rm -f "$preview_body"' EXIT
+
+          for attempt in 1 2 3 4; do
+            if curl --silent --show-error --fail-with-body \
+              --connect-timeout 10 --max-time 30 \
+              --output "$preview_body" "${PREVIEW_URL}/"; then
+              break
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              echo "::error::PR preview did not become reachable at ${PREVIEW_URL}/"
+              exit 1
+            fi
+            sleep "$((attempt * 5))"
+          done
+
+          grep --fixed-strings --quiet 'Stillframe' "$preview_body"
+          grep --fixed-strings --quiet 'href="/assets/app.css"' "$preview_body"
+          curl --silent --show-error --fail-with-body \
+            --connect-timeout 10 --max-time 30 \
+            --output /dev/null "${PREVIEW_URL}/assets/app.css"
 
       - name: Comment PR preview URL
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
