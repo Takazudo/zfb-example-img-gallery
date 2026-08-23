@@ -57,7 +57,7 @@ document.
 
 | Permission | Scope | CI | Human operator | Why it is needed |
 | --- | --- | --- | --- | --- |
-| **Workers Scripts — Edit** | Account | required | required | `pnpm exec wrangler deploy`, `pnpm exec wrangler versions upload`, Static Assets uploads, and deployment's `/accounts/{id}/workers/scripts/{name}/subdomain` API calls |
+| **Workers Scripts — Edit** | Account | required | required | `pnpm exec wrangler deploy`, `pnpm exec wrangler versions upload`, and Static Assets uploads |
 | **Workers R2 Storage — Edit** | Account | required | required | `pnpm exec wrangler r2 bucket create`, `pnpm exec wrangler r2 object put/get/delete`, and deploy-time validation of the `BUCKET` binding |
 | **D1 — Edit** | Account | required | required | `pnpm exec wrangler d1 create`, `pnpm exec wrangler d1 list`, `pnpm exec wrangler d1 migrations apply --remote`, and `pnpm exec wrangler d1 execute --remote` |
 | **Account Settings — Read** | Account | required | required | Lets Wrangler resolve which account the token belongs to |
@@ -150,9 +150,9 @@ Private buckets are a deliberate property of this design.
 
 Before the first deploy, reconcile the committed file with this shape. The UUID placeholders below
 stand for the values returned by `pnpm exec wrangler d1 list --json`; do not copy placeholder text
-into a live configuration. The starting checkout intentionally comments the production route
-until provisioning is complete. Uncomment that route before the first production deploy, as
-described in section 8.
+into a live configuration. The starting checkout intentionally comments the production route.
+Keep it commented for the first production deployment, seed the production database through the
+permanent `workers.dev` URL, then activate the route as described in sections 8 and 9.
 
 ```toml
 name = "zfb-example-img-gallery"
@@ -331,12 +331,14 @@ registration and upload paths. The six steps below are intentionally sequential.
    from section 2 for S3-compatible object puts, and those values must remain shell-only.
 
 Run the six steps locally first to validate the complete flow. After the first production deploy,
-run the seeder and backfill once more against the live hostname to populate the production D1 and
-R2 resources (the local state is not uploaded by deployment). The seeder's resume behavior makes
-this safe:
+run the seeder and backfill once more against the permanent `workers.dev` URL printed by Wrangler
+to populate the production D1 and R2 resources (the local state is not uploaded by deployment).
+The seeder's resume behavior makes this safe:
 
 ```sh
-node scripts/seed-upload.mjs --base-url https://zfb-example-img-gallery.takazudomodular.com --remote
+ACCOUNT_SUBDOMAIN=your-workers-subdomain
+LIVE_BASE="https://zfb-example-img-gallery.${ACCOUNT_SUBDOMAIN}.workers.dev"
+node scripts/seed-upload.mjs --base-url "$LIVE_BASE" --remote
 node scripts/backfill-thumbs.mjs --remote
 ```
 
@@ -354,15 +356,33 @@ deferred. This allows the bootstrap workflow itself to land on `main` without a 
 first deployment.
 
 - A **push to `main`** builds, checks, applies migrations to `img-gallery`, runs
-  `pnpm exec wrangler deploy` for production, idempotently enables the `workers.dev` subdomain,
-  attaches the production custom domain when its route block is active, and smoke-tests the site.
+  `pnpm exec wrangler deploy` for production, publishes the permanent `workers.dev` URL, attaches
+  the production custom domain when its route block is active, and smoke-tests that domain.
 - A **pull request** builds, applies migrations to the separate `img-gallery-preview` database,
   then runs `pnpm exec wrangler versions upload --env preview --preview-alias pr-<N>`. The workflow
   posts a sticky comment with the preview URL. A PR never touches the production Worker, database,
   or bucket.
 
-Before pushing `main`, make the two UUID replacements from section 4 and uncomment this existing
-top-level block in `wrangler.toml` (it must remain above `[env.preview]`):
+For the first infrastructure deploy, commit the two UUID replacements from section 4 while leaving
+the existing custom-domain block commented. This deploy creates the Worker and applies the schema
+without exposing an unseeded custom hostname. Review the diff, commit the UUIDs, and push through a
+pull request:
+
+```sh
+git diff -- wrangler.toml
+git add wrangler.toml
+git commit -m 'Configure Cloudflare gallery resources'
+git push
+gh run list --repo Takazudo/zfb-example-img-gallery --workflow deploy.yml --limit 5
+gh run watch <run-id> --repo Takazudo/zfb-example-img-gallery
+```
+
+Use the production `workers.dev` URL printed by the post-merge deployment to complete the remote
+seed and thumbnail backfill from section 7. The production smoke deliberately requires at least
+three D1-backed photo titles, so seed before activating the custom domain.
+
+After seeding, uncomment this top-level block in `wrangler.toml` (it must remain above
+`[env.preview]`):
 
 ```toml
 [[routes]]
@@ -370,13 +390,13 @@ pattern = "zfb-example-img-gallery.takazudomodular.com"
 custom_domain = true
 ```
 
-Review the diff, commit the UUIDs and route activation, and push:
+Review the route-only diff, commit it on a branch, and merge it:
 
 ```sh
 git diff -- wrangler.toml
 git add wrangler.toml
-git commit -m 'Configure Cloudflare gallery resources'
-git push origin main
+git commit -m 'Activate the gallery custom domain'
+git push
 gh run list --repo Takazudo/zfb-example-img-gallery --workflow deploy.yml --limit 5
 gh run watch <run-id> --repo Takazudo/zfb-example-img-gallery
 ```
@@ -482,11 +502,6 @@ environments, just like D1 bindings.
 The token lacks the Edit permission for the resource the failing command touches, the
 `CLOUDFLARE_ACCOUNT_ID` is wrong, or the token was rotated in Cloudflare but not in GitHub. Check
 the account and zone scopes, then reset the repository secret.
-
-### **`API error code 10056`**
-
-The Workers subdomain is “already configured.” The idempotent subdomain-enabling step treats this
-as success; it is not a deployment failure.
 
 ### **Deploy uploads the Worker, then fails creating the route**
 

@@ -95,33 +95,41 @@ jobs:
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name != 'pull_request'
         run: pnpm exec wrangler deploy --env=""
 
-      # Wrangler's config flags are authoritative on deploy, but this explicit
-      # API call keeps previews enabled for an already-created workers.dev
-      # subdomain. Cloudflare returns 10056 when the same state is requested.
-      - name: Enable workers.dev subdomain and preview URLs
+      # A Worker script must exist before its workers.dev settings can be
+      # changed. On a fresh account, create one unaliased bootstrap version.
+      - name: Ensure PR preview Worker exists
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          if pnpm exec wrangler versions list --env preview --json > /dev/null; then
+            exit 0
+          fi
+          echo "::notice::Creating the initial preview Worker version before enabling preview URLs"
+          pnpm exec wrangler versions upload --env preview
+
+      # `versions upload` deliberately leaves trigger configuration untouched.
+      # Apply workers_dev/preview_urls before creating the aliased version so
+      # Cloudflare marks that version as previewable at upload time.
+      - name: Apply PR preview triggers
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
+        run: pnpm exec wrangler triggers deploy --env preview
+
+      - name: Upload PR preview version
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
+        run: |
+          pnpm exec wrangler versions upload --env preview \
+            --preview-alias "pr-${{ github.event.pull_request.number }}"
+
+      # Preview URLs follow <alias>-<worker>.<account-subdomain>.workers.dev.
+      - name: Resolve PR preview URL
         id: workers-dev
-        if: steps.cloudflare.outputs.configured == 'true'
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
         env:
           ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          endpoint="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/zfb-example-img-gallery/subdomain"
-          response=$(curl --silent --show-error \
-            --request POST "$endpoint" \
-            --header "Authorization: Bearer ${API_TOKEN}" \
-            --header "Content-Type: application/json" \
-            --data '{"enabled":true,"previews_enabled":true}')
-          if jq -e '.success == true' >/dev/null <<<"$response"; then
-            echo "workers.dev subdomain enabled"
-          elif jq -e '.errors[]? | select(.code == 10056)' >/dev/null <<<"$response"; then
-            echo "workers.dev subdomain already configured (10056)"
-          else
-            echo "$response" | jq -r '.errors[]? | "::error::\(.code): \(.message)"' >&2
-            exit 1
-          fi
-
           subdomain_response=$(curl --silent --show-error --fail-with-body \
             --request GET "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/subdomain" \
             --header "Authorization: Bearer ${API_TOKEN}")
@@ -130,17 +138,35 @@ jobs:
             echo "::error::Cloudflare did not return the workers.dev account subdomain"
             exit 1
           fi
-          echo "subdomain=https://${subdomain}.workers.dev" >> "$GITHUB_OUTPUT"
-          if [ -n "${PR_NUMBER:-}" ]; then
-            echo "preview_url=https://pr-${PR_NUMBER}-zfb-example-img-gallery-preview.${subdomain}.workers.dev" >> "$GITHUB_OUTPUT"
-          fi
+          echo "preview_url=https://pr-${PR_NUMBER}-zfb-example-img-gallery-preview.${subdomain}.workers.dev" >> "$GITHUB_OUTPUT"
 
-      - name: Upload PR preview version
+      - name: Smoke-test PR preview
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
-        continue-on-error: true
+        env:
+          PREVIEW_URL: ${{ steps.workers-dev.outputs.preview_url }}
         run: |
-          pnpm exec wrangler versions upload --env preview \
-            --preview-alias "pr-${{ github.event.pull_request.number }}"
+          set -euo pipefail
+          preview_body=$(mktemp)
+          trap 'rm -f "$preview_body"' EXIT
+
+          for attempt in 1 2 3 4; do
+            if curl --silent --show-error --fail-with-body \
+              --connect-timeout 10 --max-time 30 \
+              --output "$preview_body" "${PREVIEW_URL}/"; then
+              break
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              echo "::error::PR preview did not become reachable at ${PREVIEW_URL}/"
+              exit 1
+            fi
+            sleep "$((attempt * 5))"
+          done
+
+          grep --fixed-strings --quiet 'Stillframe' "$preview_body"
+          grep --fixed-strings --quiet 'href="/assets/app.css"' "$preview_body"
+          curl --silent --show-error --fail-with-body \
+            --connect-timeout 10 --max-time 30 \
+            --output /dev/null "${PREVIEW_URL}/assets/app.css"
 
       - name: Comment PR preview URL
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'

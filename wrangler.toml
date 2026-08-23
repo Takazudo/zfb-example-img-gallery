@@ -45,14 +45,15 @@ binding = "IMAGES"
 [[d1_databases]]
 binding = "DB"
 database_name = "img-gallery"
-database_id = "REPLACE_AFTER_BOOTSTRAP"
+database_id = "36e7edc4-4251-46b1-ba11-b2dec0d06e3a"
 
 # Production R2 bucket for photo, avatar and derived-card objects. Private.
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "img-gallery"
 
-# Custom domain, PRODUCTION ONLY. Leave commented until bootstrap/runbook setup.
+# Custom domain, PRODUCTION ONLY. Activate after the first workers.dev deploy
+# and production seed; the production smoke intentionally requires seed rows.
 # [[routes]]
 # pattern = "zfb-example-img-gallery.takazudomodular.com"
 # custom_domain = true
@@ -67,7 +68,7 @@ binding = "IMAGES"
 [[env.preview.d1_databases]]
 binding = "DB"
 database_name = "img-gallery-preview"
-database_id = "REPLACE_AFTER_BOOTSTRAP"
+database_id = "7800c2ac-09db-4aa8-af73-ba0dd1839311"
 
 [[env.preview.r2_buckets]]
 binding = "BUCKET"
