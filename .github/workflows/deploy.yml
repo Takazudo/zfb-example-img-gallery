@@ -194,4 +194,6 @@ jobs:
 
       - name: Smoke-test the custom domain
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name != 'pull_request'
+        env:
+          SMOKE_REQUIRE_LIVE: "1"
         run: node scripts/smoke.mjs
