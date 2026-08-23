@@ -95,33 +95,18 @@ jobs:
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name != 'pull_request'
         run: pnpm exec wrangler deploy --env=""
 
-      # Wrangler's config flags are authoritative on deploy, but this explicit
-      # API call keeps previews enabled for an already-created workers.dev
-      # subdomain. Cloudflare returns 10056 when the same state is requested.
-      - name: Enable workers.dev subdomain and preview URLs
+      # Preview URLs follow <alias>-<worker>.<account-subdomain>.workers.dev.
+      # Wrangler applies workers_dev/preview_urls from wrangler.toml during the
+      # version upload; this read only supplies the sticky PR comment URL.
+      - name: Resolve PR preview URL
         id: workers-dev
-        if: steps.cloudflare.outputs.configured == 'true'
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
         env:
           ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          endpoint="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/zfb-example-img-gallery/subdomain"
-          response=$(curl --silent --show-error \
-            --request POST "$endpoint" \
-            --header "Authorization: Bearer ${API_TOKEN}" \
-            --header "Content-Type: application/json" \
-            --data '{"enabled":true,"previews_enabled":true}')
-          if jq -e '.success == true' >/dev/null <<<"$response"; then
-            echo "workers.dev subdomain enabled"
-          elif jq -e '.errors[]? | select(.code == 10056)' >/dev/null <<<"$response"; then
-            echo "workers.dev subdomain already configured (10056)"
-          else
-            echo "$response" | jq -r '.errors[]? | "::error::\(.code): \(.message)"' >&2
-            exit 1
-          fi
-
           subdomain_response=$(curl --silent --show-error --fail-with-body \
             --request GET "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/subdomain" \
             --header "Authorization: Bearer ${API_TOKEN}")
@@ -130,14 +115,10 @@ jobs:
             echo "::error::Cloudflare did not return the workers.dev account subdomain"
             exit 1
           fi
-          echo "subdomain=https://${subdomain}.workers.dev" >> "$GITHUB_OUTPUT"
-          if [ -n "${PR_NUMBER:-}" ]; then
-            echo "preview_url=https://pr-${PR_NUMBER}-zfb-example-img-gallery-preview.${subdomain}.workers.dev" >> "$GITHUB_OUTPUT"
-          fi
+          echo "preview_url=https://pr-${PR_NUMBER}-zfb-example-img-gallery-preview.${subdomain}.workers.dev" >> "$GITHUB_OUTPUT"
 
       - name: Upload PR preview version
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
-        continue-on-error: true
         run: |
           pnpm exec wrangler versions upload --env preview \
             --preview-alias "pr-${{ github.event.pull_request.number }}"
