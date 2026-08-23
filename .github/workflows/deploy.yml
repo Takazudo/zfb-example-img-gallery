@@ -95,17 +95,30 @@ jobs:
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name != 'pull_request'
         run: pnpm exec wrangler deploy --env=""
 
+      # A Worker script must exist before its workers.dev settings can be
+      # changed. On a fresh account, create one unaliased bootstrap version.
+      - name: Ensure PR preview Worker exists
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          if pnpm exec wrangler versions list --env preview --json > /dev/null; then
+            exit 0
+          fi
+          echo "::notice::Creating the initial preview Worker version before enabling preview URLs"
+          pnpm exec wrangler versions upload --env preview
+
+      # `versions upload` deliberately leaves trigger configuration untouched.
+      # Apply workers_dev/preview_urls before creating the aliased version so
+      # Cloudflare marks that version as previewable at upload time.
+      - name: Apply PR preview triggers
+        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
+        run: pnpm exec wrangler triggers deploy --env preview
+
       - name: Upload PR preview version
         if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
         run: |
           pnpm exec wrangler versions upload --env preview \
             --preview-alias "pr-${{ github.event.pull_request.number }}"
-
-      # `versions upload` deliberately leaves trigger configuration untouched.
-      # Apply workers_dev/preview_urls from wrangler.toml after the script exists.
-      - name: Apply PR preview triggers
-        if: steps.cloudflare.outputs.configured == 'true' && github.event_name == 'pull_request'
-        run: pnpm exec wrangler triggers deploy --env preview
 
       # Preview URLs follow <alias>-<worker>.<account-subdomain>.workers.dev.
       - name: Resolve PR preview URL
