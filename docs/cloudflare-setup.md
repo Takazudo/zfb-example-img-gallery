@@ -336,7 +336,8 @@ to populate the production D1 and R2 resources (the local state is not uploaded 
 The seeder's resume behavior makes this safe:
 
 ```sh
-LIVE_BASE=https://zfb-example-img-gallery.<account>.workers.dev
+ACCOUNT_SUBDOMAIN=your-workers-subdomain
+LIVE_BASE="https://zfb-example-img-gallery.${ACCOUNT_SUBDOMAIN}.workers.dev"
 node scripts/seed-upload.mjs --base-url "$LIVE_BASE" --remote
 node scripts/backfill-thumbs.mjs --remote
 ```
