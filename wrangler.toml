@@ -52,11 +52,11 @@ database_id = "36e7edc4-4251-46b1-ba11-b2dec0d06e3a"
 binding = "BUCKET"
 bucket_name = "img-gallery"
 
-# Custom domain, PRODUCTION ONLY. Activate after the first workers.dev deploy
-# and production seed; the production smoke intentionally requires seed rows.
-# [[routes]]
-# pattern = "zfb-example-img-gallery.takazudomodular.com"
-# custom_domain = true
+# Custom domain, PRODUCTION ONLY. Keep this block above [env.preview]; the
+# preview environment explicitly clears inherited routes below.
+[[routes]]
+pattern = "zfb-example-img-gallery.takazudomodular.com"
+custom_domain = true
 
 # Preview bindings are non-inheritable and therefore repeated in full.
 [env.preview]

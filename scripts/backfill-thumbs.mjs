@@ -235,8 +235,9 @@ async function main(argv = process.argv.slice(2)) {
     rowTitles.add(title);
     const photo = manifestByTitle.get(title);
     if (!photo) {
-      problems.push(`No manifest match for database row title ${JSON.stringify(title)}`);
-      console.log(`skip row ${JSON.stringify(title)} — no manifest match`);
+      // The seed account may also contain genuine user uploads. They are not
+      // part of the demo manifest and intentionally keep thumb_key = NULL.
+      console.log(`skip row ${JSON.stringify(title)} — not a seed manifest row`);
       skipped += 1;
       continue;
     }

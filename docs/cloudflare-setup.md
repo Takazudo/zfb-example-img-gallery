@@ -150,9 +150,10 @@ Private buckets are a deliberate property of this design.
 
 Before the first deploy, reconcile the committed file with this shape. The UUID placeholders below
 stand for the values returned by `pnpm exec wrangler d1 list --json`; do not copy placeholder text
-into a live configuration. The starting checkout intentionally comments the production route.
-Keep it commented for the first production deployment, seed the production database through the
-permanent `workers.dev` URL, then activate the route as described in sections 8 and 9.
+into a live configuration. This repository has already completed its seed and therefore keeps the
+production route active. For a fresh account, temporarily comment that route for the initial
+workers.dev deployment, seed the production database, then restore it as described in sections 8
+and 9. Never leave `zfb.config.ts` pointing at a hostname that will remain unattached.
 
 ```toml
 name = "zfb-example-img-gallery"
@@ -324,8 +325,9 @@ registration and upload paths. The six steps below are intentionally sequential.
    node scripts/backfill-thumbs.mjs --persist-to .wrangler/state
    ```
 
-   This is a demo-seed step, not an application feature. Genuine user uploads still have no
-   thumbnail and the grid falls back to the full image. If local state reports a lock, stop
+   This is a demo-seed step, not an application feature. Database rows absent from the seed
+   manifest are skipped as genuine user uploads; they keep no thumbnail and the grid falls back
+   to the full image. If local state reports a lock, stop
    `pnpm exec wrangler dev`, run the backfill, then restart the Worker for verification. If the
    deployed database is the target, pass `--remote`; that mode uses the separate R2 credentials
    from section 2 for S3-compatible object puts, and those values must remain shell-only.
@@ -379,7 +381,8 @@ gh run watch <run-id> --repo Takazudo/zfb-example-img-gallery
 
 Use the production `workers.dev` URL printed by the post-merge deployment to complete the remote
 seed and thumbnail backfill from section 7. The production smoke deliberately requires at least
-three D1-backed photo titles, so seed before activating the custom domain.
+three D1-backed photo titles, so seed before activating the custom domain. Until activation, the
+configured canonical and `og:image` hostname is intentionally not the verification target.
 
 After seeding, uncomment this top-level block in `wrangler.toml` (it must remain above
 `[env.preview]`):
@@ -507,6 +510,13 @@ the account and zone scopes, then reset the repository secret.
 
 The token lacks **Workers Routes — Edit** for `takazudomodular.com`. Add that zone-scoped
 permission and rerun the workflow; no application code change is needed.
+
+### **A photo page loads but its `og:image` URL does not**
+
+Compare the `og:image` origin with the active top-level `[[routes]]` pattern. `zfb.config.ts` uses
+that hostname for absolute canonical and social metadata, so the matching custom-domain route must
+be active before those published URLs can resolve. The production smoke now follows a real photo
+link and fetches its declared JPEG to guard this contract.
 
 ### **Every page shows the 404 page in a browser while `curl` returns 200**
 

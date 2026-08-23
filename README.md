@@ -2,9 +2,9 @@
 
 Stillframe is a small, server-rendered photo gallery built with [zfb](https://github.com/Takazudo/zudo-front-builder), Preact, and Cloudflare's D1, R2, and Images bindings. It is intentionally a plain web application: forms submit to the Worker, the Worker writes the binding-backed state, and the response redirects back to a clean URL.
 
-**Live:** `zfb.config.ts` sets the canonical origin to `https://zfb-example-img-gallery.takazudomodular.com`, which `lib/site.ts` resolves at request time. The production `[[routes]]` block is still commented in the checked-in `wrangler.toml`, so the custom domain is not active in this checkout. A deployed Workers URL has the form `https://zfb-example-img-gallery.<account>.workers.dev/` until the custom domain is enabled; see the [Cloudflare setup runbook](docs/cloudflare-setup.md).
+**Live:** [zfb-example-img-gallery.takazudomodular.com](https://zfb-example-img-gallery.takazudomodular.com). `zfb.config.ts` and the active production-only `[[routes]]` block in `wrangler.toml` share that canonical/Open Graph origin; `[env.preview]` explicitly clears the route. The permanent workers.dev URL remains available as an operational fallback; see the [Cloudflare setup runbook](docs/cloudflare-setup.md).
 
-The source currently exposes `SITE_NAME` and `SITE_TWITTER` (`Stillframe` and `@takazudo`) but no `SITE_ORIGIN` constant; the zfb `site` setting is the canonical-origin source of truth.
+The source exposes `SITE_NAME` and `SITE_TWITTER` (`Stillframe` and `@takazudo`) but no `SITE_ORIGIN` constant; the zfb `site` setting and production custom-domain route are the matching origin contract.
 
 ## What the demo does
 
@@ -177,7 +177,7 @@ The committed manifest contains 293 usable slugs. The procedure below is deliber
    node scripts/backfill-thumbs.mjs --persist-to .wrangler/state
    ```
 
-   D1 and bucket names default from `wrangler.toml`; `--photos-dir`, `--manifest`, `--d1`, `--bucket`, `--persist-to`, `--concurrency`, `--force`, and `--remote` are supported. Local mode uses Wrangler's `--local --persist-to`; remote mode uses `--remote` for D1 and S3-compatible R2 credentials from `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_ACCOUNT_ID` (or `R2_ENDPOINT`) for object puts. The default bounded concurrency is four. Already populated thumbnails are skipped unless `--force` is supplied, and missing manifest rows or individual failures are reported without preventing other jobs from completing. Genuine user uploads still have `thumb_key = NULL`; this backfill is not an application feature.
+   D1 and bucket names default from `wrangler.toml`; `--photos-dir`, `--manifest`, `--d1`, `--bucket`, `--persist-to`, `--concurrency`, `--force`, and `--remote` are supported. Local mode uses Wrangler's `--local --persist-to`; remote mode uses `--remote` for D1 and S3-compatible R2 credentials from `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_ACCOUNT_ID` (or `R2_ENDPOINT`) for object puts. The default bounded concurrency is four. Already populated thumbnails are skipped unless `--force` is supplied, and missing seeded rows or individual failures are reported without preventing other jobs from completing. Database rows whose titles are not in the seed manifest are treated as genuine user uploads and skipped normally, leaving `thumb_key = NULL`; this backfill is not an application feature.
 
 For local mode, all Wrangler CLI operations and the dev server must address the same `.wrangler/state` directory. If local state locking prevents the backfill, stop `wrangler dev`, run the backfill, then restart the Worker for verification.
 
