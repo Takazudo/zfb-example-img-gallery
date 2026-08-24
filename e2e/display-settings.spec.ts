@@ -41,6 +41,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("supports pointer and keyboard dialog control, every choice, Original geometry, and appended cards @smoke", async ({ page }) => {
+  await page.addInitScript(() => {
+    delete (window as typeof window & { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver;
+  });
   await installMixedIntrinsicImages(page);
   await page.goto(FIXTURE_PATH);
   const trigger = page.getByRole("button", { name: "Display settings", exact: true });
