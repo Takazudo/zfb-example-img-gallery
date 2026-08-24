@@ -18,7 +18,7 @@ type Props = {
 
 const TAGLINE = "A zfb image gallery on Cloudflare.";
 const navClass = "inline-flex min-h-[2.75rem] items-center px-hsp-xs text-small text-ink-soft transition-colors hover:text-brand";
-const actionClass = "inline-flex min-h-[2.75rem] items-center rounded-md bg-brand px-hsp-sm text-small font-semibold text-white transition-colors hover:bg-brand-strong";
+const actionClass = "inline-flex min-h-[2.75rem] items-center rounded-md bg-brand px-hsp-sm text-small font-semibold text-on-brand transition-colors hover:bg-brand-strong";
 
 function NavLink({ href, activePath, children }: { href: string; activePath?: string; children: ComponentChildren }) {
   return <a href={href} aria-current={activePath === href ? "page" : undefined} class={navClass}>{children}</a>;
