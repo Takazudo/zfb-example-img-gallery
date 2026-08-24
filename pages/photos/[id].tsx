@@ -2,6 +2,7 @@ import { getCloudflareContext } from "@takazudo/zfb-adapter-cloudflare";
 import { getSessionUser } from "../../lib/auth";
 import { getPhotoDetail } from "../../lib/db/photos";
 import type { Env } from "../../lib/env";
+import { ogImagePath } from "../../lib/og";
 import { htmlResponse } from "../../lib/render";
 import {
   absoluteUrl,
@@ -103,7 +104,7 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
     description,
     canonical: absoluteUrl(`/photos/${id}`, origin),
     ogType: "article",
-    imageUrl: absoluteUrl(`/og/v1/${id}.jpg`, origin),
+    imageUrl: absoluteUrl(ogImagePath(String(id)), origin),
     imageWidth: 1200,
     imageHeight: 630,
     imageAlt: photo.title,

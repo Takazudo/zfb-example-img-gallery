@@ -1,6 +1,7 @@
 import { runWithCloudflareContext } from "@takazudo/zfb-adapter-cloudflare";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../lib/env";
+import { OG_GENERATION } from "../../lib/og";
 import PhotoDetailPage from "../../pages/photos/[id]";
 
 const configuredGlobal = globalThis as { __zfb?: { site?: string } };
@@ -130,6 +131,13 @@ describe("photo detail SSR", () => {
     expect(html).not.toContain("twitter:creator");
     expect(html).not.toContain("twitter:title");
     expect(html).not.toContain("twitter:description");
+  });
+
+  it("routes the detail og:image through the current OG generation", async () => {
+    const html = await (await invoke(mockEnv())).text();
+    const ogImage = attribute(html, /<meta property="og:image"[^>]*>/, "content");
+
+    expect(ogImage).toBe(`https://gallery.example/og/${OG_GENERATION}/42.jpg`);
   });
 
   it("emits one parseable, script-safe ImageObject without a null thumbnail", async () => {
