@@ -75,6 +75,7 @@ function photo(id: number): PhotoCard {
     thumb_key: id % 2 === 0 ? `thumbs/${id}.webp` : null,
     width: 1600,
     height: 1200,
+    blurhash: null,
   };
 }
 

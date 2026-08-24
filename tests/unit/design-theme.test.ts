@@ -86,6 +86,15 @@ describe("semantic theme architecture", () => {
     expect(globalCss).not.toMatch(/(?:img|picture|video)[^{]*{[^}]*filter\s*:/s);
   });
 
+  it("uses cover/contain placeholders and transitions only image opacity", () => {
+    expect(globalCss).toMatch(/\[data-image-placeholder="true"\]::before\s*{[^}]*background-size:\s*cover/s);
+    expect(globalCss).toMatch(/\[data-placeholder-fit="contain"\][^}]*::before\s*{[^}]*background-size:\s*contain/s);
+    const imageRule = globalCss.match(/\[data-placeholder-image="true"\]\s*{(?<body>[^}]*)}/s)?.groups?.body ?? "";
+    expect(imageRule).toContain("transition: opacity 180ms ease;");
+    expect(imageRule).not.toMatch(/transition:\s*(?:all|transform|width|height)/);
+    expect(globalCss).toMatch(/@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*transition-duration:\s*0\.01ms !important/);
+  });
+
   it("wires thumbnail preferences to intrinsic media and responsive grid tokens", () => {
     expect(globalCss).toContain("--gallery-thumbnail-aspect-ratio: 1 / 1;");
     expect(globalCss).toContain("--gallery-thumbnail-width: 12.5rem;");

@@ -10,6 +10,9 @@ import { TagList } from "../../components/tag-list";
 import GalleryLayout from "../../layouts/gallery-layout";
 import { GALLERY_PREFERENCES_BOOTSTRAP_SCRIPT } from "../../lib/gallery-preferences";
 import { THEME_BOOTSTRAP_SCRIPT } from "../../lib/theme";
+import { DEFAULT_SNAPSHOT_LIMITS, utf8ByteLength } from "../../lib/gallery-snapshots";
+
+const VALID_BLURHASH = "Ub86Xpt:fQt:t:o#fQo#fQfQfQfQt:o#fQo#";
 
 describe("GalleryLayout", () => {
   it("renders the dynamic document head with one stable stylesheet and module entry", () => {
@@ -111,20 +114,32 @@ describe("shared presentational components", () => {
     expect(html).toContain('data-gallery-status="true" aria-live="polite" aria-atomic="true" hidden');
   });
   it("renders the PhotoCard structural and metadata contract", () => {
-    const html = render(<PhotoCard photo={{ id: 7, title: "Acrylic macro", src: "/img/photo.webp", width: 2000, height: 1500 }} />);
+    const html = render(<PhotoCard photo={{ id: 7, title: "Acrylic macro", src: "/img/photo.webp", width: 2000, height: 1500, blurhash: null }} />);
     expect(html).toMatch(/^<li data-photo-id="7">/); expect(html).toContain('<a href="/photos/7"');
     expect(html).toContain('width="2000"'); expect(html).toContain('height="1500"');
     expect(html).toContain('alt="Acrylic macro"');
     expect(html).toContain("[object-fit:var(--gallery-thumbnail-object-fit)]");
   });
+  it("renders a bounded cover placeholder only for a valid hash while keeping the image visible by default", () => {
+    const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 2400, height: 1600, blurhash: VALID_BLURHASH };
+    const html = render(<PhotoCard photo={photo} />);
+    expect(html).toContain('data-image-placeholder="true"');
+    expect(html).toContain('data-placeholder-fit="cover"');
+    expect(html).toContain('data-placeholder-image="true"');
+    expect(html).toContain("data:image/png;base64,");
+    expect(html).not.toContain("data-placeholder-pending");
+    expect(render(<PhotoCard photo={{ ...photo, blurhash: "not-a-hash" }} />)).not.toContain("data-image-placeholder");
+    expect(render(<PhotoCard photo={{ ...photo, blurhash: "x".repeat(100_000) }} />)).not.toContain("data-image-placeholder");
+    expect(render(<PhotoCard photo={{ ...photo, blurhash: null }} />)).not.toContain("data-image-placeholder");
+  });
   it("uses lazy loading by default and eager loading for priority photos", () => {
-    const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 20, height: 20 };
+    const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 20, height: 20, blurhash: null };
     expect(render(<PhotoCard photo={photo} />)).toContain('loading="lazy"');
     const priority = render(<PhotoCard photo={photo} priority />);
     expect(priority).toContain('loading="eager"'); expect(priority).not.toContain('loading="lazy"');
   });
   it("emits responsive image attributes only with a srcSet", () => {
-    const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 20, height: 20 };
+    const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 20, height: 20, blurhash: null };
     const plain = render(<PhotoCard photo={photo} sizes="20px" />);
     expect(plain).not.toMatch(/srcset=/i); expect(plain).not.toContain("sizes=");
     const responsive = render(<PhotoCard photo={photo} srcSet="/img/photo.webp 20w" />);
@@ -135,7 +150,7 @@ describe("shared presentational components", () => {
       scope="global"
       page={{ page: 1, pageSize: 24, totalItems: 1, totalPages: 1, offset: 0, hasPrev: false, hasNext: false }}
       nextHref="/page/2"
-      photos={[{ id: 7, title: "Photo", r2_key: "photos/7.jpg", thumb_key: null, width: 1200, height: 800 }]}
+      photos={[{ id: 7, title: "Photo", r2_key: "photos/7.jpg", thumb_key: null, width: 1200, height: 800, blurhash: null }]}
     />);
     expect(html).toContain('data-gallery-feed="true"');
     expect(html).toContain('data-gallery-scope="global"');
@@ -154,7 +169,7 @@ describe("shared presentational components", () => {
       scope="tag:3"
       page={{ page: 1, pageSize: 24, totalItems: 25, totalPages: 2, offset: 0, hasPrev: false, hasNext: true }}
       nextHref="/tags/foo/page/2"
-      photos={Array.from({ length: 24 }, (_, id) => ({ id, title: `Photo ${id}`, r2_key: `photos/${id}.jpg`, thumb_key: null, width: 1200, height: 800 }))}
+      photos={Array.from({ length: 24 }, (_, id) => ({ id, title: `Photo ${id}`, r2_key: `photos/${id}.jpg`, thumb_key: null, width: 1200, height: 800, blurhash: null }))}
     />);
     expect(html).toContain('data-gallery-scope="tag:3"');
     expect(html).toContain('data-gallery-next-url="/tags/foo/page/2"');
@@ -162,6 +177,15 @@ describe("shared presentational components", () => {
     expect(html).toContain('data-gallery-terminal="false"');
     expect(html).toContain('href="/tags/foo/page/2"');
     expect(html).toContain(">Load next 1 photos</a>");
+  });
+  it("keeps an expanded placeholder-bearing cardsHtml payload below the 512 KiB entry cap", () => {
+    const cardsHtml = render(<PhotoGrid>{Array.from({ length: 240 }, (_, id) => (
+      <PhotoCard key={id} photo={{
+        id, title: `Photo ${id}`, src: `/img/${id}.webp`, width: 2400, height: 1600, blurhash: VALID_BLURHASH,
+      }} />
+    ))}</PhotoGrid>);
+    expect(cardsHtml).toContain("data:image/png;base64,");
+    expect(utf8ByteLength(cardsHtml)).toBeLessThan(DEFAULT_SNAPSHOT_LIMITS.maxEntryBytes);
   });
   it("renders tag text and applies percent encoding exactly once", () => {
     const html = render(<TagList tags={[{ name: "acrylic" }, { name: "東京" }]} />);
