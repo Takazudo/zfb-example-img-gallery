@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SettingsView } from "../../pages/settings";
 
 describe("settings page SSR contract", () => {
-  it("renders three POST settings forms, one multipart avatar form, and no scripts", () => {
+  it("renders three POST settings forms, multipart fallback, and intentional runtime scripts", () => {
     const html = render(
       <SettingsView
         account={{
@@ -26,6 +26,9 @@ describe("settings page SSR contract", () => {
     expect(html).toContain('name="confirm"');
     expect(html).toContain('width="96"');
     expect(html).toContain('height="96"');
-    expect(html).not.toMatch(/<script\b/i);
+    expect(html.match(/<script\b/g)).toHaveLength(2);
+    expect(html).toContain("data-theme-bootstrap");
+    expect(html).toContain('type="module" src="/assets/islands.js"');
+    expect(html).not.toContain("data-zfb-reload");
   });
 });

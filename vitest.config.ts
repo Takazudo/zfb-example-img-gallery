@@ -4,6 +4,17 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   // Preact JSX for the .tsx files in the `ssr` project.
   esbuild: { jsx: "automatic", jsxImportSource: "preact" },
+  // zfb applies these aliases in production. Mirror them so the framework-
+  // neutral Island and ClientRouter packages mint Preact VNodes in SSR tests.
+  resolve: {
+    alias: {
+      "react/jsx-runtime": "preact/jsx-runtime",
+      "react/jsx-dev-runtime": "preact/jsx-dev-runtime",
+    },
+  },
+  ssr: {
+    noExternal: ["@takazudo/zfb", "@takazudo/zfb-runtime"],
+  },
   test: {
     passWithNoTests: true,
     projects: [
