@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { access } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { readImageDimensions } from "../../lib/image-dims";
+import { OG_GENERATION } from "../../lib/og";
 import {
   absoluteUrl,
   buildPageSeo,
@@ -85,7 +86,7 @@ describe("photo SEO and committed brand assets", () => {
       tags: [],
     });
     expect(seo.canonical).toBe("https://gallery.example/photos/7");
-    expect(seo.imageUrl).toBe("https://gallery.example/og/v1/7.jpg");
+    expect(seo.imageUrl).toBe(`https://gallery.example/og/${OG_GENERATION}/7.jpg`);
     expect(seo.jsonLd).not.toContain("<");
     const data = JSON.parse(seo.jsonLd!);
     expect(data.contentUrl).toBe("https://gallery.example/img/photos/original.jpg");

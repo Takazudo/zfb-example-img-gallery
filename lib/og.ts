@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 
-export const OG_GENERATION = "v1";
+export const OG_GENERATION = "v2";
 export const OG_WIDTH = 1200;
 export const OG_HEIGHT = 630;
 export const OG_CONTENT_TYPE = "image/jpeg";
@@ -8,7 +8,9 @@ export const OG_IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
 export const OG_FALLBACK_CACHE = "public, max-age=60";
 
 /** Every generation this codebase has served. Append on a bump; never remove one. */
-export const OG_GENERATIONS = ["v1"] as const;
+export const OG_GENERATIONS = ["v1", "v2"] as const;
+
+export type OgCardRenderer = (env: Env, sourceKey: string) => Promise<ArrayBuffer>;
 
 export function ogObjectKey(photoId: string, generation: string = OG_GENERATION): string {
   return `derived/og/${generation}/${photoId}.jpg`;
@@ -37,12 +39,14 @@ export async function ensureOgCard(
   env: Env,
   photoId: string,
   sourceKey: string,
+  generation: string = OG_GENERATION,
+  renderer: OgCardRenderer = generateOgCard,
 ): Promise<ArrayBuffer> {
-  const key = ogObjectKey(photoId);
+  const key = ogObjectKey(photoId, generation);
   const existing = await env.BUCKET.get(key);
   if (existing) return existing.arrayBuffer();
 
-  const bytes = await generateOgCard(env, sourceKey);
+  const bytes = await renderer(env, sourceKey);
   await env.BUCKET.put(key, bytes, {
     httpMetadata: { contentType: OG_CONTENT_TYPE, cacheControl: OG_IMMUTABLE_CACHE },
   });
@@ -55,9 +59,11 @@ export async function tryGenerateOgCard(
   env: Env,
   photoId: string,
   sourceKey: string,
+  generation: string = OG_GENERATION,
+  renderer: OgCardRenderer = generateOgCard,
 ): Promise<boolean> {
   try {
-    await ensureOgCard(env, photoId, sourceKey);
+    await ensureOgCard(env, photoId, sourceKey, generation, renderer);
     return true;
   } catch {
     return false;

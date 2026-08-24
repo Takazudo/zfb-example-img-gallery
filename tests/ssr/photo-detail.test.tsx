@@ -118,7 +118,7 @@ describe("photo detail SSR", () => {
 
     expect(canonical).toBe("https://gallery.example/photos/42");
     expect(ogUrl).toBe(canonical);
-    expect(ogImage).toBe("https://gallery.example/og/v1/42.jpg");
+    expect(ogImage).toBe(`https://gallery.example/og/${OG_GENERATION}/42.jpg`);
     expect(author).toBe("https://gallery.example/authors/alice");
     expect(attribute(html, /<meta property="og:image:width"[^>]*>/, "content")).toBe("1200");
     expect(attribute(html, /<meta property="og:image:height"[^>]*>/, "content")).toBe("630");

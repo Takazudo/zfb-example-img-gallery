@@ -207,8 +207,8 @@ function checkConfig() {
     '"/sitemap.xml"', '"/register"', '"/login"', '"/logout"',
     '"/settings"', '"/upload"',
   ]) assert(wranglerConfig.includes(rule), `run_worker_first is missing ${rule}`);
-  assert(!wranglerConfig.includes('"/og/v1/*"'),
-    "run_worker_first must not contain redundant /og/v1/* under Wrangler 4.85.0");
+  assert(!/\/og\/v\d+\/\*/.test(wranglerConfig),
+    "run_worker_first must not contain redundant /og/vN/* under Wrangler 4.85.0");
   for (const section of ["[[d1_databases]]", "[[r2_buckets]]", "[[env.preview.d1_databases]]", "[[env.preview.r2_buckets]]"]) {
     assert(wranglerConfig.includes(section), `wrangler.toml is missing ${section}`);
   }
