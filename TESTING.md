@@ -39,7 +39,9 @@ pnpm exec vitest run --project unit tests/unit/backfill-blurhash.test.ts
 The test suite does not invoke Wrangler against a remote account, deploy, or mutate production.
 The runbook's local commands use a temporary or explicitly shared `--persist-to` directory; a
 remote command must name both D1 and R2 resources and should be dry-run first under operator
-control. No remote backfill was run for this change.
+control. Automated tests never run the remote backfill. A separate operator run completed the
+production legacy-data backfill on 2026-08-24: 294 hashes present, zero missing or malformed, and
+an immediate normal rerun selected zero rows.
 
 ### Browser lane
 
@@ -115,8 +117,8 @@ and download each `/img/**` object to compare bytes and `Content-Type`. Stop
 the remote dev process, delete every fixture row, object, and isolated preview
 resource (`wrangler d1 delete` / `wrangler r2 bucket delete`) in a finally/cleanup
 step. If credentials, entitlement, or isolated resources are unavailable, this
-is a deferred manual check rather than a local automated failure. No remote
-backfill was run for this change.
+is a deferred manual check rather than a local automated failure. This preview
+check remains separate from the completed production legacy-data backfill noted above.
 
 ## Deliberate deltas
 
