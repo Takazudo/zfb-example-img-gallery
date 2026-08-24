@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../lib/env";
-import type { StoreResult } from "../../lib/storage";
+import type { PhotoStoreResult } from "../../lib/storage";
 
 const h = vi.hoisted(() => ({
   ctx: null as unknown as { env: Env; request: Request },
@@ -16,7 +16,7 @@ vi.mock("../../lib/auth", () => ({
 }));
 vi.mock("../../lib/storage", () => ({
   MAX_UPLOAD_BYTES: 4 * 1024 * 1024,
-  validateAndStore: vi.fn(async () => ({
+  preprocessAndStorePhoto: vi.fn(async () => ({
     ok: true,
     key: "photos/123e4567-e89b-12d3-a456-426614174000.png",
     contentType: "image/png",
@@ -24,6 +24,7 @@ vi.mock("../../lib/storage", () => ({
     size: 12,
     width: 640,
     height: 480,
+    blurhash: "U4D]o#00fQ00~q00M{00M{~qRj~q",
   })),
   deleteObjects: vi.fn(async () => undefined),
 }));
@@ -42,15 +43,15 @@ vi.mock("../../lib/og", () => ({
 import UploadPage from "../../pages/upload";
 import { getSessionUser } from "../../lib/auth";
 import { insertPhoto } from "../../lib/db/photo-write";
-import { deleteObjects, validateAndStore } from "../../lib/storage";
+import { deleteObjects, preprocessAndStorePhoto } from "../../lib/storage";
 import { generateOgCard } from "../../lib/og";
 
-const mockedStorage = vi.mocked(validateAndStore);
+const mockedStorage = vi.mocked(preprocessAndStorePhoto);
 const mockedDelete = vi.mocked(deleteObjects);
 const mockedInsert = vi.mocked(insertPhoto);
 const mockedOg = vi.mocked(generateOgCard);
 
-const storageFailures: Array<[Extract<StoreResult, { ok: false }>, number, string]> = [
+const storageFailures: Array<[Extract<PhotoStoreResult, { ok: false }>, number, string]> = [
   [{ ok: false, reason: "too-large", size: 4 * 1024 * 1024 + 1, limit: 4 * 1024 * 1024 }, 413, "larger than 4 MB"],
   [{ ok: false, reason: "unsupported-type" }, 415, "not a supported"],
   [{ ok: false, reason: "undecodable" }, 415, "could not be decoded"],
@@ -84,6 +85,7 @@ beforeEach(() => {
     size: 12,
     width: 640,
     height: 480,
+    blurhash: "U4D]o#00fQ00~q00M{00M{~qRj~q",
   });
   mockedDelete.mockReset();
   mockedDelete.mockResolvedValue(undefined);
@@ -180,6 +182,7 @@ describe("/upload handler", () => {
         size: 12,
         width: 640,
         height: 480,
+        blurhash: "U4D]o#00fQ00~q00M{00M{~qRj~q",
       };
     });
     const response = await invoke(post({ title: "A title", tags: " Synth , #Modular, synth ,, ENCLOSURE Deep " }, file("photo.jpg", "png", "image/jpeg")));
@@ -190,6 +193,7 @@ describe("/upload handler", () => {
       title: "A title",
       contentType: "image/png",
       r2Key: "photos/123e4567-e89b-12d3-a456-426614174000.png",
+      blurhash: "U4D]o#00fQ00~q00M{00M{~qRj~q",
       tags: ["synth", "modular", "enclosure-deep"],
     }));
     expect(mockedOg).toHaveBeenCalledWith(expect.anything(), "23");
@@ -200,6 +204,22 @@ describe("/upload handler", () => {
     const response = await invoke(post({ title: "A title" }, file()));
     expect(response.status).toBe(303);
     expect(mockedInsert).toHaveBeenCalledOnce();
+  });
+
+  it("passes a nullable preprocessing fallback through to D1", async () => {
+    mockedStorage.mockResolvedValueOnce({
+      ok: true,
+      key: "photos/123e4567-e89b-12d3-a456-426614174000.png",
+      contentType: "image/png",
+      ext: "png",
+      size: 12,
+      width: 640,
+      height: 480,
+      blurhash: null,
+    });
+    const response = await invoke(post({ title: "A title" }, file()));
+    expect(response.status).toBe(303);
+    expect(mockedInsert).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ blurhash: null }));
   });
 
   it("deletes the just-written R2 key when the D1 write fails", async () => {

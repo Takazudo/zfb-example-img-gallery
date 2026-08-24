@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { readImageDimensions } from "./image-dims";
+import { tryGeneratePhotoBlurhash } from "./photo-blurhash";
 
 export type KeyPrefix = "photos" | "thumbs" | "avatars";
 export type ImageExt = "jpg" | "png" | "webp";
@@ -59,12 +60,39 @@ export function contentLengthExceedsLimit(request: Request): boolean {
   return !Number.isSafeInteger(length) || length > MAX_UPLOAD_BYTES;
 }
 
-export type StoreResult =
-  | { ok: true; key: string; contentType: AllowedImageType; ext: ImageExt; size: number; width: number; height: number }
+type StoreFailure =
   | { ok: false; reason: "empty" }
   | { ok: false; reason: "too-large"; size: number; limit: number }
   | { ok: false; reason: "unsupported-type" }
   | { ok: false; reason: "undecodable" };
+
+type ValidatedImage = {
+  ok: true;
+  contentType: AllowedImageType;
+  ext: ImageExt;
+  size: number;
+  width: number;
+  height: number;
+};
+
+type StoredImage = ValidatedImage & { key: string };
+
+export type StoreResult = StoredImage | StoreFailure;
+
+export type PhotoStoreResult = (StoredImage & { blurhash: string | null }) | StoreFailure;
+
+function validateImage(bytes: ArrayBuffer): ValidatedImage | StoreFailure {
+  const size = bytes.byteLength;
+  if (size === 0) return { ok: false, reason: "empty" };
+  if (size > MAX_UPLOAD_BYTES) return { ok: false, reason: "too-large", size, limit: MAX_UPLOAD_BYTES };
+
+  const view = new Uint8Array(bytes);
+  const imageType = sniffImageType(view);
+  if (!imageType) return { ok: false, reason: "unsupported-type" };
+  const dimensions = readImageDimensions(view);
+  if (!dimensions) return { ok: false, reason: "undecodable" };
+  return { ok: true, ...imageType, size, ...dimensions };
+}
 
 /**
  * Validates and writes image bytes to R2. Callers must write R2 first and insert
@@ -75,19 +103,24 @@ export async function validateAndStore(
   bytes: ArrayBuffer,
   opts: { prefix: KeyPrefix },
 ): Promise<StoreResult> {
-  const size = bytes.byteLength;
-  if (size === 0) return { ok: false, reason: "empty" };
-  if (size > MAX_UPLOAD_BYTES) return { ok: false, reason: "too-large", size, limit: MAX_UPLOAD_BYTES };
+  const validated = validateImage(bytes);
+  if (!validated.ok) return validated;
+  const key = buildKey(opts.prefix, crypto.randomUUID(), validated.ext);
+  await env.BUCKET.put(key, bytes, { httpMetadata: { contentType: validated.contentType } });
+  return { ...validated, key };
+}
 
-  const view = new Uint8Array(bytes);
-  const imageType = sniffImageType(view);
-  if (!imageType) return { ok: false, reason: "unsupported-type" };
-  const dimensions = readImageDimensions(view);
-  if (!dimensions) return { ok: false, reason: "undecodable" };
-
-  const key = buildKey(opts.prefix, crypto.randomUUID(), imageType.ext);
-  await env.BUCKET.put(key, bytes, { httpMetadata: { contentType: imageType.contentType } });
-  return { ok: true, key, ...imageType, size, ...dimensions };
+/** Validate, best-effort preprocess, then persist unchanged original photo bytes. */
+export async function preprocessAndStorePhoto(
+  env: Env,
+  bytes: ArrayBuffer,
+): Promise<PhotoStoreResult> {
+  const validated = validateImage(bytes);
+  if (!validated.ok) return validated;
+  const blurhash = await tryGeneratePhotoBlurhash(env, bytes);
+  const key = buildKey("photos", crypto.randomUUID(), validated.ext);
+  await env.BUCKET.put(key, bytes, { httpMetadata: { contentType: validated.contentType } });
+  return { ...validated, key, blurhash };
 }
 
 export async function getObject(env: Env, key: string): Promise<R2ObjectBody | null> {

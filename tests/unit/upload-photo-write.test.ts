@@ -60,12 +60,14 @@ describe("upload photo DB write", () => {
       contentType: "image/png",
       width: 800,
       height: 600,
+      blurhash: "U4D]o#00fQ00~q00M{00M{~qRj~q",
       tags: ["synth", "modular"],
     })).resolves.toBe(7);
 
     expect(db._prepared).toHaveLength(5);
     expect(db._prepared[0].sql).toContain("thumb_key");
-    expect(db._prepared[0].sql).toContain("NULL, ?, ?, ?, NULL, datetime('now')");
+    expect(db._prepared[0].sql).toContain("NULL, ?, ?, ?, ?, datetime('now')");
+    expect(db._prepared[0].params.at(-1)).toBe("U4D]o#00fQ00~q00M{00M{~qRj~q");
     expect(db._prepared[1].sql).toContain("INSERT INTO tags");
     expect(db._prepared[3].sql).toContain("INSERT INTO photo_tags");
     expect(db._prepared[3].params).toEqual(["photos/uuid.png", "synth"]);
@@ -83,8 +85,10 @@ describe("upload photo DB write", () => {
       contentType: "image/jpeg",
       width: 1,
       height: 1,
+      blurhash: null,
       tags: [],
     })).resolves.toBe(19);
+    expect(db._prepared[0].params.at(-1)).toBeNull();
     expect(db._prepared.at(-1)?.sql).toContain("SELECT id FROM photos WHERE r2_key");
   });
 
@@ -100,6 +104,7 @@ describe("upload photo DB write", () => {
       contentType: "image/webp",
       width: 1,
       height: 1,
+      blurhash: null,
       tags: [],
     })).rejects.toThrow("did not return an id");
   });
@@ -116,6 +121,7 @@ describe("upload photo DB write", () => {
       contentType: "image/webp",
       width: 1,
       height: 1,
+      blurhash: null,
       tags: [],
     })).rejects.toThrow("D1 failed");
   });
