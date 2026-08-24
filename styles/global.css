@@ -14,6 +14,7 @@
   /* SSR preference defaults. Valid persisted choices override these through
      the data attributes installed by the pre-paint bootstrap. */
   --gallery-thumbnail-aspect-ratio: 1 / 1;
+  --gallery-thumbnail-object-fit: cover;
   --gallery-thumbnail-width: 12.5rem;
   --palette-slate-0: oklch(0.14 0.012 260);
   --palette-slate-1: oklch(0.2 0.012 260);
@@ -54,7 +55,13 @@
   --palette-shadow-2: oklch(0.05 0.006 260 / 0.24);
 }
 
-html[data-thumb-ratio="original"] { --gallery-thumbnail-aspect-ratio: auto; }
+/* The image itself is the intrinsic box in Original mode. Keeping this
+   variable on the replaced <img>, rather than an auto-ratio wrapper, lets
+   mixed source dimensions determine each card's height. */
+html[data-thumb-ratio="original"] {
+  --gallery-thumbnail-aspect-ratio: auto;
+  --gallery-thumbnail-object-fit: contain;
+}
 html[data-thumb-ratio="portrait"] { --gallery-thumbnail-aspect-ratio: 3 / 4; }
 html[data-thumb-ratio="square"] { --gallery-thumbnail-aspect-ratio: 1 / 1; }
 html[data-thumb-ratio="landscape"] { --gallery-thumbnail-aspect-ratio: 4 / 3; }

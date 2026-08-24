@@ -137,6 +137,36 @@ describe("author page handlers", () => {
     expect(html).toContain('type="module" src="/assets/islands.js"');
   });
 
+  it("keeps author feed metadata sequential through a full and remainder batch", async () => {
+    const photos = Array.from({ length: 49 }, (_, index) => photo(index + 1));
+
+    setContext("/authors/alice", { author: [alice], counts: [49], photos });
+    const first = await body(await AuthorDetailPage({ params: { username: "alice" } }));
+    expect(first).toContain('data-gallery-scope="author:1"');
+    expect(first).toContain('data-gallery-page="1"');
+    expect(first).toContain('data-gallery-total-pages="3"');
+    expect(first).toContain('data-gallery-total-items="49"');
+    expect(first).toContain('data-gallery-page-size="24"');
+    expect(first).toContain('data-gallery-next-url="/authors/alice/page/2"');
+    expect(first).toContain('data-gallery-next-count="24"');
+    expect(first).toContain(">Load next 24 photos</a>");
+
+    setContext("/authors/alice/page/2", { author: [alice], counts: [49], photos });
+    const middle = await body(await AuthorDetailPagedPage({ params: { username: "alice", page: "2" } }));
+    expect(middle).toContain('data-gallery-page="2"');
+    expect(middle).toContain('data-gallery-next-url="/authors/alice/page/3"');
+    expect(middle).toContain('data-gallery-next-count="1"');
+    expect(middle).toContain(">Load next 1 photos</a>");
+    expect(middle).toContain('loading="lazy"');
+
+    setContext("/authors/alice/page/3", { author: [alice], counts: [49], photos });
+    const final = await body(await AuthorDetailPagedPage({ params: { username: "alice", page: "3" } }));
+    expect(final).toContain('data-gallery-page="3"');
+    expect(final).toContain('data-gallery-terminal="true"');
+    expect(final).not.toContain('data-gallery-next-link="true"');
+    expect(final).not.toContain('loading="eager"');
+  });
+
   it("returns a layout-wrapped 404 for an unknown username", async () => {
     setContext("/authors/UNKNOWN", { author: [] });
 
@@ -165,6 +195,8 @@ describe("author page handlers", () => {
     expect(response.status).toBe(200);
     expect(html).toContain("No photos yet");
     expect(html).not.toContain('aria-label="Pagination"');
+    expect(html).toContain('data-gallery-scope="author:1"');
+    expect(html).toContain('data-gallery-terminal="true"');
   });
 
   it("clamps an overflowing page to the final tile", async () => {
@@ -179,7 +211,8 @@ describe("author page handlers", () => {
     expect(response.status).toBe(200);
     expect(html).toContain("photo-25");
     expect(html).not.toContain("photo-1");
-    expect(html).toContain('href="/authors/alice"');
+    expect(html).toContain('data-gallery-page="2"');
+    expect(html).toContain('data-gallery-terminal="true"');
   });
 
   it("treats a non-numeric page as page 1", async () => {
@@ -194,5 +227,6 @@ describe("author page handlers", () => {
     expect(response.status).toBe(200);
     expect(html).toContain("photo-1");
     expect(html).not.toContain('href="/authors/alice/page/1"');
+    expect(html).toContain('data-gallery-page="1"');
   });
 });

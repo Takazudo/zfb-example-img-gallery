@@ -1,8 +1,6 @@
 import { getCloudflareContext } from "@takazudo/zfb-adapter-cloudflare";
 import { EmptyState } from "../../components/empty-state";
-import { Pagination } from "../../components/pagination";
-import { PhotoCard } from "../../components/photo-card";
-import { PhotoGrid } from "../../components/photo-grid";
+import { GLOBAL_FEED_SCOPE, PhotoFeed } from "../../components/photo-feed";
 import GalleryLayout from "../../layouts/gallery-layout";
 import { getSessionUser } from "../../lib/auth";
 import { listPhotoPage } from "../../lib/db/photos";
@@ -11,8 +9,6 @@ import { buildPageSeo } from "../../lib/seo";
 import { SITE_NAME } from "../../lib/site";
 
 export const prerender = false;
-
-const GRID_SIZES = "(max-width: 30rem) 100vw, 240px";
 
 /**
  * Parse a `/page/<segment>` URL segment into a requested 1-based page number.
@@ -34,32 +30,6 @@ type PageProps = { params?: Record<string, string | undefined> };
 function lastPathSegment(pathname: string): string | undefined {
   const parts = pathname.split("/").filter(Boolean);
   return parts.at(-1);
-}
-
-function renderPhotoGrid(items: Awaited<ReturnType<typeof listPhotoPage>>["items"]) {
-  return (
-    <PhotoGrid>
-      {items.map((photo, index) => {
-        const src = `/img/${photo.thumb_key ?? photo.r2_key}`;
-        return (
-          <PhotoCard
-            key={photo.id}
-            photo={{
-              id: photo.id,
-              title: photo.title,
-              src,
-              // These are the original dimensions; they reserve the thumbnail's aspect ratio.
-              width: photo.width,
-              height: photo.height,
-            }}
-            priority={index === 0}
-            // Keep the grid hint ready for the future variant/srcset pipeline.
-            sizes={GRID_SIZES}
-          />
-        );
-      })}
-    </PhotoGrid>
-  );
 }
 
 export default async function PhotoGridPage({ params }: PageProps = {}) {
@@ -86,25 +56,20 @@ export default async function PhotoGridPage({ params }: PageProps = {}) {
         <h1 class="text-display font-semibold tracking-tight">
           {effectivePage === 1 ? SITE_NAME : `${SITE_NAME} — Page ${effectivePage}`}
         </h1>
-        {result.totalItems === 0 ? (
-          <EmptyState
-            title="No photos yet"
-            action={user ? { href: "/upload", label: "Upload a photo" } : { href: "/register", label: "Create an account" }}
-          >
-            {user ? "Share the first photo in the gallery." : "Create an account to share the first photo in the gallery."}
-          </EmptyState>
-        ) : (
-          <>
-            {renderPhotoGrid(result.items)}
-            {result.totalPages > 1 ? (
-              <Pagination
-                page={effectivePage}
-                pageCount={result.totalPages}
-                href={(page) => (page === 1 ? "/" : `/page/${page}`)}
-              />
-            ) : null}
-          </>
-        )}
+        <PhotoFeed
+          scope={GLOBAL_FEED_SCOPE}
+          page={result}
+          nextHref={`/page/${effectivePage + 1}`}
+          photos={result.items}
+          empty={result.totalItems === 0 ? (
+            <EmptyState
+              title="No photos yet"
+              action={user ? { href: "/upload", label: "Upload a photo" } : { href: "/register", label: "Create an account" }}
+            >
+              {user ? "Share the first photo in the gallery." : "Create an account to share the first photo in the gallery."}
+            </EmptyState>
+          ) : null}
+        />
       </section>
     </GalleryLayout>
   );

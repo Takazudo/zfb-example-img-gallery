@@ -35,7 +35,7 @@ export interface Photo {
   created_at: string;
 }
 
-/** One tile in a square-thumb grid. Deliberately narrow — no description, no joins. */
+/** One tile in a thumbnail grid. Deliberately narrow — no description, no joins. */
 export interface PhotoCard {
   id: number;
   title: string;

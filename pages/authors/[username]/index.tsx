@@ -1,14 +1,13 @@
 import { getCloudflareContext } from "@takazudo/zfb-adapter-cloudflare";
 import { EmptyState } from "../../../components/empty-state";
-import { Pagination } from "../../../components/pagination";
-import { PhotoCard } from "../../../components/photo-card";
-import { PhotoGrid } from "../../../components/photo-grid";
-import { authorHref, AUTHOR_PAGE_SIZE, countPhotosByAuthor, getAuthorByUsername, listPhotosByAuthor, resolvePageWindow } from "../../../lib/db/authors";
+import { authorFeedScope, PhotoFeed } from "../../../components/photo-feed";
+import { authorHref, getAuthorByUsername, listAuthorPhotoPage } from "../../../lib/db/authors";
 import type { AuthorProfile } from "../../../lib/db/authors";
+import { getSessionUser } from "../../../lib/auth";
 import type { Env } from "../../../lib/env";
 import { htmlResponse } from "../../../lib/render";
 import { buildPageSeo } from "../../../lib/seo";
-import GalleryLayout from "../../../layouts/gallery-layout";
+import GalleryLayout, { type LayoutUser } from "../../../layouts/gallery-layout";
 
 // Reads D1 for every request — never prerendered.
 export const prerender = false;
@@ -37,9 +36,9 @@ function authorAvatar(author: AuthorProfile) {
   );
 }
 
-function notFoundResponse(): Response {
+function notFoundResponse(user: LayoutUser | null): Response {
   return htmlResponse(
-    <GalleryLayout title="Author not found" activePath="/authors">
+    <GalleryLayout title="Author not found" activePath="/authors" user={user}>
       <section class="flex flex-col gap-vsp-sm">
         <h1 class="text-display font-semibold tracking-tight">Author not found</h1>
         <p class="text-body text-ink-soft">
@@ -53,23 +52,27 @@ function notFoundResponse(): Response {
 
 export async function renderAuthorDetail(username: string, rawPage?: string): Promise<Response> {
   const { env, request } = getCloudflareContext<Env>();
-  const author = await getAuthorByUsername(env, username);
-  if (author === null) return notFoundResponse();
+  const [author, sessionUser] = await Promise.all([
+    getAuthorByUsername(env, username),
+    getSessionUser(env, request),
+  ]);
+  const user = sessionUser
+    ? { username: sessionUser.username, avatarKey: sessionUser.avatar_key }
+    : null;
+  if (author === null) return notFoundResponse(user);
 
-  // Count first: totalPages is required before the stable page window can be read.
-  const total = await countPhotosByAuthor(env, author.id);
-  const window = resolvePageWindow(rawPage, total, AUTHOR_PAGE_SIZE);
-  const photos = await listPhotosByAuthor(env, author.id, AUTHOR_PAGE_SIZE, window.offset);
-  const href = authorHref(author.username, window.page);
+  const result = await listAuthorPhotoPage(env, author.id, rawPage);
+  const href = authorHref(author.username, result.page);
 
   return htmlResponse(
     <GalleryLayout
       title={`@${author.username}`}
       activePath="/authors"
+      user={user}
       seo={buildPageSeo({
         request,
         title: `@${author.username}`,
-        description: `@${author.username} has ${photoCountLabel(total)} in Stillframe.`,
+        description: `@${author.username} has ${photoCountLabel(result.totalItems)} in Stillframe.`,
         path: href,
       })}
     >
@@ -77,40 +80,21 @@ export async function renderAuthorDetail(username: string, rawPage?: string): Pr
         {authorAvatar(author)}
         <div>
           <h1 class="text-display font-semibold tracking-tight">@{author.username}</h1>
-          <p class="mt-vsp-2xs text-body text-ink-soft">{photoCountLabel(total)}</p>
+          <p class="mt-vsp-2xs text-body text-ink-soft">{photoCountLabel(result.totalItems)}</p>
         </div>
       </section>
 
-      {total === 0 ? (
-        <EmptyState title="No photos yet">
-          This author has not shared a photograph.
-        </EmptyState>
-      ) : (
-        <>
-          <PhotoGrid>
-            {photos.map((photo, index) => (
-              <PhotoCard
-                key={photo.id}
-                priority={window.page === 1 && index === 0}
-                photo={{
-                  id: photo.id,
-                  title: photo.title,
-                  src: `/img/${photo.thumb_key ?? photo.r2_key}`,
-                  width: photo.width,
-                  height: photo.height,
-                }}
-              />
-            ))}
-          </PhotoGrid>
-          {window.totalPages > 1 ? (
-            <Pagination
-              page={window.page}
-              pageCount={window.totalPages}
-              href={(page) => authorHref(author.username, page)}
-            />
-          ) : null}
-        </>
-      )}
+      <PhotoFeed
+        scope={authorFeedScope(author.id)}
+        page={result}
+        nextHref={authorHref(author.username, result.page + 1)}
+        photos={result.items}
+        empty={result.totalItems === 0 ? (
+          <EmptyState title="No photos yet">
+            This author has not shared a photograph.
+          </EmptyState>
+        ) : null}
+      />
     </GalleryLayout>,
   );
 }
