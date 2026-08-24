@@ -29,6 +29,7 @@ function toPhotoCardPhoto(photo: PhotoRow): PhotoCardPhoto {
     src: `/img/${photo.thumb_key ?? photo.r2_key}`,
     width: photo.width,
     height: photo.height,
+    blurhash: photo.blurhash,
   };
 }
 

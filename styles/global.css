@@ -69,6 +69,29 @@ html[data-thumb-width="small"] { --gallery-thumbnail-width: 9rem; }
 html[data-thumb-width="medium"] { --gallery-thumbnail-width: 12.5rem; }
 html[data-thumb-width="large"] { --gallery-thumbnail-width: 16rem; }
 
+/* The pseudo-element survives gallery innerHTML snapshots; the image remains
+   visible until the controller marks a hash-bearing, incomplete image pending. */
+[data-image-placeholder="true"]::before {
+  position: absolute;
+  inset: 0;
+  background-image: var(--image-placeholder);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  content: "";
+}
+[data-image-placeholder="true"][data-placeholder-fit="contain"]::before {
+  background-size: contain;
+}
+[data-placeholder-image="true"] {
+  position: relative;
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+[data-image-placeholder="true"][data-placeholder-pending] > [data-placeholder-image="true"] {
+  opacity: 0;
+}
+
 /* Light is the source-order fallback. An absent data-theme follows the OS
    preference below; either explicit data-theme value always wins. */
 :root,

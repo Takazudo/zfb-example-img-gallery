@@ -12,6 +12,7 @@ import {
 } from "../../lib/seo";
 import { siteOrigin } from "../../lib/site";
 import GalleryLayout, { type LayoutUser } from "../../layouts/gallery-layout";
+import { PlaceholderImage } from "../../components/placeholder-image";
 
 export const prerender = false;
 
@@ -120,11 +121,14 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
       >
         {/* min-w-0 lets this fluid grid track shrink below the image's intrinsic width. */}
         <div data-testid="photo-detail-media" class="min-w-0">
-          <img
+          <PlaceholderImage
             src={`/img/${photo.r2_key}`}
             alt={photo.title}
             width={photo.width}
             height={photo.height}
+            blurhash={photo.blurhash}
+            fit="contain"
+            wrapperClass="w-full bg-surface-sunken"
             decoding="async"
             fetchpriority="high"
             class="mx-auto block h-auto max-h-[80vh] w-full bg-surface-sunken object-contain"

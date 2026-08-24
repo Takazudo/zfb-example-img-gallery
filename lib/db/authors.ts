@@ -73,7 +73,7 @@ export async function listPhotosByAuthor(
 ): Promise<PhotoCard[]> {
   const result = await env.DB
     .prepare(
-      `SELECT id, title, r2_key, thumb_key, width, height, created_at
+      `SELECT id, title, r2_key, thumb_key, width, height, blurhash, created_at
          FROM photos
         WHERE user_id = ?
         ORDER BY created_at DESC, id DESC
@@ -116,7 +116,7 @@ export async function listAuthorPhotoPage(
   const pageMeta = resolvePage(rawPage, totalItems, PHOTO_PAGE_SIZE);
   const result = await env.DB
     .prepare(
-      `SELECT id, title, r2_key, thumb_key, width, height
+      `SELECT id, title, r2_key, thumb_key, width, height, blurhash
          FROM photos
         WHERE user_id = ?
         ORDER BY created_at DESC, id DESC

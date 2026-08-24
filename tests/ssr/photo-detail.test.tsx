@@ -15,18 +15,18 @@ const photoRow = {
   content_type: "image/webp",
   width: 2400,
   height: 1600,
-  blurhash: null,
+  blurhash: null as string | null,
   created_at: "2026-08-20 01:02:03",
   author_id: 7,
   author_username: "alice",
   author_avatar_key: null,
 };
 
-function mockEnv(): Env {
+function mockEnv(row = photoRow): Env {
   const prepare = vi.fn((sql: string) => {
     const statement = {
       bind: vi.fn(() => statement),
-      first: vi.fn(async () => photoRow),
+      first: vi.fn(async () => row),
       all: vi.fn(async () => ({
         results: sql.includes("FROM photo_tags")
           ? [{ id: 1, name: "landscape" }, { id: 2, name: "東京 scene" }]
@@ -63,6 +63,17 @@ afterEach(() => {
 });
 
 describe("photo detail SSR", () => {
+  it("renders the detail placeholder with contain fit and no pending no-JS state", async () => {
+    const html = await (await invoke(mockEnv({
+      ...photoRow,
+      blurhash: "Ub86Xpt:fQt:t:o#fQo#fQfQfQfQt:o#fQo#",
+    }))).text();
+    expect(html).toContain('data-image-placeholder="true"');
+    expect(html).toContain('data-placeholder-fit="contain"');
+    expect(html).toContain("data:image/png;base64,");
+    expect(html).not.toContain("data-placeholder-pending");
+  });
+
   it("renders escaped plain text, author, encoded tags, and the uncropped hero", async () => {
     const html = await (await invoke(mockEnv())).text();
 
