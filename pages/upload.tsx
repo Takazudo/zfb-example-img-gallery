@@ -332,7 +332,7 @@ export default async function UploadPage(): Promise<Response> {
       await generate(env, String(photoId));
     }
   } catch {
-    // A card miss is regenerated lazily by /og/v1; it must never lose an upload.
+    // A card miss is regenerated lazily by /og/v2; it must never lose an upload.
   }
 
   return redirect(`/photos/${photoId}`);

@@ -92,7 +92,7 @@ The first server-rendered page always contains up to 24 cards and a canonical ne
 /settings                          auth-gated: username, avatar, delete account
 /upload                            auth-gated: photo + title + description + tags
 /img/[...key]                      R2 object proxy
-/og/v1/[id].jpg                    1200x630 social card
+/og/v2/[id].jpg                    1200x630 social card (v1 retained and generation-pinned)
 /robots.txt  /sitemap.xml          SSR, generated from D1
 ```
 
@@ -121,14 +121,14 @@ R2 keys are immutable UUID-based names. The stored original, grid variant, avata
 photos/{uuid}.{ext}          # stored original; ext comes from magic-byte sniffing, never the filename
 thumbs/{uuid}.{ext}          # optional smaller grid variant
 avatars/{uuid}.{ext}         # account avatar
-derived/og/v1/{photoId}.jpg  # 1200x630 social card
+derived/og/v2/{photoId}.jpg  # 1200x630 social card (v1 retained and generation-pinned)
 ```
 
 R2 has no atomic rename. A key derived from a mutable title or filename would require copy-then-delete on every edit; immutable keys are also what justify `Cache-Control: public, max-age=31536000, immutable` on `/img/*`.
 
 The write order is R2 `put()` first, then the D1 row. A crash between them leaves a recoverable orphan rather than a row pointing at a missing blob. Account deletion collects every original, thumbnail, avatar, and generated-card key, deletes the R2 objects first, and only if every R2 delete succeeds removes the D1 rows in one `batch()`. D1 `batch()` rolls back on a failing statement, while the R2 half does not, which is why R2 goes first.
 
-There is deliberately no `og_key` column. The card key is derived from the photo id and the `v1` generation segment, so changing the crop is a code change rather than a data migration.
+There is deliberately no `og_key` column. The card key is derived from the photo id and generation segment: new cards use `v2`, while the `v1` route and objects remain retained and generation-pinned. Changing the card design is a code change rather than a data migration.
 
 ## Dependencies
 
@@ -242,9 +242,13 @@ The detail page emits a full head: title, description, absolute canonical, `og:t
 
 `twitter:creator` is intentionally absent: anyone can register, so stamping every photo with one handle would misattribute other people's uploads. Authorship is carried by `article:author`. `twitter:title` and `twitter:description` are also absent because X falls back to the Open Graph values.
 
-The source photos are square or near-square while social cards are landscape. `/og/v1/{id}.jpg` asks the Cloudflare Images binding (`env.IMAGES`) for `{ width: 1200, height: 630, fit: "cover", gravity: "auto" }`, outputs JPEG, and persists the result at `derived/og/v1/{id}.jpg`. Uploads attempt write-through generation after the photo row commits; the route lazily regenerates a missing card, so there is no migration script and no permanently broken card.
+The source photos are square or near-square while social cards are landscape. The current `/og/v2/{id}.jpg` card is a composed 1200x630 JPEG: a pre-baked `#141210` plate sits behind a contain-fitted photo in the left 510x510 square container, with the Takazudo mark on the right. Its drop shadow is an alpha silhouette: the source is padded transparently, a black fill is clipped into the source alpha with `composite: "in"`, a transparent border adds bleed, and an alpha-aware blur softens it before the shadow is drawn behind the photo. For transparent PNGs, the shadow follows the opaque content rather than the full image rectangle. See [the Cloudflare Images capability probe](docs/images-binding-capabilities.md) for the production binding evidence and supported composition operations.
 
-OG generation never fails an upload: the photo row commits first and generation failures are swallowed. The card route returns the committed static fallback at HTTP 200 with `Cache-Control: public, max-age=60` when generation fails, because a crawler caching an error can hide a card for days. An unknown photo id is still a real 404. Bumping `v1` to `v2` changes both the route and object-key prefix, so every card misses and regenerates; the old generation can then be deleted by prefix. Local `wrangler dev` implements `width`, `height`, `rotate`, and `format`, but not `gravity: "auto"`; verify salient-band cropping against a deployed preview.
+Uploads attempt write-through generation after the photo row commits; the v2 route lazily regenerates a missing card, so there is no migration script and no permanently broken card.
+
+OG generation never fails an upload: the photo row commits first and generation failures are swallowed. The card route returns the committed static fallback at HTTP 200 with `Cache-Control: public, max-age=60` when generation fails, because a crawler caching an error can hide a card for days. An unknown photo id is still a real 404. Each generation has its own route and object-key prefix, so the v2 rollout misses and regenerates under `derived/og/v2/`; the retained v1 objects stay available for their generation-pinned route.
+
+Local verification has a broader limitation than the old crop warning. Miniflare's local Images implementation honours only `rotate`, `width`, `height`, and output format, and silently drops every drawn layer; a composite therefore renders locally as just the resized photo, with no error. The composed card is verifiable through `wrangler dev --remote`, a deployed preview, or `pnpm preview:og` (the offline `sharp` renderer). Use the [Cloudflare Images capability probe](docs/images-binding-capabilities.md) as the reference for what the production binding actually supports.
 
 ## Deployment
 

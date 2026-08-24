@@ -116,7 +116,7 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   expect(ogImage).toBeTruthy();
   expect(ogImage!).toMatch(/^https?:\/\//);
   const ogUrl = new URL(ogImage!);
-  expect(ogUrl.pathname).toBe(`/og/v1/${photoPath.split("/").at(-1)}.jpg`);
+  expect(ogUrl.pathname).toBe(`/og/v2/${photoPath.split("/").at(-1)}.jpg`);
 
   await page.goto("/tags");
   await expect(page.locator("h1")).toHaveText("Tags");
