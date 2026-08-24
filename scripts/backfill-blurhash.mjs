@@ -43,7 +43,7 @@ const BLURHASH_LENGTH = 36;
 // BlurHash's size flag is (componentsX - 1) * 9 + (componentsY - 1), encoded
 // in base83. Fixed 4x4 therefore has value 30, whose base83 character is U.
 const BLURHASH_SIZE_FLAG = "U";
-const BLURHASH_BASE83 = /^[0-9A-Za-z#$%*+\-.:;=?@[\]^_{|}~]{36}$/u;
+const BLURHASH_BASE83 = new Set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~");
 const SAFE_BUCKET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/u;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 
@@ -280,7 +280,7 @@ export function assertBlurhash(value, label = "blurhash") {
     typeof value !== "string" ||
     value.length !== BLURHASH_LENGTH ||
     value[0] !== BLURHASH_SIZE_FLAG ||
-    !BLURHASH_BASE83.test(value)
+    [...value].some((character) => !BLURHASH_BASE83.has(character))
   ) {
     throw new Error(`${label} is not a valid fixed-4x4 BlurHash`);
   }

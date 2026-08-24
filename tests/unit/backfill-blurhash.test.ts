@@ -53,6 +53,11 @@ describe("legacy BlurHash backfill", () => {
     expect(() => assertBlurhash("%C9H2_~q%Mt7fQfQ%Mt7fQfQ%Mt7fQfQ%Mt7")).toThrow(/valid fixed-4x4/);
   });
 
+  it("accepts the complete base83 alphabet used by generated hashes", () => {
+    const hashWithComma = `${HASH.slice(0, 8)},${HASH.slice(9)}`;
+    expect(assertBlurhash(hashWithComma)).toBe(hashWithComma);
+  });
+
   it("encodes small originals with the fixed 4x4 contract", async () => {
     const hash = await blurhashFromOriginal(await imageBytes(1, 1));
     expect(hash).toHaveLength(36);
