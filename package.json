@@ -21,6 +21,9 @@
     "@takazudo/zfb": "2.10.1",
     "@takazudo/zfb-adapter-cloudflare": "2.10.1",
     "@takazudo/zfb-runtime": "2.10.1",
+    "blurhash": "2.0.5",
+    "fast-png": "8.0.0",
+    "fflate": "0.8.3",
     "preact": "^10.22.0",
     "preact-render-to-string": "^6.5.0"
   },

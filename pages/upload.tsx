@@ -12,8 +12,8 @@ import { htmlResponse, redirect } from "../lib/render";
 import {
   deleteObjects,
   MAX_UPLOAD_BYTES,
-  validateAndStore,
-  type StoreResult,
+  preprocessAndStorePhoto,
+  type PhotoStoreResult,
 } from "../lib/storage";
 import { insertPhoto } from "../lib/db/photo-write";
 import { normalizeTagInput } from "../lib/db/tags";
@@ -182,7 +182,7 @@ function storageFailure(reason: string): { message: string; status: number } {
   }
 }
 
-function resultFailure(result: Extract<StoreResult, { ok: false }>): { message: string; status: number } {
+function resultFailure(result: Extract<PhotoStoreResult, { ok: false }>): { message: string; status: number } {
   return storageFailure(result.reason);
 }
 
@@ -278,9 +278,9 @@ export default async function UploadPage(): Promise<Response> {
     });
   }
 
-  let stored: StoreResult;
+  let stored: PhotoStoreResult;
   try {
-    stored = await validateAndStore(env, await photo.arrayBuffer(), { prefix: "photos" });
+    stored = await preprocessAndStorePhoto(env, await photo.arrayBuffer());
   } catch (error) {
     const reason = storageReason(error);
     const failure = storageFailure(reason ?? "store-failed");
@@ -302,6 +302,7 @@ export default async function UploadPage(): Promise<Response> {
       contentType: stored.contentType,
       width: stored.width,
       height: stored.height,
+      blurhash: stored.blurhash,
       tags: parsedTags.tags,
     });
   } catch {

@@ -9,6 +9,7 @@ export type NewPhotoInput = {
   contentType: string;
   width: number;
   height: number;
+  blurhash: string | null;
   tags: string[];
 };
 
@@ -40,7 +41,7 @@ export async function insertPhoto(env: Env, input: NewPhotoInput): Promise<numbe
       .prepare(
         `INSERT INTO photos (user_id, title, description, r2_key, thumb_key,
                              content_type, width, height, blurhash, created_at)
-         VALUES (?, ?, ?, ?, NULL, ?, ?, ?, NULL, datetime('now'))`,
+         VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, datetime('now'))`,
       )
       .bind(
         input.userId,
@@ -50,6 +51,7 @@ export async function insertPhoto(env: Env, input: NewPhotoInput): Promise<numbe
         input.contentType,
         input.width,
         input.height,
+        input.blurhash,
       ),
     ...input.tags.map((name) =>
       env.DB
