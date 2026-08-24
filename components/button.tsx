@@ -6,10 +6,10 @@ type Props = {
   children: ComponentChildren;
 };
 const variants = {
-  primary: "bg-brand text-white hover:bg-brand-strong",
+  primary: "bg-brand text-on-brand hover:bg-brand-strong",
   secondary: "border border-line bg-surface text-ink hover:border-brand hover:text-brand",
   ghost: "text-ink-soft hover:text-brand",
-  danger: "bg-danger text-white hover:bg-danger hover:brightness-90",
+  danger: "bg-danger text-on-danger hover:bg-danger hover:brightness-90",
 };
 
 export function Button({ variant = "primary", size = "md", type = "submit", href, disabled,
