@@ -23,6 +23,24 @@ The project names and file globs below are copied from vitest.config.ts.
 
 The mandatory topic-worker command selects unit, ssr, and handlers. pnpm test:all also runs the integration project.
 
+### Legacy BlurHash backfill
+
+The operator workflow is covered by the Node unit fixture in
+`tests/unit/backfill-blurhash.test.ts`. It uses generated temporary image bytes and fake D1/R2
+adapters, and exercises remote-resource enforcement, cursor/null-row paging, `--limit`, Sharp
+object/download/pixel bounds, fixed-4x4 output, concurrency, isolated failures, dry-run zero
+mutation, conditional versus forced SQL, partial retries, and an idempotent second run. Run the
+focused check with:
+
+```sh
+pnpm exec vitest run --project unit tests/unit/backfill-blurhash.test.ts
+```
+
+The test suite does not invoke Wrangler against a remote account, deploy, or mutate production.
+The runbook's local commands use a temporary or explicitly shared `--persist-to` directory; a
+remote command must name both D1 and R2 resources and should be dry-run first under operator
+control. No remote backfill was run for this change.
+
 ### Browser lane
 
 The `@smoke` Playwright lane runs one Chromium worker against one shared local Wrangler state. `playwright.config.ts` applies migrations and the idempotent `scripts/e2e-fixture.sql` before starting the server. The fixture creates one `e2e-fixture` author/tag and 50 lightweight rows with deterministic mixed dimensions; every `/img/**` request is intercepted with test PNG bytes, so no R2 upload is needed and repeated setup is safe.
