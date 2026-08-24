@@ -11,6 +11,10 @@
 /* Raw palette values are private implementation details. Components consume
    only the semantic colors exposed by the @theme block below. */
 :root {
+  /* SSR preference defaults. Valid persisted choices override these through
+     the data attributes installed by the pre-paint bootstrap. */
+  --gallery-thumbnail-aspect-ratio: 1 / 1;
+  --gallery-thumbnail-width: 12.5rem;
   --palette-slate-0: oklch(0.14 0.012 260);
   --palette-slate-1: oklch(0.2 0.012 260);
   --palette-slate-2: oklch(0.22 0.012 260);
@@ -49,6 +53,14 @@
   --palette-shadow-1: oklch(0.14 0.012 260 / 0.07);
   --palette-shadow-2: oklch(0.05 0.006 260 / 0.24);
 }
+
+html[data-thumb-ratio="original"] { --gallery-thumbnail-aspect-ratio: auto; }
+html[data-thumb-ratio="portrait"] { --gallery-thumbnail-aspect-ratio: 3 / 4; }
+html[data-thumb-ratio="square"] { --gallery-thumbnail-aspect-ratio: 1 / 1; }
+html[data-thumb-ratio="landscape"] { --gallery-thumbnail-aspect-ratio: 4 / 3; }
+html[data-thumb-width="small"] { --gallery-thumbnail-width: 9rem; }
+html[data-thumb-width="medium"] { --gallery-thumbnail-width: 12.5rem; }
+html[data-thumb-width="large"] { --gallery-thumbnail-width: 16rem; }
 
 /* Light is the source-order fallback. An absent data-theme follows the OS
    preference below; either explicit data-theme value always wins. */

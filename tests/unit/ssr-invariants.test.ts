@@ -12,11 +12,11 @@ const valid404 = `<!doctype html><html><head>
 <style>.zfb-route-announcer{position:absolute}</style>
 <meta name="zfb-view-transitions-enabled" content="true">
 <meta name="zfb-view-transitions-fallback" content="animate">
-<meta name="zfb-preserve-html-attrs" content="data-theme">
+<meta name="zfb-preserve-html-attrs" content="data-theme data-thumb-ratio data-thumb-width">
 <meta name="zfb-traverse-refetch" content="true">
 <link rel="stylesheet" href="/assets/app.css">
 <script type="module" src="/assets/islands-abc123.js"></script>
-</head><body><div data-zfb-island="ThemeToggle" data-when="load"></div></body></html>`;
+</head><body><div data-zfb-island="ThemeToggle" data-when="load"></div><div data-zfb-island="DisplaySettings" data-when="load"><dialog aria-labelledby="display-settings-title"><h2 id="display-settings-title">Display settings</h2><fieldset><legend>Thumbnail ratio</legend><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"></fieldset><fieldset><legend>Thumbnail width</legend><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"></fieldset></dialog></div></body></html>`;
 
 function buildFixture() {
   const root = mkdtempSync(join(tmpdir(), "zfb-ssr-invariant-"));
@@ -72,6 +72,23 @@ describe("SSR invariants", () => {
       const problems = scanBuildOutput(root);
       expect(problems).toContain("assets/islands.js bytes differ from assets/islands-abc123.js");
       expect(problems).toContain("404.html must not load the stable /assets/islands.js alias");
+    } finally {
+      rmSync(root, { recursive: true });
+    }
+  });
+
+  it("rejects an inert SSR settings trigger and incomplete radio semantics", () => {
+    const root = buildFixture();
+    try {
+      const broken = valid404
+        .replace("<dialog", '<button aria-haspopup="dialog">Display settings</button><dialog')
+        .replace('<input type="radio" name="thumbnail-width">', "");
+      writeFileSync(join(root, "404.html"), broken);
+      const problems = scanBuildOutput(root);
+      expect(problems).toContain(
+        "404.html must withhold the display-settings trigger until hydration",
+      );
+      expect(problems).toContain("404.html must contain three thumbnail-width radios");
     } finally {
       rmSync(root, { recursive: true });
     }
