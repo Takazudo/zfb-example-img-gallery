@@ -322,15 +322,13 @@ export default async function UploadPage(): Promise<Response> {
   }
 
   try {
-    // The merged OG module persists through ensureOgCard. The fallback keeps
-    // this route compatible with the issue's narrow generateOgCard test mock.
-    const ensure = "ensureOgCard" in og ? og.ensureOgCard : undefined;
-    const generate = "generateOgCard" in og ? og.generateOgCard : undefined;
-    if (typeof ensure === "function") {
-      await ensure(env, String(photoId), stored.key);
-    } else if (typeof generate === "function") {
-      await generate(env, String(photoId));
-    }
+    await og.ensureOgCard(
+      env,
+      String(photoId),
+      stored.key,
+      og.OG_GENERATION,
+      og.generateOgCompositeCard,
+    );
   } catch {
     // A card miss is regenerated lazily by /og/v2; it must never lose an upload.
   }

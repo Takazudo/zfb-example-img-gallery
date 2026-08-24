@@ -160,3 +160,32 @@ The raw PNG outputs are retained outside the worktree for optional visual inspec
 
 It contains `pad.png`, `composite-in.png`, `border.png`, `blur.png`, `layered.png`,
 `separate-draw.png`, and `reuse-first.png`.
+
+## End-to-end preview composition (issue 83)
+
+The full v2 renderer was deployed to the isolated `preview` environment on 2026-08-25 and
+checked through `https://zfb-example-img-gallery-preview.takazudo.workers.dev`. Four retained
+preview fixtures cover portrait (`830831`), landscape (`830832`), square (`830833`), and a
+committed orientation-6 JPEG (`830834`). Every `/og/v2/` response was a 1200x630 JPEG, used the
+flat `#141210` plate (JPEG samples `(19,18,16)`), contain-fit the auto-oriented photo, and kept
+the right-side mark. The EXIF source is physically 240x360, advertises orientation 6, and is
+correctly treated as 360x240 by the production Images pipeline.
+
+The first full render also narrowed an important difference from the isolated probe: a 1x1
+draw overlay affects only that one-pixel bounding box. `public/og-shadow-fill.png` therefore did
+not fill the photo silhouette, and the blurred shadow was effectively absent. Cloudflare's
+[draw-overlay documentation](https://developers.cloudflare.com/images/optimization/draw-overlays/)
+specifies `repeat: true` for tiling an overlay across the base image. Adding it to the
+`composite: "in"` draw makes the 1x1 black fill cover the padded photo before the border and blur
+transforms. After redeploying, the four production cards differ from their offline Sharp goldens
+by only 0.97-1.30 mean RGB levels per channel; the previously absent shadow follows each photo,
+including the EXIF-oriented case.
+
+The `/og/v1/` cards remained 1200x630 cover crops. Their four response SHA-256 hashes were
+byte-identical before and after the v2 shadow correction, confirming that the generation-pinned
+objects under `derived/og/v1/` were unchanged.
+
+Machine-readable metadata, headers, before/after cards, offline goldens, pixel diffs, command
+transcripts, and the retained fixture inventory are outside the worktree at:
+
+`/home/takazudo/cclogs/takazudo-zfb-example-img-gallery/20260825-issue-76/artifacts/83/`

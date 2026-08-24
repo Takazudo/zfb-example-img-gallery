@@ -3,10 +3,15 @@
 /**
  * Foundation integration probe.
  *
- * The probe intentionally talks to a separately started local Wrangler Worker
- * over HTTP. Keep the Worker lifecycle outside this process so callers can
- * wrap `wrangler dev` in a bounded orchestration and always terminate it.
+ * Local mode talks to a separately started Wrangler Worker over HTTP. Keep the
+ * Worker lifecycle outside this process so callers can bound and terminate it;
  * D1/R2 CLI calls use the same persistence directory as that Worker.
+ *
+ * A deployed preview can be checked with:
+ *   CONFIRM_MODE=preview CONFIRM_BASE_URL=https://<worker>-preview.<account>.workers.dev \
+ *     node scripts/confirm-foundations.mjs
+ * Preview mode refuses custom domains and non-preview workers.dev hosts, and
+ * scopes every mutating Wrangler command to --env preview --remote.
  */
 
 import { execFileSync } from "node:child_process";
@@ -18,16 +23,52 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const baseUrl = (process.env.CONFIRM_BASE_URL ?? "http://localhost:8788").replace(/\/+$/, "");
 const persistTo = process.env.WRANGLER_PERSIST ?? ".wrangler/state";
+const mode = process.env.CONFIRM_MODE ?? "local";
+assertMode(mode);
+const remotePreview = mode === "preview";
 const wranglerConfig = readFileSync(join(repoRoot, "wrangler.toml"), "utf8");
 
-function configValue(name) {
-  const match = wranglerConfig.match(new RegExp(`^${name}\\s*=\\s*"([^"]+)"`, "m"));
-  if (!match) throw new Error(`wrangler.toml is missing top-level ${name}`);
+function assertMode(value) {
+  if (value !== "local" && value !== "preview") {
+    throw new Error(`CONFIRM_MODE must be local or preview, got ${JSON.stringify(value)}`);
+  }
+  if (value === "preview") {
+    if (!process.env.CONFIRM_BASE_URL) throw new Error("CONFIRM_MODE=preview requires CONFIRM_BASE_URL");
+    const url = new URL(baseUrl);
+    if (url.protocol !== "https:" || !url.hostname.endsWith(".workers.dev") || !url.hostname.includes("-preview.")) {
+      throw new Error(`preview mode refuses non-preview Workers URL: ${baseUrl}`);
+    }
+  }
+}
+
+function configValue(name, section = null) {
+  let contents = wranglerConfig;
+  if (section) {
+    const marker = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = new RegExp(`^${marker}\\s*$`, "m").exec(wranglerConfig);
+    if (!match) throw new Error(`wrangler.toml is missing ${section}`);
+    const remainder = wranglerConfig.slice(match.index + match[0].length);
+    const nextSection = remainder.search(/^\[/m);
+    contents = nextSection === -1 ? remainder : remainder.slice(0, nextSection);
+  }
+  const match = contents.match(new RegExp(`^${name}\\s*=\\s*"([^"]+)"`, "m"));
+  if (!match) throw new Error(`wrangler.toml is missing ${name}${section ? ` in ${section}` : ""}`);
   return match[1];
 }
 
-const databaseName = configValue("database_name");
-const bucketName = configValue("bucket_name");
+const databaseName = remotePreview
+  ? configValue("database_name", "[[env.preview.d1_databases]]")
+  : configValue("database_name");
+const bucketName = remotePreview
+  ? configValue("bucket_name", "[[env.preview.r2_buckets]]")
+  : configValue("bucket_name");
+const storageArgs = remotePreview
+  ? ["--env", "preview", "--remote"]
+  : ["--local", "--persist-to", persistTo];
+const fixtureEmail = remotePreview ? "confirm-preview-83@example.test" : "confirm@example.com";
+const fixtureUsername = remotePreview ? "ConfirmPreview83" : "ConfirmUser";
+const fixtureUsernameNormalized = fixtureUsername.toLowerCase();
+const fixtureKeyNamespace = remotePreview ? "83000000-0000-4000-8000" : "123e4567-e89b-12d3-a456";
 const fixturePath = join(repoRoot, "public", "og-fallback.jpg");
 const fixtureBytes = readFileSync(fixturePath);
 const notFoundHtml = readFileSync(join(repoRoot, "dist", "404.html"), "utf8");
@@ -63,7 +104,7 @@ function runWrangler(args) {
 function d1(sql) {
   const output = runWrangler([
     "d1", "execute", databaseName,
-    "--local", "--persist-to", persistTo, "--json", "--command", sql,
+    ...storageArgs, "--json", "--command", sql,
   ]);
   let payload;
   try {
@@ -84,7 +125,7 @@ function r2Put(key, contentType = "image/jpeg") {
   runWrangler([
     "r2", "object", "put", `${bucketName}/${key}`,
     "--file", fixturePath, "--content-type", contentType,
-    "--local", "--persist-to", persistTo,
+    ...storageArgs,
   ]);
   ownedKeys.add(key);
 }
@@ -93,7 +134,7 @@ function r2Delete(key) {
   try {
     runWrangler([
       "r2", "object", "delete", `${bucketName}/${key}`,
-      "--local", "--persist-to", persistTo,
+      ...storageArgs,
     ]);
   } catch {
     // Cleanup is best effort: the primary assertion failure remains useful.
@@ -103,7 +144,7 @@ function r2Delete(key) {
 function r2Get(key, destination) {
   runWrangler([
     "r2", "object", "get", `${bucketName}/${key}`,
-    "--file", destination, "--local", "--persist-to", persistTo,
+    "--file", destination, ...storageArgs,
   ]);
 }
 
@@ -173,7 +214,7 @@ function queryPhotoId(key) {
 }
 
 function cleanupFixtureRows() {
-  const users = d1("SELECT id FROM users WHERE email = 'confirm@example.com';");
+  const users = d1(`SELECT id FROM users WHERE email = ${sqlString(fixtureEmail)};`);
   for (const row of users) {
     const userId = Number(row.id);
     d1Write([
@@ -237,20 +278,20 @@ async function checkAuth() {
   const register = await http("/register", {
     method: "POST",
     body: new URLSearchParams({
-      email: "confirm@example.com",
-      username: "ConfirmUser",
+      email: fixtureEmail,
+      username: fixtureUsername,
       password: "local-confirm-fixture-pw",
     }),
   });
   assert(register.response.status === 303, `register expected 303, got ${register.response.status}`);
   const registerSid = assertSessionCookie(register.response.headers.get("set-cookie"));
 
-  const users = d1("SELECT id, username, email, password_hash, password_salt FROM users WHERE email = 'confirm@example.com';");
+  const users = d1(`SELECT id, username, email, password_hash, password_salt FROM users WHERE email = ${sqlString(fixtureEmail)};`);
   assert(users.length === 1, "register should create exactly one fixture user");
   const user = users[0];
   fixtureUserId = Number(user.id);
-  assert(user.username === "confirmuser", `username was not normalised: ${user.username}`);
-  assert(user.email === "confirm@example.com", `email was not normalised: ${user.email}`);
+  assert(user.username === fixtureUsernameNormalized, `username was not normalised: ${user.username}`);
+  assert(user.email === fixtureEmail, `email was not normalised: ${user.email}`);
   assert(user.password_hash && user.password_salt, "password credentials were not stored");
   assert(!JSON.stringify(user).includes("local-confirm-fixture-pw"), "plaintext password leaked into users row");
 
@@ -265,19 +306,19 @@ async function checkAuth() {
   const collision = await http("/register", {
     method: "POST",
     body: new URLSearchParams({
-      email: " CONFIRM@Example.com ",
-      username: "ConfirmUser",
+      email: ` ${fixtureEmail.toUpperCase()} `,
+      username: fixtureUsername,
       password: "local-confirm-fixture-pw",
     }),
   });
   assert(collision.response.status === 409, `case-variant registration expected 409, got ${collision.response.status}`);
-  assert(d1("SELECT COUNT(*) AS n FROM users WHERE email = 'confirm@example.com';")[0].n === 1,
+  assert(d1(`SELECT COUNT(*) AS n FROM users WHERE email = ${sqlString(fixtureEmail)};`)[0].n === 1,
     "case-variant registration created a duplicate account");
 
   const login = await http("/login", {
     method: "POST",
     body: new URLSearchParams({
-      email: " CONFIRM@Example.com ",
+      email: ` ${fixtureEmail.toUpperCase()} `,
       password: "local-confirm-fixture-pw",
     }),
   });
@@ -306,7 +347,7 @@ async function checkAuth() {
 }
 
 async function checkImageRoute() {
-  const key = `photos/123e4567-e89b-12d3-a456-426614174000.jpg`;
+  const key = `photos/${fixtureKeyNamespace}-426614174000.jpg`;
   r2Put(key, "image/png");
   const hit = await http(`/img/${key}`);
   assert(hit.response.status === 200, `image GET expected 200, got ${hit.response.status}`);
@@ -323,7 +364,7 @@ async function checkImageRoute() {
   }
   assert(head.bytes.byteLength === 0, "image HEAD returned a response body");
 
-  const missing = await http("/img/photos/223e4567-e89b-12d3-a456-426614174000.jpg");
+  const missing = await http(`/img/photos/${fixtureKeyNamespace}-426614174001.jpg`);
   assert(missing.response.status === 404, `missing image expected 404, got ${missing.response.status}`);
   for (const malformed of ["/img/../secret", "/img/photos/%2e%2e%2fx"]) {
     const response = await http(malformed);
@@ -334,8 +375,10 @@ async function checkImageRoute() {
 
 async function checkOgRoute() {
   assert(fixtureUserId !== null, "OG fixtures require the auth fixture user");
-  const sourceKey = `photos/${"223e4567-e89b-12d3-a456-426614174000"}.jpg`;
-  const missingSourceKey = "photos/missing-0000.jpg";
+  const sourceKey = `photos/${fixtureKeyNamespace}-426614174002.jpg`;
+  const missingSourceKey = remotePreview
+    ? "photos/issue-83-confirm-preview-missing.jpg"
+    : "photos/missing-0000.jpg";
   r2Put(sourceKey, "image/jpeg");
   d1Write([
     `INSERT INTO photos (user_id, title, description, r2_key, content_type, width, height, created_at)
@@ -404,8 +447,15 @@ async function checkNavigationAndSite() {
     if (["/", "/register", "/login"].includes(path)) {
       assert(navigate.text !== notFoundHtml, `${path} navigation returned dist/404.html`);
     }
-    const executableScript = /<script\b(?![^>]*\btype=["']application\/ld\+json["'])[^>]*>/i;
-    assert(!executableScript.test(navigate.text), `${path} response contains an executable script tag`);
+    const scriptTags = [...navigate.text.matchAll(/<script\b([^>]*)>/gi)].map((match) => match[1]);
+    for (const attributes of scriptTags) {
+      const structuredData = /\btype=["']application\/ld\+json["']/i.test(attributes);
+      const bootstrap = /\bdata-theme-bootstrap(?:=["'][^"']*["'])?/i.test(attributes);
+      const islands = /\btype=["']module["']/i.test(attributes)
+        && /\bsrc=["']\/assets\/islands(?:-[a-z0-9]+)?\.js["']/i.test(attributes);
+      assert(structuredData || bootstrap || islands,
+        `${path} response contains an unexpected script tag: <script${attributes}>`);
+    }
   }
 
   const root = await http("/");
@@ -428,7 +478,7 @@ async function checkNavigationAndSite() {
   assert(sitemap.response.status === 200 && (sitemap.response.headers.get("content-type") ?? "").includes("application/xml"),
     "sitemap.xml did not reach its Worker route");
   assert(sitemap.text.includes("https://"), "sitemap did not emit canonical absolute URLs");
-  console.log("[confirm] navigation differential, script-free current pages, SEO root, CSS, robots, and sitemap verified");
+  console.log("[confirm] navigation differential, expected script inventory, SEO root, CSS, robots, and sitemap verified");
 }
 
 async function main() {

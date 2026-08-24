@@ -231,7 +231,7 @@ describe("OG image route", () => {
       { width: 1200, height: 630 },
     ]);
     expect(images.events.filter((event) => event.type === "draw")).toEqual([
-      { type: "draw", transformer: 1, image: 2, argument: { composite: "in" } },
+      { type: "draw", transformer: 1, image: 2, argument: { composite: "in", repeat: true } },
       {
         type: "draw",
         transformer: 3,
