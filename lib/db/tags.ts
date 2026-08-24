@@ -23,6 +23,7 @@ export type TaggedPhoto = {
   thumb_key: string | null;
   width: number;
   height: number;
+  blurhash: string | null;
   created_at: string;
   username: string;
 };
@@ -135,7 +136,7 @@ export async function listTagPhotoPage(
   const pageMeta = resolvePage(rawPage, totalItems, PHOTO_PAGE_SIZE);
   const result = await env.DB
     .prepare(
-      `SELECT p.id, p.title, p.r2_key, p.thumb_key, p.width, p.height
+      `SELECT p.id, p.title, p.r2_key, p.thumb_key, p.width, p.height, p.blurhash
          FROM photos p JOIN photo_tags pt ON pt.photo_id = p.id
         WHERE pt.tag_id = ?
         ORDER BY p.created_at DESC, p.id DESC
@@ -155,7 +156,7 @@ export async function listPhotosByTag(
 ): Promise<TaggedPhoto[]> {
   const { results } = await env.DB.prepare(
     `SELECT p.id AS id, p.title AS title, p.r2_key AS r2_key, p.thumb_key AS thumb_key,
-            p.width AS width, p.height AS height, p.created_at AS created_at,
+            p.width AS width, p.height AS height, p.blurhash AS blurhash, p.created_at AS created_at,
             u.username AS username
        FROM photos p
        JOIN photo_tags pt ON pt.photo_id = p.id

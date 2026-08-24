@@ -64,7 +64,7 @@ export async function listPhotoPage(env: Env, rawPage: unknown): Promise<Paged<P
   const pageMeta = resolvePage(rawPage, totalItems);
   const result = await env.DB
     .prepare(
-      `SELECT id, title, r2_key, thumb_key, width, height
+      `SELECT id, title, r2_key, thumb_key, width, height, blurhash
          FROM photos
         ORDER BY created_at DESC, id DESC
         LIMIT ? OFFSET ?`,

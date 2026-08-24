@@ -43,6 +43,7 @@ export interface PhotoCard {
   thumb_key: string | null;
   width: number;
   height: number;
+  blurhash: string | null;
 }
 
 export interface Tag {
