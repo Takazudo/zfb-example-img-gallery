@@ -1,9 +1,40 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { softClick } from "./navigation";
 
 const THEME_STORAGE_KEY = "stillframe-theme";
+const NO_RELOAD_SENTINEL = "__themeNavigationNoReload";
 
 type ThemeMode = "light" | "dark";
+
+type BrowserErrorCapture = {
+  messages: string[];
+  onPage: (page: Page) => void;
+};
+
+const browserErrorCaptures = new WeakMap<BrowserContext, BrowserErrorCapture>();
+
+function attachBrowserErrorCapture(page: Page, messages: string[]): void {
+  page.on("console", (message) => {
+    if (message.type() === "error") messages.push(`console: ${message.text()}`);
+  });
+  page.on("pageerror", (error) => messages.push(`page: ${error.message}`));
+}
+
+test.beforeEach(async ({ context }) => {
+  const messages: string[] = [];
+  const onPage = (page: Page) => attachBrowserErrorCapture(page, messages);
+  for (const page of context.pages()) attachBrowserErrorCapture(page, messages);
+  context.on("page", onPage);
+  browserErrorCaptures.set(context, { messages, onPage });
+});
+
+test.afterEach(async ({ context }) => {
+  const capture = browserErrorCaptures.get(context);
+  if (!capture) return;
+  context.off("page", capture.onPage);
+  browserErrorCaptures.delete(context);
+  expect(capture.messages).toEqual([]);
+});
 
 function themeButton(page: Page, mode: ThemeMode) {
   return page.getByRole("button", {
@@ -127,6 +158,16 @@ test("tracks live OS changes until an explicit toggle wins @smoke", async ({ pag
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(themeButton(page, "light")).toBeVisible();
 
+  // Exercise two actual system changes after the explicit choice. The explicit
+  // root/storage state must remain authoritative through both transitions.
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(themeButton(page, "light")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  expect(await readThemeState(page)).toMatchObject({
+    colorScheme: "light",
+    storedTheme: "light",
+  });
+
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(themeButton(page, "light")).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -155,10 +196,18 @@ test("persists an explicit toggle across reload and soft GET swaps @smoke", asyn
   await page.reload();
   await expectThemeAndHeader(page, "dark");
 
+  await page.evaluate((sentinel) => {
+    (window as unknown as Record<string, string>)[sentinel] = "alive";
+  }, NO_RELOAD_SENTINEL);
   const authorsSwap = await softClick(page, "/authors");
+  const afterAuthorsSentinel = await page.evaluate(
+    (sentinel) => (window as unknown as Record<string, string>)[sentinel],
+    NO_RELOAD_SENTINEL,
+  );
+  expect(afterAuthorsSentinel).toBe("alive");
   expect(new URL(authorsSwap.finalUrl).pathname).toBe("/authors");
   await expect(page).toHaveURL(/\/authors$/);
-  await expect(page).toHaveTitle("Authors | Stillframe");
+  await expect(page).toHaveTitle("Authors — Stillframe");
   await expect(page.locator("h1")).toHaveText("Authors");
   await expect(page.getByRole("link", { name: "Authors", exact: true })).toHaveAttribute(
     "aria-current",
@@ -167,9 +216,14 @@ test("persists an explicit toggle across reload and soft GET swaps @smoke", asyn
   await expectThemeAndHeader(page, "dark");
 
   const tagsSwap = await softClick(page, "/tags");
+  const afterTagsSentinel = await page.evaluate(
+    (sentinel) => (window as unknown as Record<string, string>)[sentinel],
+    NO_RELOAD_SENTINEL,
+  );
+  expect(afterTagsSentinel).toBe("alive");
   expect(new URL(tagsSwap.finalUrl).pathname).toBe("/tags");
   await expect(page).toHaveURL(/\/tags$/);
-  await expect(page).toHaveTitle("Tags | Stillframe");
+  await expect(page).toHaveTitle("Tags — Stillframe");
   await expect(page.locator("h1")).toHaveText("Tags");
   await expect(page.getByRole("link", { name: "Tags", exact: true })).toHaveAttribute(
     "aria-current",
