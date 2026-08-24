@@ -112,6 +112,12 @@ export function isGallerySnapshot(
 
   if (snapshot.page > snapshot.totalPages || snapshot.nextCount > snapshot.pageSize) return false;
   if (snapshot.pageSize > 24) return false;
+  const renderedCount = (snapshot.photoIds as string[]).length;
+  const maximumRenderedCount = Math.min(
+    snapshot.totalItems as number,
+    (snapshot.page as number) * (snapshot.pageSize as number),
+  );
+  if (renderedCount === 0 || renderedCount > maximumRenderedCount) return false;
   if (snapshot.terminal !== (snapshot.nextUrl === "")) return false;
   if (snapshot.terminal && snapshot.nextCount !== 0) return false;
   if (!snapshot.terminal && snapshot.nextCount === 0) return false;

@@ -461,7 +461,10 @@ export class InfiniteGalleryController {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
-    this.save();
+    // zfb unmounts the outgoing island after swapping the body. Saving through
+    // the global Document here could therefore capture a same-scope destination
+    // feed under this outgoing entry's identity. Successful appends and the
+    // earlier before-preparation hook already persist every useful snapshot.
     this.#generation += 1;
     this.#abortController?.abort();
     this.#observer?.disconnect();

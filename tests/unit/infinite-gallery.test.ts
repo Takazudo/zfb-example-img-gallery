@@ -209,8 +209,9 @@ describe("infinite gallery controller without browser-only observers", () => {
       feed.queries.set("[data-gallery-feed-next]", control);
 
       const documentListeners = new Map<string, Set<(event: Event) => void>>();
+      let activeFeed = feed;
       const fakeDocument = {
-        querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [feed] : [],
+        querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [activeFeed] : [],
         addEventListener: (type: string, listener: (event: Event) => void) => {
           const listeners = documentListeners.get(type) ?? new Set();
           listeners.add(listener);
@@ -224,6 +225,8 @@ describe("infinite gallery controller without browser-only observers", () => {
       let failWithResponse = false;
       let succeed = false;
       let parsedDocument: unknown = null;
+      const store = new GallerySnapshotStore(null);
+      let syncedState: unknown = null;
       const controller = InfiniteGalleryController.mount({
         document: fakeDocument as unknown as Document,
         location: { href: "https://example.test/", origin: "https://example.test" } as Location,
@@ -243,8 +246,10 @@ describe("infinite gallery controller without browser-only observers", () => {
           });
         }) as typeof fetch,
         parseHtml: () => parsedDocument as Document,
-        syncEntry: (() => undefined) as typeof import("@takazudo/zfb-runtime").syncHistoryEntry,
-        store: new GallerySnapshotStore(null),
+        syncEntry: ((_url: string | URL, options?: { state?: unknown }) => {
+          syncedState = options?.state ?? null;
+        }) as typeof import("@takazudo/zfb-runtime").syncHistoryEntry,
+        store,
       });
       expect(controller).not.toBeNull();
       const clickListener = [...(link.listeners.get("click") ?? [])][0]!;
@@ -305,7 +310,27 @@ describe("infinite gallery controller without browser-only observers", () => {
       expect(link.textContent).toBe("All photos loaded");
       expect(link.href).toBe("");
       expect(status.textContent).toBe("All photos loaded");
+
+      const identity = identityFromState(syncedState, "global", "https://example.test/");
+      expect(identity).not.toBeNull();
+      expect(store.get(identity!.key, identity!.scope, identity!.url)?.page).toBe(2);
+
+      // Island cleanup runs after zfb swaps the body. A same-scope destination
+      // must not overwrite the outgoing history entry's persisted snapshot.
+      const destinationGrid = new FakeElement();
+      const destinationCard = new FakeElement();
+      destinationCard.dataset.photoId = "999";
+      destinationGrid.children.push(destinationCard);
+      const destinationFeed = new FakeElement();
+      destinationFeed.dataset = {
+        galleryScope: "global", galleryPage: "1", galleryTotalPages: "2",
+        galleryTotalItems: "48", galleryPageSize: "24", galleryNextUrl: "/page/2",
+        galleryNextCount: "24", galleryTerminal: "false",
+      };
+      destinationFeed.queryLists.set('[data-gallery-grid="true"]', [destinationGrid]);
+      activeFeed = destinationFeed;
       controller!.destroy();
+      expect(store.get(identity!.key, identity!.scope, identity!.url)?.page).toBe(2);
     } finally {
       Object.defineProperty(globalThis, "HTMLElement", { configurable: true, value: OriginalHTMLElement });
     }
@@ -336,6 +361,11 @@ describe("gallery entry identity and bounded snapshots", () => {
     expect(isGallerySnapshot(snapshot("gallery-12345678"), { scope: "tag:1" })).toBe(false);
     expect(isGallerySnapshot(snapshot("gallery-12345678"), { entryUrl: "https://example.test/other" })).toBe(false);
     expect(isGallerySnapshot(snapshot("gallery-12345678", { photoIds: ["1", "1"] }))).toBe(false);
+    expect(isGallerySnapshot(snapshot("gallery-12345678", { photoIds: [], cardsHtml: "" }))).toBe(false);
+    expect(isGallerySnapshot(snapshot("gallery-12345678", {
+      totalItems: 1,
+      photoIds: ["1", "2"],
+    }))).toBe(false);
     expect(isGallerySnapshot(snapshot("gallery-12345678", { terminal: true }))).toBe(false);
   });
 
