@@ -15,6 +15,8 @@ The source exposes `SITE_NAME` and `SITE_TWITTER` (`Stillframe` and `@takazudo`)
 - Supports registration, login, and POST-only logout.
 - Lets a signed-in user change their username, upload an avatar, or delete their account.
 - Lets a signed-in user upload a photo with a title, plain-text description, and comma-separated tags.
+- Provides one global Display settings dialog for the gallery thumbnail ratio (Original, Portrait 3:4, Square 1:1, or Landscape 4:3) and width (Small, Medium, or Large). Choices are stored in local storage, synchronized across tabs, and applied to cards loaded later.
+- Enhances the server-rendered 24-item pages with progressive infinite loading: a visible loading/error/end status, an automatic IntersectionObserver path, and a manual `Load next … photos` path. Each history entry keeps a bounded expanded-gallery snapshot so router navigation and Back can restore it; the canonical `/page/[page]` links remain the no-JavaScript fallback.
 
 Every mutation remains a plain `<form method="post">` followed by a 303 redirect, so the application works with full navigations when JavaScript is unavailable. The intentional zfb client runtime progressively enhances same-origin navigation, soft-submits eligible forms, hydrates the theme toggle, and preserves the user's theme choice.
 
@@ -67,6 +69,12 @@ The shared layout mounts zfb's `ClientRouter` with animated fallback, `data-them
 Forms intentionally have no `data-zfb-reload`. With the runtime active, eligible same-origin GET forms navigate with encoded queries; non-GET methods are transported as POST, multipart bodies remain `FormData`, URL-encoded forms keep their encoding, redirects update the final URL, and validation/error HTML swaps without replaying a mutation. Ordinary form markup remains the no-JavaScript fallback.
 
 `zfb:after-swap` is a DOM-swap milestone: it fires before incoming scripts execute and before new islands mount or hydrate. Code that needs a newly hydrated island must use that island's own lifecycle rather than treating `zfb:after-swap` as a hydration event.
+
+### Gallery display and infinite loading
+
+The Display settings dialog is available from the global header on every page. It offers four ratios (Original, Portrait 3:4, Square 1:1, and Landscape 4:3) and three widths (Small 9rem, Medium 12.5rem, and Large 16rem). Preferences are versioned in local storage, restored before the first paint, synchronized with other tabs, preserved by zfb soft navigation, and inherited by newly appended cards. Original uses each image's intrinsic width and height; the other ratios crop with `object-fit: cover`.
+
+The first server-rendered page always contains up to 24 cards and a canonical next-page link. With JavaScript, the controller can append the next page while keeping the current URL; an automatic load is one request per leave/re-enter intersection, while the visible link always remains a manual retry/fallback. Loading, one-shot non-success, retry, and terminal `All photos loaded` states are announced in the feed's live region. Router history stores only bounded per-entry markup snapshots, so a photo navigation followed by Back can restore the loaded cards and scroll position without requiring a full reload. Disabling JavaScript follows the ordinary `/page/[page]` link and renders that page directly.
 
 ## Routes
 
@@ -197,6 +205,7 @@ For local mode, all Wrangler CLI operations and the dev server must address the 
 - **Magic-byte MIME checks.** Only JPEG, PNG, and WebP are allowed, and the allowlist is enforced from file bytes rather than the declared `Content-Type`. A PNG renamed `.jpg` is rejected; the stored extension comes from the sniff.
 - **Tags are deliberately constrained but free-form.** Input is comma-separated. Normalisation trims, strips one leading `#`, applies Unicode NFKC, lowercases, collapses whitespace to `-`, drops empties, and deduplicates. `/`, `%`, `?`, `#`, and control characters are rejected; each tag is 1–32 Unicode code points, with at most 10 tags per photo.
 - **`blurhash` is stored but unused.** See the data-model note above.
+- **Offset pagination has a concurrent-insert boundary.** The feed uses `created_at DESC, id DESC` with `LIMIT/OFFSET`; if a new photo is inserted between requests, a later offset can omit one item (or expose a repeat). Client-side append deduplication removes repeats, but it cannot recover an item shifted past the requested offset. Cursor pagination is intentionally outside this feature.
 - **Descriptions are plain text.** There is no Markdown parser; the detail page renders them with `white-space: pre-wrap`.
 
 ## Social cards and SEO

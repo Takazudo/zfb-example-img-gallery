@@ -25,11 +25,17 @@ The mandatory topic-worker command selects unit, ssr, and handlers. pnpm test:al
 
 ### Browser lane
 
-The browser lane is one `@smoke` Playwright spec in CI:
+The `@smoke` Playwright lane runs one Chromium worker against one shared local Wrangler state. `playwright.config.ts` applies migrations and the idempotent `scripts/e2e-fixture.sql` before starting the server. The fixture creates one `e2e-fixture` author/tag and 50 lightweight rows with deterministic mixed dimensions; every `/img/**` request is intercepted with test PNG bytes, so no R2 upload is needed and repeated setup is safe.
 
-register → login → upload → photo appears on page 1 → detail page → tag page lists it → the detail page's og:image URL returns 200 with image/jpeg.
+The browser confirmation covers the existing register → login → upload → detail/tag/social-card journey plus the complete progressive gallery contract: delayed loading, exactly 24 + 24 + a smaller final remainder, terminal status, one controlled error with retry and untouched link/grid, observer anti-cascade, all Display settings ratios/widths, computed mixed-dimension Original cards, invalid/deleted storage defaults, reload and cross-tab persistence, zfb soft-navigation persistence, newly appended cards, two-batch router navigation + Back restoration with a no-reload sentinel, a JavaScript-disabled canonical link, and manual loading with IntersectionObserver unavailable. Theme, navigation, form, auth/header, title/meta, route-announcer, and accessibility assertions remain in the existing smoke specs.
 
-The spec intercepts outbound image requests with a 1×1 PNG. `.github/workflows/deploy.yml` runs it with one Chromium worker before deployment and uploads Playwright diagnostics when the job fails or is cancelled. `scripts/smoke.mjs` provides the separate post-deploy production check.
+The exact local command is:
+
+```sh
+bash $HOME/.claude/scripts/playwright-guard.sh --wait 300 -- pnpm exec playwright test --grep @smoke
+```
+
+The guard owns the one server lifecycle; do not start a second unmanaged dev server. The spec intercepts outbound image requests with a 1×1 PNG by default and uses tiny generated PNGs only when it must verify intrinsic mixed dimensions. `.github/workflows/deploy.yml` runs the same lane before deployment and uploads Playwright diagnostics when the job fails or is cancelled. `scripts/smoke.mjs` provides the separate post-deploy production check.
 
 ### SSR invariants
 
@@ -78,3 +84,7 @@ Automated agents working in this repository must follow these rules:
 - No assertion that gravity: "auto" selected the correct salient band.
 - No full 293-item seeding-script run; a bounded sample is the appropriate smoke test.
 - No coverage-threshold gate.
+
+### Pagination boundary exercised by browser tests
+
+The deterministic fixture makes the two full-page transitions and final remainder repeatable, but it does not change the production pagination contract. Pages use offset pagination, so a concurrent insert between page requests can shift a later offset and omit one row (or produce a duplicate). The client deduplicates repeated photo IDs while appending; it cannot recover an omitted row, and cursor pagination is outside this feature.
