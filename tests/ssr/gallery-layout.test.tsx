@@ -8,15 +8,46 @@ import { PhotoCard } from "../../components/photo-card";
 import { PhotoGrid } from "../../components/photo-grid";
 import { TagList } from "../../components/tag-list";
 import GalleryLayout from "../../layouts/gallery-layout";
+import { THEME_BOOTSTRAP_SCRIPT } from "../../lib/theme";
 
 describe("GalleryLayout", () => {
-  it("renders the document head and exactly one stable stylesheet", () => {
+  it("renders the dynamic document head with one stable stylesheet and module entry", () => {
     const html = render(<GalleryLayout title="Gallery">content</GalleryLayout>);
     expect(html).toContain('<html lang="en"');
     expect(html).toMatch(/<meta char(?:s|S)et="utf-8"/);
     expect(html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1"');
     expect(html).toContain("<title>Gallery — Stillframe</title>");
     expect(html.match(/href="\/assets\/app\.css"/g)).toHaveLength(1);
+    expect(html.match(/<script type="module" src="\/assets\/islands\.js"><\/script>/g)).toHaveLength(1);
+  });
+  it("emits the marked pre-paint bootstrap before stylesheet work", () => {
+    const html = render(<GalleryLayout>content</GalleryLayout>);
+    expect(html).toContain(`<script data-theme-bootstrap="true">${THEME_BOOTSTRAP_SCRIPT}</script>`);
+    expect(html.indexOf("data-theme-bootstrap")).toBeLessThan(html.indexOf('href="/assets/app.css"'));
+  });
+  it("mounts the uniform SPA router policy and preserves its announcer styles", () => {
+    const html = render(<GalleryLayout>content</GalleryLayout>);
+    expect(html).toContain('name="zfb-view-transitions-enabled" content="true"');
+    expect(html).toContain('name="zfb-view-transitions-fallback" content="animate"');
+    expect(html).toContain('name="zfb-preserve-html-attrs" content="data-theme"');
+    expect(html).toContain('name="zfb-traverse-refetch" content="true"');
+    expect(html).toContain(".zfb-route-announcer");
+  });
+  it("mounts the stable accessible theme island in the wrapping header nav", () => {
+    const html = render(<GalleryLayout>content</GalleryLayout>);
+    expect(html).toContain('data-zfb-island="ThemeToggle"');
+    expect(html).toContain('data-when="load"');
+    expect(html).toContain('aria-label="Switch to dark mode"');
+    expect(html).toMatch(/<nav[^>]*>[\s\S]*data-zfb-island="ThemeToggle"[\s\S]*<\/nav>/);
+    expect(html).toContain("flex w-full flex-wrap items-center");
+    const props = html.match(/data-zfb-island="ThemeToggle"[^>]*data-props="([^"]*)"/)?.[1];
+    expect(props).toBeUndefined();
+  });
+  it("suppresses only the manual stable module for the SSG document mode", () => {
+    const html = render(<GalleryLayout includeStableClientEntry={false}>content</GalleryLayout>);
+    expect(html).not.toContain('src="/assets/islands.js"');
+    expect(html).toContain('data-zfb-island="ThemeToggle"');
+    expect(html).toContain('name="zfb-view-transitions-enabled"');
   });
   it("renders signed-out controls only", () => {
     const html = render(<GalleryLayout user={null}>content</GalleryLayout>);
@@ -35,9 +66,11 @@ describe("GalleryLayout", () => {
     expect(html.match(/aria-current="page"/g)).toHaveLength(1);
     expect(html).toMatch(/href="\/tags" aria-current="page"/);
   });
-  it("contains no script or inline event handler", () => {
+  it("contains only the intentional bootstrap and module scripts with no inline event handler", () => {
     const html = render(<GalleryLayout>content</GalleryLayout>);
-    expect(html).not.toMatch(/<script/i); expect(html).not.toMatch(/\son[a-z]+=/i);
+    expect(html.match(/<script\b/g)).toHaveLength(2);
+    expect(html).not.toMatch(/\son[a-z]+=/i);
+    expect(html).not.toContain("data-zfb-reload");
   });
 });
 

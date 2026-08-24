@@ -8,7 +8,7 @@
   "scripts": {
     "predev": "rm -rf dist .zfb .zfb-build",
     "dev": "zfb dev",
-    "build": "zfb build && node scripts/stable-css.mjs",
+    "build": "zfb build && node scripts/stable-assets.mjs",
     "preview": "zfb preview",
     "typecheck": "zfb check",
     "test": "vitest run --project unit --project ssr --project handlers",

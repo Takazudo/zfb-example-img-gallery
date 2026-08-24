@@ -1,7 +1,11 @@
+import { Island } from "@takazudo/zfb";
+import { ClientRouter } from "@takazudo/zfb-runtime";
 import type { ComponentChildren } from "preact";
 import { FaviconLinks, Seo } from "../components/seo";
+import { ThemeToggle } from "../components/theme-toggle";
 import type { SeoData } from "../lib/seo";
 import { SITE_NAME } from "../lib/site";
+import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
 import "../styles/global.css";
 
 /** Minimal structural shape of the signed-in user. Declared locally because auth and shared types belong to sibling tasks. */
@@ -13,6 +17,8 @@ type Props = {
   seo?: SeoData;
   user?: LayoutUser | null;
   activePath?: string;
+  /** SSG rewrites its own generated entry; dynamic documents need the stable alias. */
+  includeStableClientEntry?: boolean;
   children: ComponentChildren;
 };
 
@@ -24,12 +30,29 @@ function NavLink({ href, activePath, children }: { href: string; activePath?: st
   return <a href={href} aria-current={activePath === href ? "page" : undefined} class={navClass}>{children}</a>;
 }
 
-export default function GalleryLayout({ title, description = TAGLINE, seo, user = null, activePath, children }: Props) {
+export default function GalleryLayout({
+  title,
+  description = TAGLINE,
+  seo,
+  user = null,
+  activePath,
+  includeStableClientEntry = true,
+  children,
+}: Props) {
   return (
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script
+          data-theme-bootstrap
+          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
+        />
+        {ClientRouter({
+          fallback: "animate",
+          preserveHtmlAttrs: ["data-theme"],
+          traverseRefetch: true,
+        }) as unknown as ComponentChildren}
         {seo ? (
           <Seo seo={seo} />
         ) : (
@@ -40,12 +63,20 @@ export default function GalleryLayout({ title, description = TAGLINE, seo, user 
         )}
         <FaviconLinks />
         <link rel="stylesheet" href="/assets/app.css" />
+        {includeStableClientEntry ? (
+          <script type="module" src="/assets/islands.js" />
+        ) : null}
       </head>
       <body class="flex min-h-dvh flex-col">
           <header class="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur">
-            <div class="flex w-full items-center justify-between gap-hsp-md px-gutter py-vsp-sm">
+            <div class="flex w-full flex-wrap items-center justify-between gap-hsp-md px-gutter py-vsp-sm">
               <a href="/" class="text-heading font-semibold tracking-tight">{SITE_NAME}</a>
               <nav aria-label="Primary" class="flex flex-wrap items-center justify-end gap-hsp-2xs">
+                {(
+                  <Island when="load">
+                    <ThemeToggle />
+                  </Island>
+                ) as unknown as ComponentChildren}
                 <NavLink href="/" activePath={activePath}>Gallery</NavLink>
                 <NavLink href="/authors" activePath={activePath}>Authors</NavLink>
                 <NavLink href="/tags" activePath={activePath}>Tags</NavLink>

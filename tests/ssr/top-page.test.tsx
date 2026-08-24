@@ -111,7 +111,9 @@ describe("top page SSR", () => {
     expect(html).toContain('height="1400"');
     expect(html).toContain('loading="eager"');
     expect(html).toContain('loading="lazy"');
-    expect(html).not.toMatch(/<script/i);
+    expect(html.match(/<script\b/g)).toHaveLength(2);
+    expect(html).toContain("data-theme-bootstrap");
+    expect(html).toContain('type="module" src="/assets/islands.js"');
     expect(html).not.toMatch(/\son[a-z]+=/i);
   });
 

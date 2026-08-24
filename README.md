@@ -16,7 +16,7 @@ The source exposes `SITE_NAME` and `SITE_TWITTER` (`Stillframe` and `@takazudo`)
 - Lets a signed-in user change their username, upload an avatar, or delete their account.
 - Lets a signed-in user upload a photo with a title, plain-text description, and comma-separated tags.
 
-Every mutation is a plain `<form method="post">` followed by a 303 redirect — the demo ships **zero client-side JavaScript**.
+Every mutation remains a plain `<form method="post">` followed by a 303 redirect, so the application works with full navigations when JavaScript is unavailable. The intentional zfb client runtime progressively enhances same-origin navigation, soft-submits eligible forms, hydrates the theme toggle, and preserves the user's theme choice.
 
 ## Architecture
 
@@ -28,7 +28,7 @@ Every mutation is a plain `<form method="post">` followed by a 303 redirect — 
 | Image blobs | Cloudflare R2 (`env.BUCKET`), served through a Worker proxy route |
 | Social cards | Cloudflare Images binding (`env.IMAGES`), generated once and persisted to R2 |
 | Auth | email + password, PBKDF2 (Web Crypto), opaque server-side session cookie |
-| Client JS | none |
+| Client JS | zfb navigation/island runtime + the theme toggle only |
 | Deploy | GitHub Actions → `wrangler deploy`; D1 migrations applied in CI |
 
 ### Clean URLs, no `paths()`
@@ -54,11 +54,19 @@ run_worker_first = [
 ]
 ```
 
-`/assets/*` is deliberately absent so hashed CSS and the stable stylesheet are served straight from the edge without a Worker invocation.
+`/assets/*` is deliberately absent so hashed and stable CSS/client runtime assets are served straight from the edge without a Worker invocation.
 
-### The stylesheet link is hard-coded on purpose
+### Stable SSR assets are hard-coded on purpose
 
-zfb injects a stylesheet link into generated (SSG) HTML only. This build is SSR-only apart from `404.html`, so `layouts/gallery-layout.tsx` hard-codes `<link rel="stylesheet" href="/assets/app.css">`. The postbuild step `scripts/stable-css.mjs` copies the one `dist/assets/styles-<hash>.css` match to that stable name and exits non-zero unless exactly one match exists. If an upstream change alters CSS emission, the failure is a **stable-css error, not a zfb error**.
+zfb rewrites generated (SSG) HTML to hashed assets, but dynamic documents returned by `htmlResponse()` are created after the build. `layouts/gallery-layout.tsx` therefore links `/assets/app.css` and `/assets/islands.js`. The postbuild step `scripts/stable-assets.mjs` discovers exactly one hashed stylesheet and exactly one generated islands entry (excluding chunks/resources), copies them to the stable names, verifies the islands alias byte-for-byte, and rejects missing relative runtime assets. The prerendered 404 suppresses the manual stable module tag because zfb injects its one hashed module entry during SSG.
+
+### SPA navigation is progressive enhancement
+
+The shared layout mounts zfb's `ClientRouter` with animated fallback, `data-theme` preservation, and traversal refetching. Refetching matters because these pages are per-request SSR: auth, D1 content, active navigation, title/meta, and header controls are server-authored and must be replaced on every swap, including repeated history URLs. The router keeps its accessible route announcer.
+
+Forms intentionally have no `data-zfb-reload`. With the runtime active, eligible same-origin GET forms navigate with encoded queries; non-GET methods are transported as POST, multipart bodies remain `FormData`, URL-encoded forms keep their encoding, redirects update the final URL, and validation/error HTML swaps without replaying a mutation. Ordinary form markup remains the no-JavaScript fallback.
+
+`zfb:after-swap` is a DOM-swap milestone: it fires before incoming scripts execute and before new islands mount or hydrate. Code that needs a newly hydrated island must use that island's own lifecycle rather than treating `zfb:after-swap` as a hydration event.
 
 ## Routes
 
@@ -97,7 +105,7 @@ Three choices are easy to miss:
 
 - Email and username are normalised before storage and comparison: email is lowercased and trimmed, while usernames are lowercased (and NFKC-normalised by the account module) for uniqueness and URL lookup. SQLite's default `UNIQUE` comparison on `TEXT` is case-sensitive; without this, `Alice` and `alice` could be two accounts sharing `/authors/alice`.
 - `width` and `height` are `NOT NULL` because every `<img>` carries them to prevent layout shift. A Worker does not decode an image; dimensions are parsed from the file header in `lib/image-dims.ts`.
-- `blurhash` is stored but nothing renders it. It arrives with the source data, while using it would require re-downloading the set and either client JavaScript or a server-side decoder, both outside this zero-JS demo.
+- `blurhash` is stored but nothing renders it. It arrives with the source data, while using it would require re-downloading the set and either a dedicated client decoder or a server-side decoder, both outside this demo's narrow runtime.
 
 R2 keys are immutable UUID-based names. The stored original, grid variant, avatar, and derived card use these shapes:
 
@@ -118,7 +126,7 @@ There is deliberately no `og_key` column. The card key is derived from the photo
 
 This is a standalone package. The zfb packages are ordinary npm registry dependencies with no `file:` links; the `zfb` CLI ships as prebuilt platform binaries through optional dependencies, so the package-install step is the whole setup.
 
-`@takazudo/zfb`, `@takazudo/zfb-runtime`, and `@takazudo/zfb-adapter-cloudflare` are exact-pinned and in lockstep at `2.8.0`. `wrangler` is also exact-pinned, at `4.85.0`. The package manager is pnpm `10.34.1`, and the required Node version is `>=22.12.0`. There is no `tailwindcss` dependency: Tailwind v4 is compiled inside the zfb binary.
+`@takazudo/zfb`, `@takazudo/zfb-runtime`, and `@takazudo/zfb-adapter-cloudflare` are exact-pinned and in lockstep at `2.10.1`. `wrangler` is also exact-pinned, at `4.85.0`. The package manager is pnpm `10.34.1`, and the required Node version is `>=22.12.0`. There is no `tailwindcss` dependency: Tailwind v4 is compiled inside the zfb binary.
 
 ## Local development
 
@@ -136,7 +144,7 @@ The checked-in scripts are:
 | Command | What it runs |
 | --- | --- |
 | `pnpm dev` | `zfb dev` (with the `predev` cleanup of generated output) |
-| `pnpm build` | `zfb build` followed by `node scripts/stable-css.mjs` |
+| `pnpm build` | `zfb build` followed by `node scripts/stable-assets.mjs` |
 | `pnpm preview` | `zfb preview` |
 | `pnpm typecheck` | `zfb check` |
 | `pnpm test` | Vitest `unit`, `ssr`, and `handlers` projects |
@@ -185,7 +193,7 @@ For local mode, all Wrangler CLI operations and the dev server must address the 
 
 - **No thumbnail generation for user uploads.** A Worker cannot resize an image; image processing is CPU-bound work that can hit the Worker CPU ceiling. Seeded photos can have a `600w` thumbnail only because the source CDN publishes one. A genuine upload is stored as-is with `thumb_key = NULL`, and the grid falls back to `r2_key`. Close this gap with a variant pipeline at upload time or Cloudflare Image Resizing.
 - **Upload size cap: 4 MiB (shown as 4 MB in the UI).** `MAX_UPLOAD_BYTES` is `4 * 1024 * 1024` in `lib/storage.ts`. The upload route rejects an oversized multipart envelope early using `Content-Length` (the envelope allowance is the image cap plus 64 KiB), then `validateAndStore()` checks the parsed image bytes definitively. The largest mirrored original recorded in the manifest is about 1.46 MiB, so the cap leaves roughly 2.7× headroom while bounding Worker memory and grid weight.
-- **Uploads go through the Worker, not presigned URLs.** A presigned PUT would avoid the request-body limit, but would need another credential type and client-side JavaScript, giving up the zero-JS property.
+- **Uploads go through the Worker, not presigned URLs.** A presigned PUT would avoid the request-body limit, but would need another credential type and upload-specific client code beyond the narrow navigation/theme runtime.
 - **Magic-byte MIME checks.** Only JPEG, PNG, and WebP are allowed, and the allowlist is enforced from file bytes rather than the declared `Content-Type`. A PNG renamed `.jpg` is rejected; the stored extension comes from the sniff.
 - **Tags are deliberately constrained but free-form.** Input is comma-separated. Normalisation trims, strips one leading `#`, applies Unicode NFKC, lowercases, collapses whitespace to `-`, drops empties, and deduplicates. `/`, `%`, `?`, `#`, and control characters are rejected; each tag is 1–32 Unicode code points, with at most 10 tags per photo.
 - **`blurhash` is stored but unused.** See the data-model note above.
