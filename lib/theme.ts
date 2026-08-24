@@ -42,6 +42,7 @@ export type ThemeControllerEnvironment = {
   dispatchThemeChange(theme: ThemeMode): void;
   subscribeSystemPreference(listener: () => void): () => void;
   subscribeThemeChange(listener: () => void): () => void;
+  subscribeStorageChange(listener: () => void): () => void;
 };
 
 export type ThemeController = {
@@ -76,6 +77,7 @@ export function createThemeController(
   let started = false;
   let removeSystemListener: (() => void) | null = null;
   let removeThemeListener: (() => void) | null = null;
+  let removeStorageListener: (() => void) | null = null;
 
   const notify = (theme: ThemeMode) => {
     if (theme === currentTheme) return;
@@ -111,16 +113,18 @@ export function createThemeController(
       safely(() => environment.readRootTheme(), null),
     );
 
-    // A valid root value is the pre-paint result and remains useful if a later
-    // storage read is restricted. Invalid DOM and storage values are ignored.
+    // A valid stored value is authoritative for live cross-tab updates. The
+    // root value is the pre-paint fallback and remains useful if storage is
+    // restricted. Invalid DOM and storage values are ignored.
     explicitTheme = storedTheme ?? rootTheme;
-    notify(
+    const nextTheme =
+      storedTheme ??
       rootTheme ??
-        getEffectiveTheme(
-          explicitTheme,
-          safely(() => environment.prefersDark(), false),
-        ),
-    );
+      getEffectiveTheme(null, safely(() => environment.prefersDark(), false));
+    if (storedTheme !== null && storedTheme !== rootTheme) {
+      safelyRun(() => environment.writeRootTheme(storedTheme));
+    }
+    notify(nextTheme);
     updateSystemSubscription();
   };
 
@@ -130,6 +134,10 @@ export function createThemeController(
       started = true;
       removeThemeListener = safely(
         () => environment.subscribeThemeChange(synchronize),
+        () => {},
+      );
+      removeStorageListener = safely(
+        () => environment.subscribeStorageChange(synchronize),
         () => {},
       );
       synchronize();
@@ -155,7 +163,9 @@ export function createThemeController(
       started = false;
       stopSystemListener();
       safelyRun(() => removeThemeListener?.());
+      safelyRun(() => removeStorageListener?.());
       removeThemeListener = null;
+      removeStorageListener = null;
     },
   };
 }
@@ -178,6 +188,13 @@ export function createBrowserThemeEnvironment(): ThemeControllerEnvironment {
     subscribeThemeChange: (listener) => {
       window.addEventListener(THEME_CHANGE_EVENT, listener);
       return () => window.removeEventListener(THEME_CHANGE_EVENT, listener);
+    },
+    subscribeStorageChange: (listener) => {
+      const onStorage = (event: StorageEvent) => {
+        if (event.key === THEME_STORAGE_KEY) listener();
+      };
+      window.addEventListener("storage", onStorage);
+      return () => window.removeEventListener("storage", onStorage);
     },
   };
 }
