@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildThemeBootstrapScript,
+  createBrowserThemeEnvironment,
   createThemeController,
   getEffectiveTheme,
   getNextTheme,
@@ -24,6 +25,7 @@ function createEnvironment(
     dispatchThemeChange: () => {},
     subscribeSystemPreference: () => () => {},
     subscribeThemeChange: () => () => {},
+    subscribeStorageChange: () => () => {},
     ...overrides,
   };
 }
@@ -87,14 +89,17 @@ describe("theme helpers", () => {
 describe("theme controller", () => {
   it("starts from the root pre-paint value and cleans up listeners", () => {
     const removeTheme = vi.fn();
+    const removeStorage = vi.fn();
     const removeSystem = vi.fn();
     const subscribeTheme = vi.fn(() => removeTheme);
+    const subscribeStorage = vi.fn(() => removeStorage);
     const subscribeSystem = vi.fn(() => removeSystem);
     const changes: ThemeMode[] = [];
     const controller = createThemeController(
       createEnvironment({
         readRootTheme: () => "dark",
         subscribeThemeChange: subscribeTheme,
+        subscribeStorageChange: subscribeStorage,
         subscribeSystemPreference: subscribeSystem,
       }),
       (theme) => changes.push(theme),
@@ -104,10 +109,12 @@ describe("theme controller", () => {
     expect(controller.getMode()).toBe("dark");
     expect(changes).toEqual(["dark"]);
     expect(subscribeTheme).toHaveBeenCalledOnce();
+    expect(subscribeStorage).toHaveBeenCalledOnce();
     expect(subscribeSystem).not.toHaveBeenCalled();
 
     controller.destroy();
     expect(removeTheme).toHaveBeenCalledOnce();
+    expect(removeStorage).toHaveBeenCalledOnce();
     expect(removeSystem).not.toHaveBeenCalled();
   });
 
@@ -190,6 +197,67 @@ describe("theme controller", () => {
     expect(changes).toEqual(["dark"]);
   });
 
+  it("prefers a newly stored mode over a stale root value", () => {
+    let storedTheme: ThemeMode | null = null;
+    let rootTheme: ThemeMode | null = null;
+    let storageListener: (() => void) | undefined;
+    const removeSystem = vi.fn();
+    const subscribeSystem = vi.fn(() => removeSystem);
+    const changes: ThemeMode[] = [];
+    const controller = createThemeController(
+      createEnvironment({
+        readStoredTheme: () => storedTheme,
+        readRootTheme: () => rootTheme,
+        writeRootTheme: (theme) => {
+          rootTheme = theme;
+        },
+        subscribeStorageChange: (listener) => {
+          storageListener = listener;
+          return () => {};
+        },
+        subscribeSystemPreference: subscribeSystem,
+      }),
+      (theme) => changes.push(theme),
+    );
+
+    controller.start();
+    expect(controller.getMode()).toBe("light");
+    expect(subscribeSystem).toHaveBeenCalledOnce();
+
+    rootTheme = "light";
+    storedTheme = "dark";
+    storageListener?.();
+    expect(rootTheme).toBe("dark");
+    expect(controller.getMode()).toBe("dark");
+    expect(changes).toEqual(["dark"]);
+    expect(removeSystem).toHaveBeenCalledOnce();
+    expect(subscribeSystem).toHaveBeenCalledOnce();
+  });
+
+  it("filters native storage events to the theme key and cleans up", () => {
+    const addEventListener = vi.fn();
+    const removeEventListener = vi.fn();
+    vi.stubGlobal("window", { addEventListener, removeEventListener });
+
+    const environment = createBrowserThemeEnvironment();
+    const listener = vi.fn();
+    const remove = environment.subscribeStorageChange(listener);
+    const storageHandler = addEventListener.mock.calls.find(([name]) => name === "storage")?.[1] as
+      | ((event: StorageEvent) => void)
+      | undefined;
+
+    expect(storageHandler).toBeDefined();
+    storageHandler?.({ key: "other-key" } as StorageEvent);
+    storageHandler?.({ key: null } as StorageEvent);
+    expect(listener).not.toHaveBeenCalled();
+    storageHandler?.({ key: THEME_STORAGE_KEY } as StorageEvent);
+    expect(listener).toHaveBeenCalledOnce();
+
+    remove();
+    expect(removeEventListener).toHaveBeenCalledWith("storage", storageHandler);
+    vi.unstubAllGlobals();
+  });
+
   it("ignores invalid state and safely contains restricted browser adapters", () => {
     const restricted = () => {
       throw new Error("restricted");
@@ -204,6 +272,7 @@ describe("theme controller", () => {
         dispatchThemeChange: restricted,
         subscribeSystemPreference: restricted,
         subscribeThemeChange: restricted,
+        subscribeStorageChange: restricted,
       }),
       () => {},
     );

@@ -170,9 +170,11 @@ test("serves the intentional theme/router runtime inventory @smoke", async ({ pa
   await page.goto("/");
   await expectRuntimeInventory(page);
 
-  const photoHref = await page.locator('a[href^="/photos/"]').first().getAttribute("href");
-  if (photoHref) {
-    await page.goto(photoHref);
+  const photoLinks = page.locator('a[href^="/photos/"]');
+  if ((await photoLinks.count()) > 0) {
+    const photoHref = await photoLinks.first().getAttribute("href");
+    expect(photoHref).toBeTruthy();
+    await page.goto(photoHref!);
     await expectRuntimeInventory(page);
     await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(1);
   }

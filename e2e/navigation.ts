@@ -29,7 +29,7 @@ type ProbeTarget = {
  */
 async function armSwapProbe(page: Page, target: ProbeTarget): Promise<void> {
   await page.evaluate(
-    ({ key, marker, target }) => {
+    ({ attribute, key, marker, target }) => {
       const destination = new URL(target.url, window.location.href);
       if (destination.origin !== window.location.origin) {
         throw new Error(`Soft navigation only accepts same-origin URLs: ${target.url}`);
@@ -56,7 +56,7 @@ async function armSwapProbe(page: Page, target: ProbeTarget): Promise<void> {
       ) {
         throw new Error(`Could not find same-origin ${target.kind} for ${target.url}`);
       }
-      element.setAttribute(TARGET_ATTRIBUTE, marker);
+      element.setAttribute(attribute, marker);
 
       const previous = (window as unknown as Record<string, NavigationProbe | undefined>)[key];
       previous?.cleanup();
@@ -88,7 +88,7 @@ async function armSwapProbe(page: Page, target: ProbeTarget): Promise<void> {
         (element as HTMLAnchorElement).click();
       }
     },
-    { key: PROBE_KEY, marker: TARGET_VALUE, target },
+    { attribute: TARGET_ATTRIBUTE, key: PROBE_KEY, marker: TARGET_VALUE, target },
   );
 }
 
