@@ -58,6 +58,12 @@ describe("GalleryLayout", () => {
       expect(html).not.toContain('aria-haspopup="dialog"');
     }
   });
+  it("mounts the zero-DOM infinite-feed controller in the existing island runtime", () => {
+    const html = render(<GalleryLayout>content</GalleryLayout>);
+    expect(html.match(/data-zfb-island="InfiniteGalleryControllerIsland"/g)).toHaveLength(1);
+    expect(html).toContain('data-zfb-island="InfiniteGalleryControllerIsland" data-when="load"');
+    expect(html.match(/src="\/assets\/islands\.js"/g)).toHaveLength(1);
+  });
   it("suppresses only the manual stable module for the SSG document mode", () => {
     const html = render(<GalleryLayout includeStableClientEntry={false}>content</GalleryLayout>);
     expect(html).not.toContain('src="/assets/islands.js"');
@@ -93,6 +99,16 @@ describe("GalleryLayout", () => {
 describe("shared presentational components", () => {
   it("renders PhotoGrid with its stable verification selector", () => {
     expect(render(<PhotoGrid><li>Photo</li></PhotoGrid>)).toMatch(/<ul[^>]*data-testid="photo-grid"/);
+  });
+  it("provides one stable polite feed status node without replacing the real anchor", () => {
+    const html = render(<PhotoFeed
+      scope="global"
+      page={{ page: 1, pageSize: 24, totalItems: 25, totalPages: 2, offset: 0, hasPrev: false, hasNext: true }}
+      nextHref="/page/2"
+      photos={[]}
+    />);
+    expect(html).toContain('data-gallery-next-link="true"');
+    expect(html).toContain('data-gallery-status="true" aria-live="polite" aria-atomic="true" hidden');
   });
   it("renders the PhotoCard structural and metadata contract", () => {
     const html = render(<PhotoCard photo={{ id: 7, title: "Acrylic macro", src: "/img/photo.webp", width: 2000, height: 1500 }} />);

@@ -58,6 +58,8 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty }: Props) {
 
   // Preact serializes the terminal empty value as a valueless data attribute;
   // the browser exposes that as an empty dataset value.
+  // Narrow compatibility hook for the client enhancement: this server-owned,
+  // stable live region lets loading/retry/end announcements survive link updates.
   return (
     <section
       data-gallery-feed="true"
@@ -94,6 +96,13 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty }: Props) {
           </a>
         </nav>
       ) : null}
+      <p
+        data-gallery-status="true"
+        aria-live="polite"
+        aria-atomic="true"
+        hidden
+        class="mt-vsp-xs text-center text-small text-ink-soft"
+      />
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { Island } from "@takazudo/zfb";
 import { ClientRouter } from "@takazudo/zfb-runtime";
 import type { ComponentChildren } from "preact";
 import { DisplaySettings } from "../components/display-settings";
+import { InfiniteGalleryControllerIsland } from "../components/infinite-gallery-controller";
 import { FaviconLinks, Seo } from "../components/seo";
 import { ThemeToggle } from "../components/theme-toggle";
 import { GALLERY_PREFERENCES_BOOTSTRAP_SCRIPT } from "../lib/gallery-preferences";
@@ -71,6 +72,11 @@ export default function GalleryLayout({
         ) : null}
       </head>
       <body class="flex min-h-dvh flex-col">
+          {(
+            <Island when="load">
+              <InfiniteGalleryControllerIsland />
+            </Island>
+          ) as unknown as ComponentChildren}
           <header class="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur">
             <div class="flex w-full flex-wrap items-center justify-between gap-hsp-md px-gutter py-vsp-sm">
               <a href="/" class="text-heading font-semibold tracking-tight">{SITE_NAME}</a>
