@@ -9,6 +9,10 @@ const password = `Pw-${runId}-aA1!`;
 const title = `E2E smoke ${runId}`;
 const description = `Uploaded by the e2e smoke run ${runId}. *Plain* _text_.`;
 const uniqueTag = `e2e-${runId}`;
+const EXPECTED_VALIDATION_CONSOLE_ERRORS = [
+  "console: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+  "console: Failed to load resource: the server responded with a status of 400 (Bad Request)",
+] as const;
 
 test.beforeEach(async ({ page }) => {
   // Stub photo bytes. The grid and detail pages are the assertions; the actual
@@ -149,7 +153,14 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   expect((await page.context().cookies()).some((cookie) => cookie.name === "sid")).toBe(false);
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Register", exact: true })).toBeVisible();
-  expect(browserErrors).toEqual([]);
+  // The journey deliberately fetches the 401 login and 400 registration
+  // validation documents. Chromium reports those two non-2xx responses as
+  // generic resource console errors; they are expected HTTP diagnostics, not
+  // JavaScript/page failures. Keep this allowlist exact: every other console
+  // error and every pageerror remains a failure.
+  const expectedValidationErrors = [...EXPECTED_VALIDATION_CONSOLE_ERRORS];
+  expect(browserErrors).toHaveLength(expectedValidationErrors.length);
+  expect(browserErrors).toEqual(expect.arrayContaining(expectedValidationErrors));
 });
 
 async function expectRuntimeInventory(page: import("@playwright/test").Page) {
