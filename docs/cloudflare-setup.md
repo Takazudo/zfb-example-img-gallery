@@ -365,8 +365,11 @@ registration and upload paths. The seven steps below are intentionally sequentia
 
    The dry run is read/decode/report only. The apply command writes D1 hashes and never writes,
    replaces, or deletes an R2 object. Keep `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (or
-   an existing Wrangler login) out of files and shell history. This runbook documents the remote
-   path; this checkout did not execute a remote backfill.
+   an existing Wrangler login) out of files and shell history.
+
+   Production status (2026-08-24): the bounded operator run completed all 294 legacy rows with
+   zero missing or malformed hashes. A normal rerun selected zero rows. R2 remained read-only
+   throughout the operation.
 
 Each new upload that reaches hash generation consumes one Cloudflare Images transformation from
 the account's quota and may incur the applicable Images usage cost. If the quota or transformation
