@@ -11,6 +11,7 @@ const valid404 = `<!doctype html><html><head>
 <script data-theme-bootstrap>(()=>{})();</script>
 <style>.zfb-route-announcer{position:absolute}</style>
 <meta name="zfb-view-transitions-enabled" content="true">
+<meta name="zfb-view-transitions-fallback" content="animate">
 <meta name="zfb-preserve-html-attrs" content="data-theme">
 <meta name="zfb-traverse-refetch" content="true">
 <link rel="stylesheet" href="/assets/app.css">
@@ -49,9 +50,11 @@ describe("SSR invariants", () => {
     const root = buildFixture();
     try {
       writeFileSync(join(root, "assets", "surprise.js"), "alert(1)");
+      writeFileSync(join(root, "assets", "_worker.js"), "not an adapter entry");
       writeFileSync(join(root, "404.html"), valid404.replace("</head>", "<script>alert(1)</script></head>"));
       const problems = scanBuildOutput(root);
       expect(problems).toContain("unexpected client JavaScript artifact: assets/surprise.js");
+      expect(problems).toContain("unexpected client JavaScript artifact: assets/_worker.js");
       expect(problems).toContain("404.html contains an unexpected executable or inline module script");
     } finally {
       rmSync(root, { recursive: true });

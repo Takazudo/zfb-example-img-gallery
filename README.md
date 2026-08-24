@@ -54,7 +54,7 @@ run_worker_first = [
 ]
 ```
 
-`/assets/*` is deliberately absent so hashed CSS and the stable stylesheet are served straight from the edge without a Worker invocation.
+`/assets/*` is deliberately absent so hashed and stable CSS/client runtime assets are served straight from the edge without a Worker invocation.
 
 ### Stable SSR assets are hard-coded on purpose
 

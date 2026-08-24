@@ -99,12 +99,12 @@ function scanSsg404(html) {
   }
 
   for (const marker of [
-    'name="zfb-view-transitions-enabled"',
-    'name="zfb-preserve-html-attrs"',
-    'content="data-theme"',
-    'name="zfb-traverse-refetch"',
+    'name="zfb-view-transitions-enabled" content="true"',
+    'name="zfb-view-transitions-fallback" content="animate"',
+    'name="zfb-preserve-html-attrs" content="data-theme"',
+    'name="zfb-traverse-refetch" content="true"',
     ".zfb-route-announcer",
-    'data-zfb-island="ThemeToggle"',
+    'data-zfb-island="ThemeToggle" data-when="load"',
   ]) {
     if (!html.includes(marker)) problems.push(`404.html is missing ${marker}`);
   }
@@ -137,7 +137,7 @@ export function scanBuildOutput(distDir = "dist") {
 
     const reachable = reachableClientAssets(distDir, generatedRel);
     const emittedClientJs = files.filter(
-      (file) => /\.(?:js|mjs)$/.test(file) && !WORKER_ENTRIES.has(file.split("/").pop()),
+      (file) => /\.(?:js|mjs)$/.test(file) && !WORKER_ENTRIES.has(file),
     );
     const expectedClientJs = new Set([...reachable, stableEntry]);
     for (const file of emittedClientJs) {

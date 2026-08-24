@@ -69,10 +69,14 @@ export default function GalleryLayout({
       </head>
       <body class="flex min-h-dvh flex-col">
           <header class="sticky top-0 z-10 border-b border-line bg-surface/95 backdrop-blur">
-            <div class="flex w-full items-center justify-between gap-hsp-md px-gutter py-vsp-sm">
+            <div class="flex w-full flex-wrap items-center justify-between gap-hsp-md px-gutter py-vsp-sm">
               <a href="/" class="text-heading font-semibold tracking-tight">{SITE_NAME}</a>
               <nav aria-label="Primary" class="flex flex-wrap items-center justify-end gap-hsp-2xs">
-                {Island({ when: "load", children: <ThemeToggle /> }) as unknown as ComponentChildren}
+                {(
+                  <Island when="load">
+                    <ThemeToggle />
+                  </Island>
+                ) as unknown as ComponentChildren}
                 <NavLink href="/" activePath={activePath}>Gallery</NavLink>
                 <NavLink href="/authors" activePath={activePath}>Authors</NavLink>
                 <NavLink href="/tags" activePath={activePath}>Tags</NavLink>

@@ -39,6 +39,7 @@ describe("GalleryLayout", () => {
     expect(html).toContain('data-when="load"');
     expect(html).toContain('aria-label="Switch to dark mode"');
     expect(html).toMatch(/<nav[^>]*>[\s\S]*data-zfb-island="ThemeToggle"[\s\S]*<\/nav>/);
+    expect(html).toContain("flex w-full flex-wrap items-center");
     const props = html.match(/data-zfb-island="ThemeToggle"[^>]*data-props="([^"]*)"/)?.[1];
     expect(props).toBeUndefined();
   });
