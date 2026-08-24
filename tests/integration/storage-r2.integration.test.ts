@@ -1,10 +1,25 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import type { Env } from "../../lib/env";
-import { getObject, validateAndStore } from "../../lib/storage";
+import { isCanonicalPhotoBlurhash } from "../../lib/image-placeholder";
+import { getObject, preprocessAndStorePhoto, validateAndStore } from "../../lib/storage";
+import {
+  imageFixtureArrayBuffer,
+  REAL_IMAGE_FIXTURES,
+} from "../helpers/image-fixtures";
 import { webpVp8xFixture } from "../helpers/mock-r2";
+
+const BLURHASH_CONTRACT_TABLE = "integration_blurhash_contract";
+
+function workerEnv(): Env {
+  return env as unknown as Env;
+}
+
+afterAll(async () => {
+  await workerEnv().DB.exec(`DROP TABLE IF EXISTS ${BLURHASH_CONTRACT_TABLE}`);
+});
 
 describe("D1 transaction integration", () => {
   it("rolls back every statement when one D1 batch statement fails", async () => {
@@ -52,4 +67,56 @@ describe("R2 storage integration", () => {
 
     await workerEnv.BUCKET.delete(result.key);
   });
+});
+
+describe("local Images upload preprocessing", () => {
+  it.each(REAL_IMAGE_FIXTURES)(
+    "decodes a real $name, stores a fixed-4x4 hash in D1, and preserves the original bytes",
+    async (fixture) => {
+      const worker = workerEnv();
+      await worker.DB.exec(
+        `CREATE TABLE IF NOT EXISTS ${BLURHASH_CONTRACT_TABLE} (r2_key TEXT PRIMARY KEY, content_type TEXT NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, blurhash TEXT)`,
+      );
+
+      const original = fixture.bytes;
+      const result = await preprocessAndStorePhoto(worker, imageFixtureArrayBuffer(fixture));
+      expect(result).toMatchObject({
+        ok: true,
+        contentType: fixture.contentType,
+        ext: fixture.ext,
+        width: fixture.width,
+        height: fixture.height,
+        size: original.byteLength,
+      });
+      if (!result.ok) throw new Error(`unexpected ${fixture.name} validation failure: ${result.reason}`);
+      expect(isCanonicalPhotoBlurhash(result.blurhash)).toBe(true);
+      expect(result.blurhash).toHaveLength(36);
+
+      await worker.DB
+        .prepare(
+          `INSERT INTO ${BLURHASH_CONTRACT_TABLE} (r2_key, content_type, width, height, blurhash)
+           VALUES (?, ?, ?, ?, ?)`,
+        )
+        .bind(result.key, result.contentType, result.width, result.height, result.blurhash)
+        .run();
+      const row = await worker.DB
+        .prepare(`SELECT content_type, width, height, blurhash FROM ${BLURHASH_CONTRACT_TABLE} WHERE r2_key = ?`)
+        .bind(result.key)
+        .first<{ content_type: string; width: number; height: number; blurhash: string | null }>();
+      expect(row).toEqual({
+        content_type: fixture.contentType,
+        width: fixture.width,
+        height: fixture.height,
+        blurhash: result.blurhash,
+      });
+
+      const object = await getObject(worker, result.key);
+      expect(object).not.toBeNull();
+      expect(object?.httpMetadata?.contentType).toBe(fixture.contentType);
+      expect(new Uint8Array(await object!.arrayBuffer())).toEqual(original);
+
+      await worker.BUCKET.delete(result.key);
+      await worker.DB.prepare(`DELETE FROM ${BLURHASH_CONTRACT_TABLE} WHERE r2_key = ?`).bind(result.key).run();
+    },
+  );
 });

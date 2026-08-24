@@ -35,9 +35,17 @@ SELECT
   'image/png',
   CASE WHEN n % 2 = 0 THEN 160 ELSE 240 END,
   CASE WHEN n % 2 = 0 THEN 240 ELSE 160 END,
-  NULL,
+  CASE WHEN n % 3 = 2 THEN 'Ub86Xpt:fQt:t:o#fQo#fQfQfQfQt:o#fQo#' ELSE NULL END,
   '2026-01-01T00:00:' || printf('%02d', n) || '.000Z'
 FROM fixture;
+
+-- Keep reruns deterministic when the pinned local D1 already has the rows.
+UPDATE photos
+SET blurhash = CASE WHEN CAST(substr(r2_key, -6, 2) AS INTEGER) % 3 = 2
+  THEN 'Ub86Xpt:fQt:t:o#fQo#fQfQfQfQt:o#fQo#'
+  ELSE NULL
+END
+WHERE user_id = 900001;
 
 INSERT OR IGNORE INTO photo_tags (photo_id, tag_id)
 SELECT id, 900001
