@@ -83,7 +83,12 @@ export async function generateOgCompositeCard(env: Env, sourceKey: string): Prom
         fit: "pad",
         background: "transparent",
       })
-      .draw(env.IMAGES.input(await assetStream(env, OG_SHADOW_FILL_PATH)), { composite: "in" })
+      // The fill asset is deliberately 1x1. Images draw overlays only within their own bounds
+      // unless repeat is enabled, so tile it across the padded photo before masking its alpha.
+      .draw(env.IMAGES.input(await assetStream(env, OG_SHADOW_FILL_PATH)), {
+        composite: "in",
+        repeat: true,
+      })
       .transform({ border: { color: "rgba(0,0,0,0)", width: BLEED } })
       .transform({ blur: SHADOW_BLUR });
     const result = await env.IMAGES.input(await assetStream(env, OG_PLATE_PATH))
@@ -107,7 +112,7 @@ export async function ensureOgCard(
   photoId: string,
   sourceKey: string,
   generation: string = OG_GENERATION,
-  renderer: OgCardRenderer = generateOgCard,
+  renderer: OgCardRenderer = generateOgCompositeCard,
 ): Promise<ArrayBuffer> {
   const key = ogObjectKey(photoId, generation);
   const existing = await env.BUCKET.get(key);
@@ -127,7 +132,7 @@ export async function tryGenerateOgCard(
   photoId: string,
   sourceKey: string,
   generation: string = OG_GENERATION,
-  renderer: OgCardRenderer = generateOgCard,
+  renderer: OgCardRenderer = generateOgCompositeCard,
 ): Promise<boolean> {
   try {
     await ensureOgCard(env, photoId, sourceKey, generation, renderer);

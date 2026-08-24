@@ -97,13 +97,14 @@ describe("OG card helpers", () => {
     );
   });
 
-  it("persists one generated card and reuses it", async () => {
+  it("persists and reuses a composite card for the current-generation defaults", async () => {
     const images = imagesBinding();
     const env = envFor(images.binding);
     await env.BUCKET.put("photos/source.png", pngFixture(100, 100));
     await ensureOgCard(env, "7", "photos/source.png");
     await ensureOgCard(env, "7", "photos/source.png");
-    expect(images.input).toHaveBeenCalledTimes(1);
+    expect(images.input).toHaveBeenCalledTimes(4);
+    expect(images.events.filter((event) => event.type === "draw")).toHaveLength(3);
     expect(await env.BUCKET.get(ogObjectKey("7"))).not.toBeNull();
   });
 
@@ -142,7 +143,7 @@ describe("OG card helpers", () => {
       argument: { blur: SHADOW_BLUR },
     });
     expect(images.events.filter((event) => event.type === "draw")).toEqual([
-      { type: "draw", transformer: 1, image: 2, argument: { composite: "in" } },
+      { type: "draw", transformer: 1, image: 2, argument: { composite: "in", repeat: true } },
       {
         type: "draw",
         transformer: 3,

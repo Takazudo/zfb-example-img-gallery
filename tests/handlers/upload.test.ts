@@ -34,6 +34,8 @@ vi.mock("../../lib/db/photo-write", () => ({
 // Expose the persistent helper so this test verifies the write-through uses the
 // current-generation cache contract rather than the legacy renderer fallback.
 vi.mock("../../lib/og", () => ({
+  OG_GENERATION: "v2",
+  generateOgCompositeCard: vi.fn(),
   ensureOgCard: vi.fn(async () => {
     h.order.push("og");
     return new ArrayBuffer(0);
@@ -44,7 +46,7 @@ import UploadPage from "../../pages/upload";
 import { getSessionUser } from "../../lib/auth";
 import { insertPhoto } from "../../lib/db/photo-write";
 import { deleteObjects, preprocessAndStorePhoto } from "../../lib/storage";
-import { ensureOgCard } from "../../lib/og";
+import { ensureOgCard, generateOgCompositeCard, OG_GENERATION } from "../../lib/og";
 
 const mockedStorage = vi.mocked(preprocessAndStorePhoto);
 const mockedDelete = vi.mocked(deleteObjects);
@@ -200,6 +202,8 @@ describe("/upload handler", () => {
       expect.anything(),
       "23",
       "photos/123e4567-e89b-12d3-a456-426614174000.png",
+      OG_GENERATION,
+      generateOgCompositeCard,
     );
   });
 
