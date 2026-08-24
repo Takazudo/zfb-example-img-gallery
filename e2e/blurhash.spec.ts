@@ -18,6 +18,12 @@ async function releaseImages(routes: Route[]): Promise<void> {
   }
 }
 
+function cssTimeToMilliseconds(value: string): number {
+  if (value.endsWith("ms")) return Number.parseFloat(value);
+  if (value.endsWith("s")) return Number.parseFloat(value) * 1000;
+  return Number.NaN;
+}
+
 test("keeps a delayed placeholder painted, then reveals success and respects reduced motion @smoke", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const held: Route[] = [];
@@ -31,7 +37,8 @@ test("keeps a delayed placeholder painted, then reveals success and respects red
   await expect(cover).toBeVisible();
   await expect(cover).toHaveAttribute("data-placeholder-pending", "true");
   await expect(image).toHaveCSS("opacity", "0");
-  expect(await image.evaluate((node) => getComputedStyle(node).transitionDuration)).toBe("0.01ms");
+  const transitionDuration = await image.evaluate((node) => getComputedStyle(node).transitionDuration);
+  expect(cssTimeToMilliseconds(transitionDuration)).toBeCloseTo(0.01, 6);
   expect(await cover.evaluate((node) => getComputedStyle(node, "::before").backgroundSize)).toBe("cover");
 
   await expect.poll(() => held.length).toBeGreaterThan(0);
