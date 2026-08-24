@@ -62,6 +62,16 @@ const databaseName = remotePreview
 const bucketName = remotePreview
   ? configValue("bucket_name", "[[env.preview.r2_buckets]]")
   : configValue("bucket_name");
+if (remotePreview) {
+  const workerName = configValue("name");
+  const hostname = new URL(baseUrl).hostname;
+  if (!hostname.startsWith(`${workerName}-preview.`)) {
+    throw new Error(`preview URL does not belong to ${workerName}: ${baseUrl}`);
+  }
+  if (databaseName === configValue("database_name") || bucketName === configValue("bucket_name")) {
+    throw new Error("preview mode refuses resource names shared with production");
+  }
+}
 const storageArgs = remotePreview
   ? ["--env", "preview", "--remote"]
   : ["--local", "--persist-to", persistTo];
