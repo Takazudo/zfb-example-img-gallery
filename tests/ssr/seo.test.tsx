@@ -1,5 +1,6 @@
 import { render } from "preact-render-to-string";
 import { afterEach, describe, expect, it } from "vitest";
+import { OG_GENERATION } from "../../lib/og";
 import { buildPhotoSeo } from "../../lib/seo";
 import GalleryLayout from "../../layouts/gallery-layout";
 
@@ -44,7 +45,7 @@ describe("SEO head", () => {
     ]) expect(html).toContain(marker);
     expect(html.match(/<title>/g)).toHaveLength(1);
     expect(html).toContain('href="https://gallery.example/photos/42"');
-    expect(html).toContain('content="https://gallery.example/og/v1/42.jpg"');
+    expect(html).toContain(`content="https://gallery.example/og/${OG_GENERATION}/42.jpg"`);
     expect(html).toContain('content="https://gallery.example/authors/alice"');
     expect(html).not.toContain("twitter:creator");
     expect(html).not.toContain("twitter:title");

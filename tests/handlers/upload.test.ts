@@ -31,10 +31,12 @@ vi.mock("../../lib/storage", () => ({
 vi.mock("../../lib/db/photo-write", () => ({
   insertPhoto: vi.fn(async () => 23),
 }));
-// Deliberately only expose the issue's narrow mock shape. The route falls back
-// to generateOgCard when the merged module's ensureOgCard is not supplied.
+// Expose the persistent helper so this test verifies the write-through uses the
+// current-generation cache contract rather than the legacy renderer fallback.
 vi.mock("../../lib/og", () => ({
-  generateOgCard: vi.fn(async () => {
+  OG_GENERATION: "v2",
+  generateOgCompositeCard: vi.fn(),
+  ensureOgCard: vi.fn(async () => {
     h.order.push("og");
     return new ArrayBuffer(0);
   }),
@@ -44,12 +46,12 @@ import UploadPage from "../../pages/upload";
 import { getSessionUser } from "../../lib/auth";
 import { insertPhoto } from "../../lib/db/photo-write";
 import { deleteObjects, preprocessAndStorePhoto } from "../../lib/storage";
-import { generateOgCard } from "../../lib/og";
+import { ensureOgCard, generateOgCompositeCard, OG_GENERATION } from "../../lib/og";
 
 const mockedStorage = vi.mocked(preprocessAndStorePhoto);
 const mockedDelete = vi.mocked(deleteObjects);
 const mockedInsert = vi.mocked(insertPhoto);
-const mockedOg = vi.mocked(generateOgCard);
+const mockedEnsure = vi.mocked(ensureOgCard);
 
 const storageFailures: Array<[Extract<PhotoStoreResult, { ok: false }>, number, string]> = [
   [{ ok: false, reason: "too-large", size: 4 * 1024 * 1024 + 1, limit: 4 * 1024 * 1024 }, 413, "larger than 4 MB"],
@@ -94,8 +96,8 @@ beforeEach(() => {
     h.order.push("d1");
     return 23;
   });
-  mockedOg.mockReset();
-  mockedOg.mockImplementation(async () => {
+  mockedEnsure.mockReset();
+  mockedEnsure.mockImplementation(async () => {
     h.order.push("og");
     return new ArrayBuffer(0);
   });
@@ -196,11 +198,17 @@ describe("/upload handler", () => {
       blurhash: "U4D]o#00fQ00~q00M{00M{~qRj~q",
       tags: ["synth", "modular", "enclosure-deep"],
     }));
-    expect(mockedOg).toHaveBeenCalledWith(expect.anything(), "23");
+    expect(mockedEnsure).toHaveBeenCalledWith(
+      expect.anything(),
+      "23",
+      "photos/123e4567-e89b-12d3-a456-426614174000.png",
+      OG_GENERATION,
+      generateOgCompositeCard,
+    );
   });
 
   it("keeps a committed row when OG generation rejects", async () => {
-    mockedOg.mockRejectedValueOnce(new Error("Images unavailable"));
+    mockedEnsure.mockRejectedValueOnce(new Error("Images unavailable"));
     const response = await invoke(post({ title: "A title" }, file()));
     expect(response.status).toBe(303);
     expect(mockedInsert).toHaveBeenCalledOnce();
@@ -230,6 +238,6 @@ describe("/upload handler", () => {
     expect(html).toContain("Could not save your photo, please try again");
     expect(mockedDelete).toHaveBeenCalledOnce();
     expect(mockedDelete).toHaveBeenCalledWith(expect.anything(), ["photos/123e4567-e89b-12d3-a456-426614174000.png"]);
-    expect(mockedOg).not.toHaveBeenCalled();
+    expect(mockedEnsure).not.toHaveBeenCalled();
   });
 });

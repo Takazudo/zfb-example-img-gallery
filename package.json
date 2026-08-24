@@ -9,6 +9,8 @@
     "predev": "rm -rf dist .zfb .zfb-build",
     "dev": "zfb dev",
     "build": "zfb build && node scripts/stable-assets.mjs",
+    "brand:assets": "node scripts/make-brand-assets.mjs",
+    "preview:og": "node scripts/preview-og-card.mjs",
     "preview": "zfb preview",
     "typecheck": "zfb check",
     "test": "vitest run --project unit --project ssr --project handlers",
