@@ -70,6 +70,54 @@ These are the invariants that can fail silently and belong in the build/integrat
 
 The browser confirmation lane must also preserve progressive enhancement: active navigation, auth/header controls, title/meta, and server-rendered page content update after soft navigation; `data-theme` survives swaps; GET and mutation forms preserve query, multipart, URL-encoded, redirect, validation, error, cookie, and submitter behavior; disabling JavaScript still performs normal full form navigations. `zfb:after-swap` fires before incoming scripts and before newly swapped islands mount/hydrate, so it must not be used as a hydration-ready signal.
 
+### BlurHash Worker-to-browser contract
+
+The local Images binding is exercised with three real, decodable fixtures (JPEG,
+PNG, and WebP). The integration test runs `preprocessAndStorePhoto` through the
+Workers runtime, checks a canonical fixed-4×4 hash in a D1 contract table, and
+compares the R2 body and content type with the original upload. Run it after the
+build because the Workers Vitest project loads `dist/_worker.js`:
+
+```sh
+pnpm build
+pnpm exec vitest run --project integration
+```
+
+The focused browser additions are in `e2e/blurhash.spec.ts`. The manager should
+run them through the repository guard (which owns the one local Wrangler server):
+
+```sh
+bash $HOME/.claude/scripts/playwright-guard.sh --wait 300 -- pnpm exec playwright test e2e/blurhash.spec.ts --grep @smoke
+```
+
+That lane covers delayed pending-to-loaded and error reveals, nullable rows,
+cover/contain pseudo-backgrounds, reduced-motion duration, appended cards,
+history snapshot restoration, no-JavaScript visibility, and the executable
+script/inline-handler inventory. The local fixture intentionally has no R2
+objects; browser `/img/**` requests are intercepted with deterministic bytes.
+
+### High-fidelity Images verification (manual, credential-gated)
+
+Local Images simulation does not establish Cloudflare's network-specific
+decoding/cropping behavior. When credentials and Images entitlement are
+available, create isolated preview-only D1 and R2 resources (never the
+production `img-gallery` resources), apply the migration, and run the preview
+Worker against that temporary configuration:
+
+```sh
+pnpm exec wrangler d1 migrations apply <isolated-preview-d1> --remote
+pnpm exec wrangler dev --remote --config <isolated-preview-wrangler.toml> --port 8789
+```
+
+Upload one JPEG, PNG, and WebP through `http://127.0.0.1:8789/upload`, verify
+the D1 hash is either canonical fixed-4×4 or the documented nullable fallback,
+and download each `/img/**` object to compare bytes and `Content-Type`. Stop
+the remote dev process, delete every fixture row, object, and isolated preview
+resource (`wrangler d1 delete` / `wrangler r2 bucket delete`) in a finally/cleanup
+step. If credentials, entitlement, or isolated resources are unavailable, this
+is a deferred manual check rather than a local automated failure. No remote
+backfill was run for this change.
+
 ## Deliberate deltas
 
 - **T0 + T1 only.** There is no T2 end-to-end split and no T3 scheduled re-exam; nothing in this standalone recipe is heavy or registry-coupled enough to earn either tier.
