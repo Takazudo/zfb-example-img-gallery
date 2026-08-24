@@ -207,7 +207,7 @@ test("persists an explicit toggle across reload and soft GET swaps @smoke", asyn
   expect(afterAuthorsSentinel).toBe("alive");
   expect(new URL(authorsSwap.finalUrl).pathname).toBe("/authors");
   await expect(page).toHaveURL(/\/authors$/);
-  await expect(page).toHaveTitle("Authors — Stillframe");
+  await expect(page).toHaveTitle("Authors | Stillframe");
   await expect(page.locator("h1")).toHaveText("Authors");
   await expect(page.getByRole("link", { name: "Authors", exact: true })).toHaveAttribute(
     "aria-current",
@@ -223,7 +223,7 @@ test("persists an explicit toggle across reload and soft GET swaps @smoke", asyn
   expect(afterTagsSentinel).toBe("alive");
   expect(new URL(tagsSwap.finalUrl).pathname).toBe("/tags");
   await expect(page).toHaveURL(/\/tags$/);
-  await expect(page).toHaveTitle("Tags — Stillframe");
+  await expect(page).toHaveTitle("Tags | Stillframe");
   await expect(page.locator("h1")).toHaveText("Tags");
   await expect(page.getByRole("link", { name: "Tags", exact: true })).toHaveAttribute(
     "aria-current",
