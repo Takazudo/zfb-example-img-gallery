@@ -512,8 +512,8 @@ ID=$(curl -s $NAV "$BASE/" | grep -oE '/photos/[0-9]+' | head -1 | grep -oE '[0-
 
 curl -s -o /dev/null -w '%{http_code}\n' $NAV "$BASE/photos/$ID"          # 200
 curl -s $NAV "$BASE/photos/$ID" | grep -c 'og:image'                      # 1: metadata present
-curl -sI $NAV "$BASE/og/v1/$ID.jpg" | grep -iE '^(HTTP|content-type|cache-control)'
-curl -s $NAV "$BASE/og/v1/$ID.jpg" -o card.jpg && file card.jpg           # JPEG, 1200x630
+curl -sI $NAV "$BASE/og/v2/$ID.jpg" | grep -iE '^(HTTP|content-type|cache-control)'
+curl -s $NAV "$BASE/og/v2/$ID.jpg" -o card.jpg && file card.jpg           # JPEG, 1200x630
 ```
 
 The social-card cache header is diagnostic:
@@ -582,11 +582,14 @@ The monthly free transformation cap is exhausted. New transformations fail, whil
 persisted cards keep serving. The `/og/*` route falls back to its static card at HTTP 200, so the
 site stays up; check usage or wait for the next monthly allowance.
 
-### **`gravity: "auto"` appears to be ignored locally**
+### **The local social card looks like only a resized photo**
 
-Local `pnpm exec wrangler dev` implements only `width`, `height`, `rotate`, and `format` for the
-Images binding. This is not an application bug; verify auto-gravity once against a deployed
-preview.
+Local `pnpm exec wrangler dev` uses Miniflare's low-fidelity Images implementation. It honours
+only `rotate`, `width`, `height`, and the output format, and silently drops every drawn layer, so
+the v2 composition renders locally as just the resized photo with no error. Verify the composed
+card through `wrangler dev --remote`, a deployed preview, or `pnpm preview:og` (the offline
+`sharp` renderer). See the [Cloudflare Images capability probe](images-binding-capabilities.md)
+for the production binding's supported operations.
 
 ### **`SEED_TAKAZUDO_PASSWORD is not set`**
 

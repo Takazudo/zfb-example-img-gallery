@@ -349,14 +349,14 @@ async function checkOgRoute() {
   // Add a probe-only cache buster so a prior failed local run cannot leave a
   // cached Static Assets 404 in front of a newly inserted fixture row.
   const cacheBust = `confirm=${Date.now()}`;
-  const generated = await http(`/og/v1/${existingId}.jpg?${cacheBust}`);
+  const generated = await http(`/og/v2/${existingId}.jpg?${cacheBust}`);
   assert(generated.response.status === 200, `OG generation expected 200, got ${generated.response.status}`);
   assertHeader(generated.response, "content-type", "image/jpeg");
   const dimensions = jpegSize(generated.bytes);
   assert(dimensions.width === 1200 && dimensions.height === 630,
     `generated OG dimensions were ${dimensions.width}x${dimensions.height}`);
 
-  const generatedKey = `derived/og/v1/${existingId}.jpg`;
+  const generatedKey = `derived/og/v2/${existingId}.jpg`;
   ownedKeys.add(generatedKey);
   const derivedPath = join(repoRoot, ".tmp-confirm-og.jpg");
   try {
@@ -369,18 +369,18 @@ async function checkOgRoute() {
     if (existsSync(derivedPath)) unlinkSync(derivedPath);
   }
 
-  const cached = await http(`/og/v1/${existingId}.jpg?${cacheBust}`);
+  const cached = await http(`/og/v2/${existingId}.jpg?${cacheBust}`);
   assert(cached.response.status === 200, `OG cache hit expected 200, got ${cached.response.status}`);
   assert(sha256(cached.bytes) === sha256(generated.bytes), "OG cache-hit bytes changed");
   assert((cached.response.headers.get("cache-control") ?? "").includes("immutable"),
     "OG cache hit is not immutable");
 
-  const fallback = await http(`/og/v1/${missingId}.jpg?${cacheBust}`);
+  const fallback = await http(`/og/v2/${missingId}.jpg?${cacheBust}`);
   assert(fallback.response.status === 200, `missing-source OG expected fallback 200, got ${fallback.response.status}`);
   assert(sha256(fallback.bytes) === sha256(fixtureBytes), "OG fallback bytes differ from public/og-fallback.jpg");
   assertHeader(fallback.response, "cache-control", "public, max-age=60");
 
-  const unknown = await http(`/og/v1/999999.jpg?${cacheBust}`);
+  const unknown = await http(`/og/v2/999999.jpg?${cacheBust}`);
   assert(unknown.response.status === 404, `unknown OG id expected 404, got ${unknown.response.status}`);
   console.log("[confirm] OG cards: generation, R2 persistence/cache hit, fallback, and unknown-id 404 verified");
 }
@@ -388,7 +388,7 @@ async function checkOgRoute() {
 async function checkNavigationAndSite() {
   const paths = [
     "/", "/authors", "/tags", "/register", "/login", "/logout", "/settings", "/upload",
-    "/page/2", "/photos/1", "/tags/example", "/img/photos/x.jpg", "/og/v1/999999.jpg",
+    "/page/2", "/photos/1", "/tags/example", "/img/photos/x.jpg", "/og/v2/999999.jpg",
   ];
   for (const path of paths) {
     const plain = await http(path);
