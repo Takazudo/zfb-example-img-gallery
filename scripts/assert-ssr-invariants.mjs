@@ -101,12 +101,24 @@ function scanSsg404(html) {
   for (const marker of [
     'name="zfb-view-transitions-enabled" content="true"',
     'name="zfb-view-transitions-fallback" content="animate"',
-    'name="zfb-preserve-html-attrs" content="data-theme"',
+    'name="zfb-preserve-html-attrs" content="data-theme data-thumb-ratio data-thumb-width"',
     'name="zfb-traverse-refetch" content="true"',
     ".zfb-route-announcer",
     'data-zfb-island="ThemeToggle" data-when="load"',
+    'data-zfb-island="DisplaySettings" data-when="load"',
+    '<dialog aria-labelledby="display-settings-title"',
+    '<legend',
   ]) {
     if (!html.includes(marker)) problems.push(`404.html is missing ${marker}`);
+  }
+  if (html.includes('aria-haspopup="dialog"')) {
+    problems.push("404.html must withhold the display-settings trigger until hydration");
+  }
+  if (html.match(/name=["']thumbnail-ratio["']/g)?.length !== 4) {
+    problems.push("404.html must contain four thumbnail-ratio radios");
+  }
+  if (html.match(/name=["']thumbnail-width["']/g)?.length !== 3) {
+    problems.push("404.html must contain three thumbnail-width radios");
   }
   return problems;
 }

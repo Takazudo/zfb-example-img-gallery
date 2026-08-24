@@ -85,13 +85,24 @@ describe("top page SSR", () => {
   it.each([
     [24, 1, false],
     [25, 2, true],
-  ])("renders %i photos as %i page(s) and hides the pager only for one page", async (totalItems, totalPages, hasPager) => {
+  ])("renders %i photos as %i page(s) and exposes only the next feed link when needed", async (totalItems, totalPages, hasNext) => {
     mocks.listPhotoPage.mockResolvedValue(page([photo(1)], totalItems, 1, totalPages));
 
     const html = render(await TopPage());
 
     expect(html).toContain('data-testid="photo-grid"');
-    expect(html.includes('aria-label="Pagination"')).toBe(hasPager);
+    expect(html.includes('data-gallery-next-link="true"')).toBe(hasNext);
+    expect(html).not.toContain('aria-label="Pagination"');
+    if (hasNext) {
+      expect(html).toContain('data-gallery-scope="global"');
+      expect(html).toContain('data-gallery-page="1"');
+      expect(html).toContain(`data-gallery-total-pages="${totalPages}"`);
+      expect(html).toContain(`data-gallery-total-items="${totalItems}"`);
+      expect(html).toContain('data-gallery-page-size="24"');
+      expect(html).toContain('data-gallery-next-url="/page/2"');
+      expect(html).toContain('data-gallery-next-count="1"');
+      expect(html).toContain(">Load next 1 photos</a>");
+    }
   });
 
   it("uses thumbnails with original dimensions and makes only the first tile eager", async () => {
@@ -137,7 +148,9 @@ describe("dynamic top page SSR", () => {
 
     expect(html).toContain("Photo 73");
     expect(html).toContain('href="https://canonical.example/page/3"');
-    expect(html).toMatch(/<a href="\/page\/3"[^>]*aria-current="page"/);
+    expect(html).toContain('data-gallery-page="3"');
+    expect(html).toContain('data-gallery-terminal="true"');
+    expect(html).not.toContain('data-gallery-next-link="true"');
     expect(html).not.toContain('href="https://foreign.example/page/999"');
   });
 
@@ -150,5 +163,6 @@ describe("dynamic top page SSR", () => {
     expect(html).toContain("Photo 1");
     expect(html).toContain('href="https://canonical.example/"');
     expect(html).not.toContain(`/page/${raw}`);
+    expect(html).toContain('data-gallery-page="1"');
   });
 });

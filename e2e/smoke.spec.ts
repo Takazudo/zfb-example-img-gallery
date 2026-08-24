@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { onePxPng, uploadPng } from "./fixtures";
+import { stubImageRequests, uploadPng } from "./fixtures";
 import { softSubmit } from "./navigation";
 
 const runId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -19,9 +19,7 @@ test.beforeEach(async ({ page }) => {
   // R2 payloads are not, and on a seeded database page 1 would otherwise pull
   // 24 multi-hundred-KB originals per navigation. The glob deliberately covers
   // ONLY /img/** — /og/** must reach the real Worker.
-  await page.route("**/img/**", (route) =>
-    route.fulfill({ status: 200, contentType: "image/png", body: onePxPng() }),
-  );
+  await stubImageRequests(page);
 });
 
 test("registers, uploads, browses, and fetches the social card @smoke", async ({ page }) => {

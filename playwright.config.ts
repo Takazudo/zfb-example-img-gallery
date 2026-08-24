@@ -47,6 +47,7 @@ export default defineConfig({
     : {
         command:
           `pnpm exec wrangler d1 migrations apply ${D1_NAME} --local --persist-to ${PERSIST} --env="" && ` +
+          `pnpm exec wrangler d1 execute ${D1_NAME} --local --persist-to ${PERSIST} --env="" --file scripts/e2e-fixture.sql && ` +
           `pnpm exec wrangler dev --env="" --port ${PORT} --persist-to ${PERSIST}`,
         url: `${BASE_URL}/`,
         reuseExistingServer: !process.env.CI,

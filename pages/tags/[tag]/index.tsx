@@ -1,18 +1,14 @@
 import { getCloudflareContext } from "@takazudo/zfb-adapter-cloudflare";
 import type { VNode } from "preact";
 import { EmptyState } from "../../../components/empty-state";
-import { Pagination } from "../../../components/pagination";
-import { PhotoCard } from "../../../components/photo-card";
-import { PhotoGrid } from "../../../components/photo-grid";
+import { PhotoFeed, tagFeedScope } from "../../../components/photo-feed";
 import { getSessionUser } from "../../../lib/auth";
 import {
-  countPhotosByTag,
   getTagByName,
-  listPhotosByTag,
+  listTagPhotoPage,
   normalizeTagName,
-  resolveTagPage,
+  parseTagPage,
   type TagRow,
-  type TaggedPhoto,
 } from "../../../lib/db/tags";
 import type { Env } from "../../../lib/env";
 import { htmlResponse } from "../../../lib/render";
@@ -39,46 +35,26 @@ function notFound(user: LayoutUser | null): Response {
   );
 }
 
-function TagDetailBody({ tag, photos, total, page, totalPages }: {
+function TagDetailBody({ tag, page, nextHref }: {
   tag: TagRow;
-  photos: TaggedPhoto[];
-  total: number;
-  page: number;
-  totalPages: number;
+  page: Awaited<ReturnType<typeof listTagPhotoPage>>;
+  nextHref: string;
 }) {
-  const encoded = encodeURIComponent(tag.name);
-  const hrefFor = (pageNumber: number) => (
-    pageNumber === 1 ? `/tags/${encoded}` : `/tags/${encoded}/page/${pageNumber}`
-  );
-
   return (
     <>
       <section class="mb-vsp-lg">
         <h1 class="text-display font-semibold tracking-tight">#{tag.name}</h1>
         <p class="mt-vsp-2xs text-body text-ink-soft">
-          {total} {total === 1 ? "photo" : "photos"}
+          {page.totalItems} {page.totalItems === 1 ? "photo" : "photos"}
         </p>
       </section>
-      {photos.length > 0 ? (
-        <PhotoGrid>
-          {photos.map((photo, index) => (
-            <PhotoCard
-              key={photo.id}
-              priority={index === 0}
-              photo={{
-                id: photo.id,
-                title: photo.title,
-                src: `/img/${photo.thumb_key ?? photo.r2_key}`,
-                width: photo.width,
-                height: photo.height,
-              }}
-            />
-          ))}
-        </PhotoGrid>
-      ) : (
-        <EmptyState title={`No photos tagged #${tag.name}`} />
-      )}
-      {totalPages > 1 ? <Pagination page={page} pageCount={totalPages} href={hrefFor} /> : null}
+      <PhotoFeed
+        scope={tagFeedScope(tag.id)}
+        page={page}
+        nextHref={nextHref}
+        photos={page.items}
+        empty={<EmptyState title={`No photos tagged #${tag.name}`} />}
+      />
     </>
   );
 }
@@ -93,13 +69,14 @@ export async function renderTagDetailRoute(params?: TagRouteParams): Promise<Tag
   const tag = await getTagByName(env, name);
   if (!tag) return notFound(user);
 
-  const total = await countPhotosByTag(env, tag.id);
-  const pageMeta = resolveTagPage(params?.page, total);
-  const photos = await listPhotosByTag(env, tag.id, pageMeta.pageSize, pageMeta.offset);
+  // Keep the tag route's established strict page-param contract while using
+  // the shared page result shape for the feed metadata.
+  const pageMeta = await listTagPhotoPage(env, tag.id, parseTagPage(params?.page));
   const encoded = encodeURIComponent(tag.name);
   const canonicalPath = pageMeta.page === 1
     ? `/tags/${encoded}`
     : `/tags/${encoded}/page/${pageMeta.page}`;
+  const nextHref = `/tags/${encoded}/page/${pageMeta.page + 1}`;
 
   return (
     <GalleryLayout
@@ -115,10 +92,8 @@ export async function renderTagDetailRoute(params?: TagRouteParams): Promise<Tag
     >
       <TagDetailBody
         tag={tag}
-        photos={photos}
-        total={total}
-        page={pageMeta.page}
-        totalPages={pageMeta.totalPages}
+        page={pageMeta}
+        nextHref={nextHref}
       />
     </GalleryLayout>
   );

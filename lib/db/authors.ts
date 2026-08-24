@@ -5,7 +5,7 @@ import type { AuthorSummary, Paged, PhotoCard } from "../types";
 export type { AuthorSummary } from "../types";
 
 /** Number of photo tiles shown on one author page. */
-export const AUTHOR_PAGE_SIZE = 24;
+export const AUTHOR_PAGE_SIZE = PHOTO_PAGE_SIZE;
 
 export interface AuthorProfile {
   id: number;
