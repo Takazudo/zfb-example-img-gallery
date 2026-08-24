@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { Button } from "../../components/button";
 import { EmptyState } from "../../components/empty-state";
 import { Field } from "../../components/field";
-import { Pagination } from "../../components/pagination";
 import { PhotoCard } from "../../components/photo-card";
+import { PhotoFeed } from "../../components/photo-feed";
 import { PhotoGrid } from "../../components/photo-grid";
 import { TagList } from "../../components/tag-list";
 import GalleryLayout from "../../layouts/gallery-layout";
@@ -96,9 +96,10 @@ describe("shared presentational components", () => {
   });
   it("renders the PhotoCard structural and metadata contract", () => {
     const html = render(<PhotoCard photo={{ id: 7, title: "Acrylic macro", src: "/img/photo.webp", width: 2000, height: 1500 }} />);
-    expect(html).toMatch(/^<li>/); expect(html).toContain('<a href="/photos/7"');
+    expect(html).toMatch(/^<li data-photo-id="7">/); expect(html).toContain('<a href="/photos/7"');
     expect(html).toContain('width="2000"'); expect(html).toContain('height="1500"');
-    expect(html).toContain('alt="Acrylic macro"'); expect(html).toContain("object-cover");
+    expect(html).toContain('alt="Acrylic macro"');
+    expect(html).toContain("[object-fit:var(--gallery-thumbnail-object-fit)]");
   });
   it("uses lazy loading by default and eager loading for priority photos", () => {
     const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 20, height: 20 };
@@ -113,13 +114,38 @@ describe("shared presentational components", () => {
     const responsive = render(<PhotoCard photo={photo} srcSet="/img/photo.webp 20w" />);
     expect(responsive).toMatch(/srcset=/i); expect(responsive).toContain('sizes="(min-width: 48rem) 200px, 100vw"');
   });
-  it("omits Pagination for a one-page collection", () => {
-    expect(render(<Pagination page={1} pageCount={1} href={(page) => `/page/${page}`} />)).toBe("");
+  it("renders a marked one-page feed without a misleading next action", () => {
+    const html = render(<PhotoFeed
+      scope="global"
+      page={{ page: 1, pageSize: 24, totalItems: 1, totalPages: 1, offset: 0, hasPrev: false, hasNext: false }}
+      nextHref="/page/2"
+      photos={[{ id: 7, title: "Photo", r2_key: "photos/7.jpg", thumb_key: null, width: 1200, height: 800 }]}
+    />);
+    expect(html).toContain('data-gallery-feed="true"');
+    expect(html).toContain('data-gallery-scope="global"');
+    expect(html).toContain('data-gallery-page="1"');
+    expect(html).toContain('data-gallery-total-pages="1"');
+    expect(html).toContain('data-gallery-total-items="1"');
+    expect(html).toContain('data-gallery-page-size="24"');
+    expect(html).toContain('data-gallery-next-url');
+    expect(html).toContain('data-gallery-next-count="0"');
+    expect(html).toContain('data-gallery-terminal="true"');
+    expect(html).toContain('data-photo-id="7"');
+    expect(html).not.toContain('data-gallery-next-link');
   });
-  it("renders Pagination with its URL builder and accessibility states", () => {
-    const html = render(<Pagination page={1} pageCount={13} href={(page) => `/tags/foo/page/${page}`} />);
-    expect(html).toContain('href="/tags/foo/page/2"'); expect(html.match(/aria-current="page"/g)).toHaveLength(1);
-    expect(html.match(/aria-disabled="true"/g)).toHaveLength(1); expect(html.match(/aria-hidden="true"/g)).toHaveLength(1);
+  it("renders an exact next-X link for a partial remainder", () => {
+    const html = render(<PhotoFeed
+      scope="tag:3"
+      page={{ page: 1, pageSize: 24, totalItems: 25, totalPages: 2, offset: 0, hasPrev: false, hasNext: true }}
+      nextHref="/tags/foo/page/2"
+      photos={Array.from({ length: 24 }, (_, id) => ({ id, title: `Photo ${id}`, r2_key: `photos/${id}.jpg`, thumb_key: null, width: 1200, height: 800 }))}
+    />);
+    expect(html).toContain('data-gallery-scope="tag:3"');
+    expect(html).toContain('data-gallery-next-url="/tags/foo/page/2"');
+    expect(html).toContain('data-gallery-next-count="1"');
+    expect(html).toContain('data-gallery-terminal="false"');
+    expect(html).toContain('href="/tags/foo/page/2"');
+    expect(html).toContain(">Load next 1 photos</a>");
   });
   it("renders tag text and applies percent encoding exactly once", () => {
     const html = render(<TagList tags={[{ name: "acrylic" }, { name: "東京" }]} />);

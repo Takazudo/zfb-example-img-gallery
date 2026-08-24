@@ -85,4 +85,18 @@ describe("semantic theme architecture", () => {
   it("does not alter gallery media colors for theming", () => {
     expect(globalCss).not.toMatch(/(?:img|picture|video)[^{]*{[^}]*filter\s*:/s);
   });
+
+  it("wires thumbnail preferences to intrinsic media and responsive grid tokens", () => {
+    expect(globalCss).toContain("--gallery-thumbnail-aspect-ratio: 1 / 1;");
+    expect(globalCss).toContain("--gallery-thumbnail-width: 12.5rem;");
+    expect(globalCss).toContain('html[data-thumb-ratio="original"]');
+    expect(globalCss).toContain("--gallery-thumbnail-aspect-ratio: auto;");
+    expect(globalCss).toContain("--gallery-thumbnail-object-fit: contain;");
+    expect(readFileSync("components/photo-grid.tsx", "utf8")).toContain(
+      "minmax(min(100%,var(--gallery-thumbnail-width)),1fr)",
+    );
+    expect(readFileSync("components/photo-card.tsx", "utf8")).toContain(
+      "aspect-ratio:var(--gallery-thumbnail-aspect-ratio)",
+    );
+  });
 });

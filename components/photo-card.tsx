@@ -11,12 +11,12 @@ type Props = { photo: PhotoCardPhoto; priority?: boolean; srcSet?: string; sizes
 export function PhotoCard({ photo, priority = false, srcSet, sizes }: Props) {
   const responsive = srcSet ? { srcSet, sizes: sizes ?? "(min-width: 48rem) 200px, 100vw" } : {};
   return (
-    <li>
+    <li data-photo-id={String(photo.id)}>
       <a href={`/photos/${photo.id}`} class="group block">
-        <div class="aspect-square overflow-hidden bg-surface-sunken">
+        <div data-photo-card-media class="overflow-hidden bg-surface-sunken">
           <img src={photo.src} alt={photo.title} width={photo.width} height={photo.height}
             loading={priority ? "eager" : "lazy"} decoding="async"
-            class="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" {...responsive} />
+            class="block w-full [aspect-ratio:var(--gallery-thumbnail-aspect-ratio)] [object-fit:var(--gallery-thumbnail-object-fit)] [object-position:center] transition-transform duration-200 group-hover:scale-[1.03]" {...responsive} />
         </div>
         <h3 class="mt-vsp-2xs truncate text-small text-ink-soft group-hover:text-ink">{photo.title}</h3>
       </a>

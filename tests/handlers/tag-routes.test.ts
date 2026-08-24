@@ -113,6 +113,35 @@ describe("tag route handlers", () => {
     expect(result.body).toContain('href="/photos/7"');
   });
 
+  it("keeps tag feed metadata sequential through a full and remainder batch", async () => {
+    const options = {
+      tag: { id: 3, name: "foo" },
+      total: 49,
+      photos: [photo],
+    };
+    const first = await invoke(TagDetailPage, "/tags/foo", { tag: "foo" }, mockDb(options));
+    expect(first.body).toContain('data-gallery-scope="tag:3"');
+    expect(first.body).toContain('data-gallery-page="1"');
+    expect(first.body).toContain('data-gallery-total-pages="3"');
+    expect(first.body).toContain('data-gallery-total-items="49"');
+    expect(first.body).toContain('data-gallery-page-size="24"');
+    expect(first.body).toContain('data-gallery-next-url="/tags/foo/page/2"');
+    expect(first.body).toContain('data-gallery-next-count="24"');
+    expect(first.body).toContain(">Load next 24 photos</a>");
+
+    const middle = await invoke(TagDetailPage, "/tags/foo/page/2", { tag: "foo", page: "2" }, mockDb(options));
+    expect(middle.body).toContain('data-gallery-page="2"');
+    expect(middle.body).toContain('data-gallery-next-url="/tags/foo/page/3"');
+    expect(middle.body).toContain('data-gallery-next-count="1"');
+    expect(middle.body).toContain(">Load next 1 photos</a>");
+
+    const final = await invoke(TagDetailPage, "/tags/foo/page/3", { tag: "foo", page: "3" }, mockDb(options));
+    expect(final.body).toContain('data-gallery-page="3"');
+    expect(final.body).toContain('data-gallery-terminal="true"');
+    expect(final.body).not.toContain('data-gallery-next-link="true"');
+    expect(final.body).not.toContain('loading="eager"');
+  });
+
   it("clamps an out-of-range page to the last page and stays successful", async () => {
     const db = mockDb({ tag: { id: 3, name: "foo" }, total: 1, photos: [photo] });
     const result = await invoke(
