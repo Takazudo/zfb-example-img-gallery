@@ -39,7 +39,9 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   await page.goto("/register");
   await page.fill('input[name="username"]', "x");
   await page.fill('input[name="email"]', "invalid-register@example.test");
-  await page.fill('input[name="password"]', "short");
+  // Keep native minlength validation satisfied so the router reaches the
+  // server-side username validation branch.
+  await page.fill('input[name="password"]', "valid-pass");
   const invalidRegisterSwap = await softSubmit(page, "/register", "Create account");
   expect(new URL(invalidRegisterSwap.finalUrl).pathname).toBe("/register");
   await expect(page.getByRole("alert")).toContainText("Username must be 3–24 characters.");
