@@ -138,7 +138,11 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   const settingsSwap = await softSubmit(page, "/settings", "Save username");
   expect(new URL(settingsSwap.finalUrl).pathname).toBe("/settings");
   await expect(page.locator('input[name="username"]')).toHaveValue(renamedUsername);
-  await expect(page.getByRole("link", { name: `@${renamedUsername}`, exact: true })).toBeVisible();
+  const renamedAuthorLink = page
+    .getByRole("navigation", { name: "Primary" })
+    .locator(`a[href="/authors/${renamedUsername}"]`);
+  await expect(renamedAuthorLink).toBeVisible();
+  await expect(renamedAuthorLink).toContainText(`@${renamedUsername}`);
 
   const logoutSwap = await softSubmit(page, "/logout", "Sign out");
   expect(new URL(logoutSwap.finalUrl).pathname).toBe("/");
