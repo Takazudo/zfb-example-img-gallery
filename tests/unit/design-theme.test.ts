@@ -8,6 +8,7 @@ const semanticColors = [
   "line-strong", "brand", "brand-strong", "brand-soft", "accent", "success",
   "success-soft", "danger", "danger-soft", "on-brand", "on-danger",
 ] as const;
+const themeRoles = [...semanticColors, "shadow-soft", "shadow-strong"] as const;
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -21,10 +22,20 @@ describe("semantic theme architecture", () => {
     expect(globalCss).toContain("@theme inline {");
     expect(globalCss).toContain("--color-*: initial;");
 
+    for (const role of themeRoles) {
+      expect(globalCss).toContain(`--theme-${role}: var(--palette-`);
+    }
     for (const color of semanticColors) {
-      expect(globalCss).toContain(`--theme-${color}: var(--palette-`);
       expect(globalCss).toContain(`--color-${color}: var(--theme-${color});`);
     }
+
+    const paletteDefinitions = new Set(
+      [...globalCss.matchAll(/--(?<token>palette-[\w-]+):/g)].map((match) => match.groups?.token),
+    );
+    const paletteReferences = new Set(
+      [...globalCss.matchAll(/var\(--(?<token>palette-[\w-]+)\)/g)].map((match) => match.groups?.token),
+    );
+    expect([...paletteReferences].filter((token) => !paletteDefinitions.has(token))).toEqual([]);
 
     const rawColorDeclarations = globalCss
       .split("\n")
@@ -41,10 +52,10 @@ describe("semantic theme architecture", () => {
     const lightMappings = globalCss.match(/:root,\s*html\[data-theme="light"\]\s*{(?<body>[^}]*)}/s)?.groups?.body ?? "";
     const osDarkMappings = globalCss.match(/html:not\(\[data-theme\]\)\s*{(?<body>[^}]*)}/s)?.groups?.body ?? "";
     const darkMappings = globalCss.match(/html\[data-theme="dark"\]\s*{(?<body>[^}]*)}/s)?.groups?.body ?? "";
-    for (const color of semanticColors) {
-      expect(lightMappings).toContain(`--theme-${color}: var(--palette-`);
-      expect(osDarkMappings).toContain(`--theme-${color}: var(--palette-`);
-      expect(darkMappings).toContain(`--theme-${color}: var(--palette-`);
+    for (const role of themeRoles) {
+      expect(lightMappings).toContain(`--theme-${role}: var(--palette-`);
+      expect(osDarkMappings).toContain(`--theme-${role}: var(--palette-`);
+      expect(darkMappings).toContain(`--theme-${role}: var(--palette-`);
     }
   });
 
