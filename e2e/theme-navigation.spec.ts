@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { onePxPng } from "./fixtures";
 import { softClick } from "./navigation";
 
 const THEME_STORAGE_KEY = "stillframe-theme";
@@ -21,6 +22,9 @@ function attachBrowserErrorCapture(page: Page, messages: string[]): void {
 }
 
 test.beforeEach(async ({ context }) => {
+  await context.route("**/img/**", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: onePxPng() }),
+  );
   const messages: string[] = [];
   const onPage = (page: Page) => attachBrowserErrorCapture(page, messages);
   for (const page of context.pages()) attachBrowserErrorCapture(page, messages);
