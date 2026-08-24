@@ -8,33 +8,154 @@
 
 @import "tailwindcss";
 
-@theme {
-  /* ── Ink & surfaces (oklch: perceptually uniform) ─────────────── */
-  --color-ink: oklch(0.22 0.012 260);
-  --color-ink-soft: oklch(0.48 0.012 260);
-  --color-ink-faint: oklch(0.64 0.01 260);
-  --color-paper: oklch(0.985 0.003 95);
-  --color-surface: oklch(1 0 0);
-  --color-surface-sunken: oklch(0.962 0.004 95);
-  --color-line: oklch(0.9 0.006 95);
-  --color-line-strong: oklch(0.78 0.008 95);
-  /* ── Accent ───────────────────────────────────────────────────── */
-  --color-brand: oklch(0.5 0.1 215);
-  --color-brand-strong: oklch(0.41 0.1 215);
-  --color-brand-soft: oklch(0.955 0.022 215);
-  --color-accent: oklch(0.68 0.15 55);
-  --color-success: oklch(0.62 0.13 155);
-  --color-success-soft: oklch(0.96 0.035 155);
-  --color-danger: oklch(0.57 0.17 25);
-  --color-danger-soft: oklch(0.96 0.035 25);
-  /* ── Horizontal spacing axis ──────────────────────────────────── */
+/* Raw palette values are private implementation details. Components consume
+   only the semantic colors exposed by the @theme block below. */
+:root {
+  --palette-slate-0: oklch(0.14 0.012 260);
+  --palette-slate-1: oklch(0.2 0.012 260);
+  --palette-slate-2: oklch(0.22 0.012 260);
+  --palette-slate-3: oklch(0.32 0.012 260);
+  --palette-slate-4: oklch(0.46 0.012 260);
+  --palette-slate-5: oklch(0.62 0.01 260);
+  --palette-slate-6: oklch(0.74 0.009 260);
+  --palette-slate-7: oklch(0.92 0.006 260);
+  --palette-slate-8: oklch(0.985 0.003 260);
+  --palette-warm-0: oklch(0.135 0.006 95);
+  --palette-warm-1: oklch(0.17 0.006 95);
+  --palette-warm-2: oklch(0.21 0.006 95);
+  --palette-warm-3: oklch(0.3 0.008 95);
+  --palette-warm-4: oklch(0.45 0.008 95);
+  --palette-warm-5: oklch(0.9 0.006 95);
+  --palette-warm-6: oklch(0.962 0.004 95);
+  --palette-warm-7: oklch(0.985 0.003 95);
+  --palette-warm-8: oklch(1 0 0);
+  --palette-cyan-0: oklch(0.28 0.04 215);
+  --palette-cyan-1: oklch(0.41 0.1 215);
+  --palette-cyan-2: oklch(0.49 0.1 215);
+  --palette-cyan-3: oklch(0.72 0.1 215);
+  --palette-cyan-4: oklch(0.78 0.09 215);
+  --palette-cyan-5: oklch(0.955 0.022 215);
+  --palette-orange-0: oklch(0.68 0.15 55);
+  --palette-orange-1: oklch(0.75 0.12 55);
+  --palette-green-0: oklch(0.26 0.045 155);
+  --palette-green-1: oklch(0.55 0.13 155);
+  --palette-green-2: oklch(0.74 0.11 155);
+  --palette-green-3: oklch(0.96 0.035 155);
+  --palette-red-0: oklch(0.27 0.055 25);
+  --palette-red-1: oklch(0.5 0.17 25);
+  --palette-red-2: oklch(0.74 0.13 25);
+  --palette-red-3: oklch(0.96 0.035 25);
+  --palette-shadow-0: oklch(0.14 0.012 260 / 0.05);
+  --palette-shadow-1: oklch(0.14 0.012 260 / 0.07);
+  --palette-shadow-2: oklch(0.05 0.006 260 / 0.24);
+}
+
+/* Light is the source-order fallback. An absent data-theme follows the OS
+   preference below; either explicit data-theme value always wins. */
+:root,
+html[data-theme="light"] {
+  color-scheme: light;
+  --theme-ink: var(--palette-slate-2);
+  --theme-ink-soft: var(--palette-slate-4);
+  --theme-ink-faint: var(--palette-slate-5);
+  --theme-paper: var(--palette-warm-7);
+  --theme-surface: var(--palette-warm-8);
+  --theme-surface-sunken: var(--palette-warm-6);
+  --theme-line: var(--palette-warm-5);
+  --theme-line-strong: var(--palette-slate-6);
+  --theme-brand: var(--palette-cyan-2);
+  --theme-brand-strong: var(--palette-cyan-1);
+  --theme-brand-soft: var(--palette-cyan-5);
+  --theme-accent: var(--palette-orange-0);
+  --theme-success: var(--palette-green-1);
+  --theme-success-soft: var(--palette-green-3);
+  --theme-danger: var(--palette-red-1);
+  --theme-danger-soft: var(--palette-red-3);
+  --theme-on-brand: var(--palette-slate-8);
+  --theme-on-danger: var(--palette-slate-8);
+  --theme-shadow-soft: var(--palette-shadow-0);
+  --theme-shadow-strong: var(--palette-shadow-1);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+    --theme-ink: var(--palette-slate-7);
+    --theme-ink-soft: var(--palette-slate-6);
+    --theme-ink-faint: var(--palette-slate-5);
+    --theme-paper: var(--palette-warm-1);
+    --theme-surface: var(--palette-warm-2);
+    --theme-surface-sunken: var(--palette-warm-0);
+    --theme-line: var(--palette-warm-3);
+    --theme-line-strong: var(--palette-warm-4);
+    --theme-brand: var(--palette-cyan-3);
+    --theme-brand-strong: var(--palette-cyan-4);
+    --theme-brand-soft: var(--palette-cyan-0);
+    --theme-accent: var(--palette-orange-1);
+    --theme-success: var(--palette-green-2);
+    --theme-success-soft: var(--palette-green-0);
+    --theme-danger: var(--palette-red-2);
+    --theme-danger-soft: var(--palette-red-0);
+    --theme-on-brand: var(--palette-slate-0);
+    --theme-on-danger: var(--palette-slate-0);
+    --theme-shadow-soft: var(--palette-shadow-2);
+    --theme-shadow-strong: var(--palette-shadow-2);
+  }
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --theme-ink: var(--palette-slate-7);
+  --theme-ink-soft: var(--palette-slate-6);
+  --theme-ink-faint: var(--palette-slate-5);
+  --theme-paper: var(--palette-warm-1);
+  --theme-surface: var(--palette-warm-2);
+  --theme-surface-sunken: var(--palette-warm-0);
+  --theme-line: var(--palette-warm-3);
+  --theme-line-strong: var(--palette-warm-4);
+  --theme-brand: var(--palette-cyan-3);
+  --theme-brand-strong: var(--palette-cyan-4);
+  --theme-brand-soft: var(--palette-cyan-0);
+  --theme-accent: var(--palette-orange-1);
+  --theme-success: var(--palette-green-2);
+  --theme-success-soft: var(--palette-green-0);
+  --theme-danger: var(--palette-red-2);
+  --theme-danger-soft: var(--palette-red-0);
+  --theme-on-brand: var(--palette-slate-0);
+  --theme-on-danger: var(--palette-slate-0);
+  --theme-shadow-soft: var(--palette-shadow-2);
+  --theme-shadow-strong: var(--palette-shadow-2);
+}
+
+@theme inline {
+  /* Reset Tailwind's default named palettes before exposing semantic roles. */
+  --color-*: initial;
+  --color-ink: var(--theme-ink);
+  --color-ink-soft: var(--theme-ink-soft);
+  --color-ink-faint: var(--theme-ink-faint);
+  --color-paper: var(--theme-paper);
+  --color-surface: var(--theme-surface);
+  --color-surface-sunken: var(--theme-surface-sunken);
+  --color-line: var(--theme-line);
+  --color-line-strong: var(--theme-line-strong);
+  --color-brand: var(--theme-brand);
+  --color-brand-strong: var(--theme-brand-strong);
+  --color-brand-soft: var(--theme-brand-soft);
+  --color-accent: var(--theme-accent);
+  --color-success: var(--theme-success);
+  --color-success-soft: var(--theme-success-soft);
+  --color-danger: var(--theme-danger);
+  --color-danger-soft: var(--theme-danger-soft);
+  --color-on-brand: var(--theme-on-brand);
+  --color-on-danger: var(--theme-on-danger);
+  /* ── Horizontal spacing axis ─────────────────────────── */
   --spacing-hsp-2xs: 0.25rem;
   --spacing-hsp-xs: 0.5rem;
   --spacing-hsp-sm: 0.75rem;
   --spacing-hsp-md: 1.25rem;
   --spacing-hsp-lg: 2rem;
   --spacing-hsp-xl: 3.5rem;
-  /* ── Vertical spacing axis ────────────────────────────────────── */
+  /* ── Vertical spacing axis ───────────────────────────── */
   --spacing-vsp-2xs: 0.25rem;
   --spacing-vsp-xs: 0.5rem;
   --spacing-vsp-sm: 0.875rem;
@@ -44,7 +165,7 @@
   /* Fluid page gutter. Every full-width surface uses px-gutter so the
      header, the grid and the footer share one side inset. */
   --spacing-gutter: clamp(1rem, 0.5rem + 2vw, 4rem);
-  /* ── Type scale ───────────────────────────────────────────────── */
+  /* ── Type scale ────────────────────────────────── */
   --text-display: 2.25rem;
   --text-display--line-height: 1.1;
   --text-title: 1.625rem;
@@ -57,18 +178,18 @@
   --text-small--line-height: 1.5;
   --text-micro: 0.75rem;
   --text-micro--line-height: 1.4;
-  /* ── Radius ───────────────────────────────────────────────────── */
+  /* ── Radius ────────────────────────────────────── */
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.875rem;
   --radius-pill: 999px;
-  /* ── Elevation (chrome only — never under a photograph) ───────── */
+  /* ── Elevation (chrome only — never under a photograph) ──────── */
   --shadow-card:
-    0 0.5px 1px oklch(0.22 0.012 260 / 0.05), 0 2px 4px oklch(0.22 0.012 260 / 0.05);
+    0 0.5px 1px var(--theme-shadow-soft), 0 2px 4px var(--theme-shadow-soft);
   --shadow-raised:
-    0 1px 2px oklch(0.22 0.012 260 / 0.06), 0 4px 8px oklch(0.22 0.012 260 / 0.06),
-    0 12px 24px oklch(0.22 0.012 260 / 0.07);
-  /* ── Fonts ────────────────────────────────────────────────────── */
+    0 1px 2px var(--theme-shadow-soft), 0 4px 8px var(--theme-shadow-soft),
+    0 12px 24px var(--theme-shadow-strong);
+  /* ── Fonts ─────────────────────────────────────── */
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;
@@ -79,14 +200,39 @@
     font-family: var(--font-sans);
     font-size: var(--text-body);
     line-height: 1.6;
-    background: var(--color-paper);
-    color: var(--color-ink);
+    background: var(--theme-paper);
+    color: var(--theme-ink);
     -webkit-font-smoothing: antialiased;
   }
   a { color: inherit; }
   /* Visible keyboard focus on every interactive element. */
   :focus-visible {
-    outline: 2px solid var(--color-brand);
+    outline: 2px solid var(--theme-brand);
     outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Keep the card's hover state without its spatial zoom. */
+  [class*="group-hover:scale-"] {
+    scale: 1 !important;
+  }
+
+  /* Native and zfb root View Transitions live outside the document tree. */
+  ::view-transition-group(root),
+  ::view-transition-image-pair(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

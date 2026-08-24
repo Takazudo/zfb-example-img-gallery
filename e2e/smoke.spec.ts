@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { onePxPng, uploadPng } from "./fixtures";
+import { softSubmit } from "./navigation";
 
 const runId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const username = `e2e${runId}`;
@@ -8,6 +9,10 @@ const password = `Pw-${runId}-aA1!`;
 const title = `E2E smoke ${runId}`;
 const description = `Uploaded by the e2e smoke run ${runId}. *Plain* _text_.`;
 const uniqueTag = `e2e-${runId}`;
+const EXPECTED_VALIDATION_CONSOLE_ERRORS = [
+  "console: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+  "console: Failed to load resource: the server responded with a status of 400 (Bad Request)",
+] as const;
 
 test.beforeEach(async ({ page }) => {
   // Stub photo bytes. The grid and detail pages are the assertions; the actual
@@ -20,28 +25,50 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("registers, uploads, browses, and fetches the social card @smoke", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(`console: ${message.text()}`);
+  });
+  page.on("pageerror", (error) => browserErrors.push(`page: ${error.message}`));
+
+  // Validation responses are also router-intercepted POSTs: they keep the
+  // current URL and replace only the document while preserving the form state.
+  await page.goto("/login");
+  await page.fill('input[name="email"]', "nobody@example.test");
+  await page.fill('input[name="password"]', "wrongpass");
+  const invalidLoginSwap = await softSubmit(page, "/login", "Sign in");
+  expect(new URL(invalidLoginSwap.finalUrl).pathname).toBe("/login");
+  await expect(page.getByRole("alert")).toContainText("Email or password is incorrect.");
+
   await page.goto("/register");
+  await page.fill('input[name="username"]', "x");
+  await page.fill('input[name="email"]', "invalid-register@example.test");
+  // Keep native minlength validation satisfied so the router reaches the
+  // server-side username validation branch.
+  await page.fill('input[name="password"]', "valid-pass");
+  const invalidRegisterSwap = await softSubmit(page, "/register", "Create account");
+  expect(new URL(invalidRegisterSwap.finalUrl).pathname).toBe("/register");
+  await expect(page.getByRole("alert")).toContainText("Username must be 3–24 characters.");
+
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="password"]', password);
-  await Promise.all([
-    page.waitForURL((url) => url.pathname !== "/register"),
-    page.click('form[action="/register"] button[type="submit"]'),
-  ]);
-  expect(new URL(page.url()).pathname).not.toBe("/register");
+  const registerSwap = await softSubmit(page, "/register", "Create account");
 
   let cookies = await page.context().cookies();
   if (!cookies.some((cookie) => cookie.name === "sid")) {
     await page.goto("/login");
     await page.fill('input[name="email"]', email);
     await page.fill('input[name="password"]', password);
-    await Promise.all([
-      page.waitForURL((url) => url.pathname !== "/login"),
-      page.click('form[action="/login"] button[type="submit"]'),
-    ]);
+    const loginSwap = await softSubmit(page, "/login", "Sign in");
+    expect(new URL(loginSwap.finalUrl).pathname).toBe("/");
     cookies = await page.context().cookies();
+  } else {
+    expect(new URL(registerSwap.finalUrl).pathname).toBe("/");
   }
   expect(cookies.some((cookie) => cookie.name === "sid")).toBe(true);
+  await expect(page.getByRole("button", { name: /Switch to (dark|light) mode/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
 
   await page.goto("/upload");
   await page.setInputFiles('input[name="photo"]', {
@@ -54,11 +81,11 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   // "#E2E Smoke" exercises the normaliser: strip the leading '#', NFKC,
   // lowercase, collapse internal whitespace to '-' => "e2e-smoke".
   await page.fill('input[name="tags"]', `#E2E Smoke, ${uniqueTag}`);
-  await Promise.all([
-    page.waitForURL(/\/photos\/\d+$/),
-    page.click('form[action="/upload"] button[type="submit"]'),
-  ]);
+  const uploadSwap = await softSubmit(page, "/upload", "Upload photo");
+  expect(new URL(uploadSwap.finalUrl).pathname).toMatch(/^\/photos\/\d+$/);
   const photoPath = new URL(page.url()).pathname;
+  await expect(page.getByRole("button", { name: /Switch to (dark|light) mode/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
 
   await page.goto("/");
   const gridPhoto = page.locator(`a[href="${photoPath}"]`);
@@ -108,19 +135,67 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   const response = await page.request.get(localOgImage);
   expect(response.status()).toBe(200);
   expect(response.headers()["content-type"]).toContain("image/jpeg");
+
+  await page.goto("/settings");
+  const renamedUsername = `${username}x`;
+  await page.fill('input[name="username"]', renamedUsername);
+  const settingsSwap = await softSubmit(page, "/settings", "Save username");
+  expect(new URL(settingsSwap.finalUrl).pathname).toBe("/settings");
+  await expect(page.locator('input[name="username"]')).toHaveValue(renamedUsername);
+  const renamedAuthorLink = page
+    .getByRole("navigation", { name: "Primary" })
+    .locator(`a[href="/authors/${renamedUsername}"]`);
+  await expect(renamedAuthorLink).toBeVisible();
+  await expect(renamedAuthorLink).toContainText(`@${renamedUsername}`);
+
+  const logoutSwap = await softSubmit(page, "/logout", "Sign out");
+  expect(new URL(logoutSwap.finalUrl).pathname).toBe("/");
+  expect((await page.context().cookies()).some((cookie) => cookie.name === "sid")).toBe(false);
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Register", exact: true })).toBeVisible();
+  // The journey deliberately fetches the 401 login and 400 registration
+  // validation documents. Chromium reports those two non-2xx responses as
+  // generic resource console errors; they are expected HTTP diagnostics, not
+  // JavaScript/page failures. Keep this allowlist exact: every other console
+  // error and every pageerror remains a failure.
+  const expectedValidationErrors = [...EXPECTED_VALIDATION_CONSOLE_ERRORS];
+  expect(browserErrors).toHaveLength(expectedValidationErrors.length);
+  expect(browserErrors).toEqual(expect.arrayContaining(expectedValidationErrors));
 });
 
-test("serves the gallery without client JavaScript", async ({ page }) => {
-  const executableScripts = page.locator('script:not([type="application/ld+json"])');
+async function expectRuntimeInventory(page: import("@playwright/test").Page) {
+  await expect(page.locator('script[data-theme-bootstrap]')).toHaveCount(1);
+  await expect(page.locator('script[type="module"][src="/assets/islands.js"]')).toHaveCount(1);
+  const executableScripts = await page.locator('script:not([type="application/ld+json"])').evaluateAll((scripts) =>
+    scripts.map((script) => ({
+      type: script.getAttribute("type") ?? "",
+      src: script.getAttribute("src"),
+      bootstrap: script.hasAttribute("data-theme-bootstrap"),
+    })),
+  );
+  expect(executableScripts).toEqual([
+    { type: "", src: null, bootstrap: true },
+    { type: "module", src: "/assets/islands.js", bootstrap: false },
+  ]);
+  const runtimeAsset = await page.request.get(new URL("/assets/islands.js", page.url()).toString());
+  expect(runtimeAsset.status()).toBe(200);
+  expect(runtimeAsset.headers()["content-type"]).toContain("javascript");
+}
+
+test("serves the intentional theme/router runtime inventory @smoke", async ({ page }) => {
 
   await page.goto("/");
-  await expect(executableScripts).toHaveCount(0);
+  await expectRuntimeInventory(page);
 
-  const photoHref = await page.locator('a[href^="/photos/"]').first().getAttribute("href");
-  await page.goto(photoHref ?? "/photos/1");
-  await expect(executableScripts).toHaveCount(0);
-  await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(1);
+  const photoLinks = page.locator('a[href^="/photos/"]');
+  if ((await photoLinks.count()) > 0) {
+    const photoHref = await photoLinks.first().getAttribute("href");
+    expect(photoHref).toBeTruthy();
+    await page.goto(photoHref!);
+    await expectRuntimeInventory(page);
+    await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(1);
+  }
 
   await page.goto("/tags");
-  await expect(executableScripts).toHaveCount(0);
+  await expectRuntimeInventory(page);
 });

@@ -5,7 +5,7 @@ export const frontmatter = { title: "Not found", description: "Page not found." 
 
 export default function NotFoundPage() {
   return (
-    <GalleryLayout title="Not found">
+    <GalleryLayout title="Not found" includeStableClientEntry={false}>
       <h1>404 — not found</h1>
       <p>That page does not exist. <a href="/">Back to the gallery</a>.</p>
     </GalleryLayout>

@@ -132,7 +132,9 @@ describe("author page handlers", () => {
     expect((html.match(/href="\/photos\//g) ?? []).length).toBeLessThanOrEqual(24);
     expect(html).toContain('src="/img/photos/1.jpg"');
     expect(html).toContain('loading="eager"');
-    expect(html).not.toContain('<script');
+    expect(html.match(/<script\b/g)).toHaveLength(2);
+    expect(html).toContain("data-theme-bootstrap");
+    expect(html).toContain('type="module" src="/assets/islands.js"');
   });
 
   it("returns a layout-wrapped 404 for an unknown username", async () => {

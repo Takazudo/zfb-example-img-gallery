@@ -99,7 +99,9 @@ describe("tag page SSR markup", () => {
     expect(html).toContain('loading="lazy"');
     expect(html).toContain('property="og:type" content="website"');
     expect(html).toContain(`href="https://gallery.example/tags/${encodeURIComponent("東京")}"`);
-    expect(html).not.toMatch(/<script/i);
+    expect(html.match(/<script\b/g)).toHaveLength(2);
+    expect(html).toContain("data-theme-bootstrap");
+    expect(html).toContain('type="module" src="/assets/islands.js"');
   });
 
   it("renders one encoded index anchor per tag with its count", async () => {

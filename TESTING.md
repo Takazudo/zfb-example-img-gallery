@@ -16,8 +16,8 @@ The project names and file globs below are copied from vitest.config.ts.
 
 | Project | Level | Tier | File glob | What it covers |
 | --- | --- | --- | --- | --- |
-| unit | L1 | T0/T1 | tests/unit/**/*.test.ts | Pure functions: pagination page-count/offset math, tag normalisation, image-header dimension parsing, slug/taxonomy parsing, password-hashing helpers, storage-key rules, and SEO helpers. |
-| ssr | L3 | T0/T1 | tests/ssr/**/*.test.tsx | preact-render-to-string over page components: markup contracts, the head tag set with absolute URLs, the JSON-LD block, and empty-state rendering. |
+| unit | L1 | T0/T1 | tests/unit/**/*.test.ts | Pure functions and artifact scanners: domain helpers plus prerender/runtime inventory and stable-asset failure modes. |
+| ssr | L3 | T0/T1 | tests/ssr/**/*.test.tsx | preact-render-to-string over page components: markup contracts, dynamic head/runtime structure, theme/router policy, JSON-LD, and empty-state rendering. |
 | handlers | L3 | T0/T1 | tests/handlers/**/*.test.ts | Route handlers against stubbed bindings (a mock R2 exposing its own store and stub D1): status codes, redirects, cache headers, cookie flags, and error paths. |
 | integration | L4 | T1 | tests/integration/**/*.test.ts | Miniflare/Workers runtime only where storage or SQL semantics are genuinely the subject: currently an R2 put → get round trip, with migration and Images-binding assertions belonging here when those seams are exercised. |
 
@@ -37,10 +37,14 @@ These are the invariants that can fail silently and belong in the build/integrat
 
 - Every page except pages/404.tsx exports the literal prerender = false.
 - dist/404.html is the only HTML file emitted by the build.
-- No client-JS bundle or executable `<script>` tag ships. Photo detail deliberately includes one non-executable `application/ld+json` SEO block.
+- The client artifact inventory is exactly one generated islands entry, its reachable generated chunks/resources, and the byte-identical stable `/assets/islands.js` alias. An unrelated JavaScript artifact fails the scan.
+- `dist/404.html` has the marked pre-paint bootstrap, router meta/style output, theme island marker, and one injected hashed module entry, with no stable-module duplicate or arbitrary executable script. JSON-LD remains non-executable structured data.
+- Dynamic `GalleryLayout` documents have the bootstrap before `/assets/app.css`, the router policy/announcer, theme island, and exactly one stable module entry. The SSG layout mode suppresses that stable tag so zfb can inject its hashed entry.
 - A navigation-header (sec-fetch-mode: navigate) request against every bare collection root in run_worker_first — /, /authors, and /tags — is answered by the Worker, not by dist/404.html. This is the failure that looks fine to curl and is broken for real browser navigation.
 
 `scripts/assert-ssr-invariants.mjs` checks the source and built-output invariants. The test suite also covers collection-root navigation headers through the Worker entry point.
+
+The browser confirmation lane must also preserve progressive enhancement: active navigation, auth/header controls, title/meta, and server-rendered page content update after soft navigation; `data-theme` survives swaps; GET and mutation forms preserve query, multipart, URL-encoded, redirect, validation, error, cookie, and submitter behavior; disabling JavaScript still performs normal full form navigations. `zfb:after-swap` fires before incoming scripts and before newly swapped islands mount/hydrate, so it must not be used as a hydration-ready signal.
 
 ## Deliberate deltas
 
