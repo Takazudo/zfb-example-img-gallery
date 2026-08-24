@@ -3,4 +3,4 @@ import { createOgRoute } from "../../../lib/og-route";
 
 export const prerender = false;
 
-export default createOgRoute("v1", generateOgCard);
+export default createOgRoute("v2", generateOgCard);

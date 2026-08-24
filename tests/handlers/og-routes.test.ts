@@ -12,7 +12,8 @@ vi.mock("@takazudo/zfb-adapter-cloudflare", () => ({
   getCloudflareContext: () => mocked.current,
 }));
 
-import OgCardRoute from "../../pages/og/v1/[id]";
+import OgV1CardRoute from "../../pages/og/v1/[id]";
+import OgV2CardRoute from "../../pages/og/v2/[id]";
 import RobotsRoute from "../../pages/robots.txt";
 import SitemapRoute from "../../pages/sitemap.xml";
 
@@ -80,9 +81,16 @@ function makeEnv(input: {
   });
 }
 
-async function invokeOg(env: Env, path = "/og/v1/7.jpg", method = "GET") {
+type OgRoute = () => Promise<Response>;
+
+async function invokeOg(
+  env: Env,
+  path = "/og/v1/7.jpg",
+  method = "GET",
+  route: OgRoute = OgV1CardRoute,
+) {
   mocked.current = { env, request: new Request(`https://request.example${path}`, { method }) };
-  return OgCardRoute();
+  return route();
 }
 
 beforeEach(() => {
@@ -96,13 +104,13 @@ afterEach(() => {
 describe("OG image route", () => {
   it("serves an immutable cache hit without invoking Images", async () => {
     const bucket = createMockR2();
-    await bucket.put(ogObjectKey("7"), CARD, { httpMetadata: { contentType: "image/jpeg" } });
+    await bucket.put(ogObjectKey("7", "v1"), CARD, { httpMetadata: { contentType: "image/jpeg" } });
     const images = mockImages();
     const response = await invokeOg(makeEnv({ bucket, images: images.binding }));
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/jpeg");
     expect(response.headers.get("cache-control")).toBe(OG_IMMUTABLE_CACHE);
-    expect(response.headers.get("etag")).toBe(`"mock-${ogObjectKey("7")}"`);
+    expect(response.headers.get("etag")).toBe(`"mock-${ogObjectKey("7", "v1")}"`);
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(CARD);
     expect(images.input).not.toHaveBeenCalled();
   });
@@ -123,9 +131,39 @@ describe("OG image route", () => {
       gravity: "auto",
     });
     expect(images.output).toHaveBeenCalledWith({ format: "image/jpeg", quality: 85 });
-    const stored = bucket._store.get(ogObjectKey("7"));
+    const stored = bucket._store.get(ogObjectKey("7", "v1"));
     expect(stored?.contentType).toBe("image/jpeg");
     expect(readImageDimensions(stored!.bytes)).toEqual({ width: 1200, height: 630 });
+  });
+
+  it("pins v1 and v2 routes to their own stored generation", async () => {
+    const bucket = createMockR2();
+    const v1Card = jpegFixture(1200, 630, 0xc0);
+    const v2Card = jpegFixture(1200, 630, 0xc1);
+    await bucket.put(ogObjectKey("7", "v1"), v1Card, { httpMetadata: { contentType: "image/jpeg" } });
+    await bucket.put(ogObjectKey("7", "v2"), v2Card, { httpMetadata: { contentType: "image/jpeg" } });
+    const images = mockImages();
+    const env = makeEnv({ bucket, images: images.binding });
+
+    const v1Response = await invokeOg(env, "/og/v1/7.jpg");
+    const v2Response = await invokeOg(env, "/og/v2/7.jpg", "GET", OgV2CardRoute);
+
+    expect(new Uint8Array(await v1Response.arrayBuffer())).toEqual(v1Card);
+    expect(new Uint8Array(await v2Response.arrayBuffer())).toEqual(v2Card);
+    expect(images.input).not.toHaveBeenCalled();
+  });
+
+  it("writes a v2 miss under the v2 generation prefix", async () => {
+    const bucket = createMockR2();
+    await bucket.put("photos/source.png", pngFixture(800, 800), {
+      httpMetadata: { contentType: "image/png" },
+    });
+    const images = mockImages();
+    const response = await invokeOg(makeEnv({ bucket, images: images.binding }), "/og/v2/7.jpg", "GET", OgV2CardRoute);
+
+    expect(response.status).toBe(200);
+    expect(bucket._store.get(ogObjectKey("7", "v2"))?.contentType).toBe("image/jpeg");
+    expect(bucket._store.has(ogObjectKey("7", "v1"))).toBe(false);
   });
 
   it("soft-recovers generation failure through Static Assets", async () => {
@@ -149,7 +187,7 @@ describe("OG image route", () => {
 
   it("supports HEAD and rejects invalid methods, suffixes, and ids", async () => {
     const bucket = createMockR2();
-    await bucket.put(ogObjectKey("7"), CARD, { httpMetadata: { contentType: "image/jpeg" } });
+    await bucket.put(ogObjectKey("7", "v1"), CARD, { httpMetadata: { contentType: "image/jpeg" } });
     const env = makeEnv({ bucket });
     const head = await invokeOg(env, "/og/v1/7.jpg", "HEAD");
     expect(head.status).toBe(200);
