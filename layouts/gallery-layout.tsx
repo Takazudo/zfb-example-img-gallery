@@ -1,8 +1,10 @@
 import { Island } from "@takazudo/zfb";
 import { ClientRouter } from "@takazudo/zfb-runtime";
 import type { ComponentChildren } from "preact";
+import { DisplaySettings } from "../components/display-settings";
 import { FaviconLinks, Seo } from "../components/seo";
 import { ThemeToggle } from "../components/theme-toggle";
+import { GALLERY_PREFERENCES_BOOTSTRAP_SCRIPT } from "../lib/gallery-preferences";
 import type { SeoData } from "../lib/seo";
 import { SITE_NAME } from "../lib/site";
 import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
@@ -23,6 +25,7 @@ type Props = {
 };
 
 const TAGLINE = "A zfb image gallery on Cloudflare.";
+const DOCUMENT_BOOTSTRAP_SCRIPT = `${THEME_BOOTSTRAP_SCRIPT}${GALLERY_PREFERENCES_BOOTSTRAP_SCRIPT}`;
 const navClass = "inline-flex min-h-[2.75rem] items-center px-hsp-xs text-small text-ink-soft transition-colors hover:text-brand";
 const actionClass = "inline-flex min-h-[2.75rem] items-center rounded-md bg-brand px-hsp-sm text-small font-semibold text-on-brand transition-colors hover:bg-brand-strong";
 
@@ -46,11 +49,11 @@ export default function GalleryLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <script
           data-theme-bootstrap
-          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
+          dangerouslySetInnerHTML={{ __html: DOCUMENT_BOOTSTRAP_SCRIPT }}
         />
         {ClientRouter({
           fallback: "animate",
-          preserveHtmlAttrs: ["data-theme"],
+          preserveHtmlAttrs: ["data-theme", "data-thumb-ratio", "data-thumb-width"],
           traverseRefetch: true,
         }) as unknown as ComponentChildren}
         {seo ? (
@@ -75,6 +78,11 @@ export default function GalleryLayout({
                 {(
                   <Island when="load">
                     <ThemeToggle />
+                  </Island>
+                ) as unknown as ComponentChildren}
+                {(
+                  <Island when="load">
+                    <DisplaySettings />
                   </Island>
                 ) as unknown as ComponentChildren}
                 <NavLink href="/" activePath={activePath}>Gallery</NavLink>

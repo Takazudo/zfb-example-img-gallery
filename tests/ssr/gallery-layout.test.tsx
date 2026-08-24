@@ -8,6 +8,7 @@ import { PhotoCard } from "../../components/photo-card";
 import { PhotoGrid } from "../../components/photo-grid";
 import { TagList } from "../../components/tag-list";
 import GalleryLayout from "../../layouts/gallery-layout";
+import { GALLERY_PREFERENCES_BOOTSTRAP_SCRIPT } from "../../lib/gallery-preferences";
 import { THEME_BOOTSTRAP_SCRIPT } from "../../lib/theme";
 
 describe("GalleryLayout", () => {
@@ -22,14 +23,18 @@ describe("GalleryLayout", () => {
   });
   it("emits the marked pre-paint bootstrap before stylesheet work", () => {
     const html = render(<GalleryLayout>content</GalleryLayout>);
-    expect(html).toContain(`<script data-theme-bootstrap="true">${THEME_BOOTSTRAP_SCRIPT}</script>`);
+    expect(html).toContain(
+      `<script data-theme-bootstrap="true">${THEME_BOOTSTRAP_SCRIPT}${GALLERY_PREFERENCES_BOOTSTRAP_SCRIPT}</script>`,
+    );
     expect(html.indexOf("data-theme-bootstrap")).toBeLessThan(html.indexOf('href="/assets/app.css"'));
   });
   it("mounts the uniform SPA router policy and preserves its announcer styles", () => {
     const html = render(<GalleryLayout>content</GalleryLayout>);
     expect(html).toContain('name="zfb-view-transitions-enabled" content="true"');
     expect(html).toContain('name="zfb-view-transitions-fallback" content="animate"');
-    expect(html).toContain('name="zfb-preserve-html-attrs" content="data-theme"');
+    expect(html).toContain(
+      'name="zfb-preserve-html-attrs" content="data-theme data-thumb-ratio data-thumb-width"',
+    );
     expect(html).toContain('name="zfb-traverse-refetch" content="true"');
     expect(html).toContain(".zfb-route-announcer");
   });
@@ -43,10 +48,21 @@ describe("GalleryLayout", () => {
     const props = html.match(/data-zfb-island="ThemeToggle"[^>]*data-props="([^"]*)"/)?.[1];
     expect(props).toBeUndefined();
   });
+  it("mounts one stable display-settings island for anonymous and signed-in headers", () => {
+    for (const user of [null, { username: "takazudo" }]) {
+      const html = render(<GalleryLayout user={user}>content</GalleryLayout>);
+      expect(html.match(/data-zfb-island="DisplaySettings"/g)).toHaveLength(1);
+      expect(html).toMatch(
+        /<nav[^>]*>[\s\S]*data-zfb-island="DisplaySettings" data-when="load"[\s\S]*<\/nav>/,
+      );
+      expect(html).not.toContain('aria-haspopup="dialog"');
+    }
+  });
   it("suppresses only the manual stable module for the SSG document mode", () => {
     const html = render(<GalleryLayout includeStableClientEntry={false}>content</GalleryLayout>);
     expect(html).not.toContain('src="/assets/islands.js"');
     expect(html).toContain('data-zfb-island="ThemeToggle"');
+    expect(html).toContain('data-zfb-island="DisplaySettings"');
     expect(html).toContain('name="zfb-view-transitions-enabled"');
   });
   it("renders signed-out controls only", () => {
