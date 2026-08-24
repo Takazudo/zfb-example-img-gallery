@@ -256,7 +256,7 @@ local command must be repeated after a fresh checkout if `.wrangler/state` has b
 ## 7. Seed the gallery with demo data
 
 The demo seed creates 293 photos, all posted by one account, **`@Takazudo`**, through the normal
-registration and upload paths. The six steps below are intentionally sequential.
+registration and upload paths. The seven steps below are intentionally sequential.
 
 1. **Mirror the source photos.**
 
@@ -332,7 +332,49 @@ registration and upload paths. The six steps below are intentionally sequential.
    deployed database is the target, pass `--remote`; that mode uses the separate R2 credentials
    from section 2 for S3-compatible object puts, and those values must remain shell-only.
 
-Run the six steps locally first to validate the complete flow. After the first production deploy,
+7. **Backfill legacy BlurHashes (optional, deliberate).** The upload route attempts a bounded
+   Cloudflare Images transformation for every new photo, but older rows can still have
+   `blurhash IS NULL`. This workflow scans all `photos` rows by increasing id, reads each original
+   without changing its R2 object, decodes it with Node-only Sharp, and updates only successful
+   hashes. It is not tied to the checked-in seed manifest. Defaults are 100 selected rows per run,
+   four concurrent rows, 4 MiB original/download buffers, 16 million Sharp input pixels, a
+   32×32 maximum raster, a 30-second per-row timeout, and 50 SQL statements per batch. Failed
+   rows remain resumable and are reported without image bytes or credentials.
+
+   Preview local state first, then apply a bounded batch using the same persistence directory:
+
+   ```sh
+   PERSIST=.wrangler/state
+   node scripts/backfill-blurhash.mjs --d1 img-gallery --bucket img-gallery --persist-to "$PERSIST" --dry-run --limit 100
+   node scripts/backfill-blurhash.mjs --d1 img-gallery --bucket img-gallery --persist-to "$PERSIST" --limit 100
+   ```
+
+   `--dry-run` selects, reads, decodes, and reports only: it performs zero D1 updates and zero R2
+   mutations. Normal updates retain `WHERE blurhash IS NULL`; `--force` is the explicit opt-in to
+   overwrite a non-null value. If local D1 is locked, stop `wrangler dev`, run the script, and
+   restart the Worker. A summary such as `Backfill summary: selected 3, decoded 2, updated 2,
+   conflicts 0, failed 1` gives the resume/failure checkpoint.
+
+   Remote mode must name both resources; it never silently selects the production bindings:
+
+   ```sh
+   # Requires Wrangler authentication with D1 read/write and R2 read access for these names.
+   node scripts/backfill-blurhash.mjs --remote --d1 img-gallery --bucket img-gallery --dry-run --limit 100
+   node scripts/backfill-blurhash.mjs --remote --d1 img-gallery --bucket img-gallery --limit 100
+   ```
+
+   The dry run is read/decode/report only. The apply command writes D1 hashes and never writes,
+   replaces, or deletes an R2 object. Keep `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (or
+   an existing Wrangler login) out of files and shell history. This runbook documents the remote
+   path; this checkout did not execute a remote backfill.
+
+Each new upload that reaches hash generation consumes one Cloudflare Images transformation from
+the account's quota and may incur the applicable Images usage cost. If the quota or transformation
+service is unavailable, the original upload still succeeds and the nullable hash falls back to the
+ordinary image path. The fixed-4x4 contract and local/remote bounds are enforced by the script;
+tune them down with its bounded flags rather than removing the safety limits.
+
+Run the seven steps locally first to validate the complete flow. After the first production deploy,
 run the seeder and backfill once more against the permanent `workers.dev` URL printed by Wrangler
 to populate the production D1 and R2 resources (the local state is not uploaded by deployment).
 The seeder's resume behavior makes this safe:
@@ -342,6 +384,8 @@ ACCOUNT_SUBDOMAIN=your-workers-subdomain
 LIVE_BASE="https://zfb-example-img-gallery.${ACCOUNT_SUBDOMAIN}.workers.dev"
 node scripts/seed-upload.mjs --base-url "$LIVE_BASE" --remote
 node scripts/backfill-thumbs.mjs --remote
+# Only after an explicit dry run against the intended database and bucket:
+node scripts/backfill-blurhash.mjs --remote --d1 img-gallery --bucket img-gallery --limit 100
 ```
 
 Keep `SEED_TAKAZUDO_PASSWORD` in the shell only for this operation. Do not run the live commands
@@ -380,7 +424,7 @@ gh run watch <run-id> --repo Takazudo/zfb-example-img-gallery
 ```
 
 Use the production `workers.dev` URL printed by the post-merge deployment to complete the remote
-seed and thumbnail backfill from section 7. The production smoke deliberately requires at least
+seed and thumbnail backfill (and, if wanted, the deliberate BlurHash backfill) from section 7. The production smoke deliberately requires at least
 three D1-backed photo titles, so seed before activating the custom domain. Until activation, the
 configured canonical and `og:image` hostname is intentionally not the verification target.
 
@@ -556,6 +600,22 @@ local migration, and restart the Worker and seeder with that same directory.
 
 Stop `pnpm exec wrangler dev`, run the backfill, and restart the Worker for verification. Local D1
 cannot run the backfill while the dev process owns the state lock.
+
+### **The BlurHash backfill refuses remote mode**
+
+Remote mode intentionally requires both `--d1 <database-name>` and `--bucket <bucket-name>` on
+the same invocation. Add the exact names from the target environment; do not rely on the
+production values in `wrangler.toml`. Wrangler must also be authenticated with D1 read/write and
+R2 read permission for that account. Use `--dry-run` first and keep the resource names visible in
+the operator log for the change record.
+
+### **A BlurHash row failed or the summary reports conflicts**
+
+The script does not update a row whose object is missing, oversized, undecodable, pixel-limited,
+or timed out. It also retains the null predicate during a normal update, so a concurrent writer
+can produce a conflict without being overwritten. Rerun the same bounded command after fixing the
+specific object or resource; use `--force` only when deliberately replacing existing values. R2
+objects are never changed by this workflow.
 
 ### **An upload is rejected as too large**
 

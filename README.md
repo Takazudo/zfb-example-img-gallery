@@ -113,7 +113,7 @@ Three choices are easy to miss:
 
 - Email and username are normalised before storage and comparison: email is lowercased and trimmed, while usernames are lowercased (and NFKC-normalised by the account module) for uniqueness and URL lookup. SQLite's default `UNIQUE` comparison on `TEXT` is case-sensitive; without this, `Alice` and `alice` could be two accounts sharing `/authors/alice`.
 - `width` and `height` are `NOT NULL` because every `<img>` carries them to prevent layout shift. A Worker does not decode an image; dimensions are parsed from the file header in `lib/image-dims.ts`.
-- `blurhash` is stored but nothing renders it. It arrives with the source data, while using it would require re-downloading the set and either a dedicated client decoder or a server-side decoder, both outside this demo's narrow runtime.
+- `blurhash` is nullable. New uploads ask the Cloudflare Images binding for a tiny, bounded raster and generate a fixed-4x4 hash best-effort; a transformation or decode failure leaves the value `NULL`. Legacy rows can be filled deliberately with `scripts/backfill-blurhash.mjs`, while presentation keeps a normal-image fallback for nullable data.
 
 R2 keys are immutable UUID-based names. The stored original, grid variant, avatar, and derived card use these shapes:
 
@@ -135,6 +135,8 @@ There is deliberately no `og_key` column. The card key is derived from the photo
 This is a standalone package. The zfb packages are ordinary npm registry dependencies with no `file:` links; the `zfb` CLI ships as prebuilt platform binaries through optional dependencies, so the package-install step is the whole setup.
 
 `@takazudo/zfb`, `@takazudo/zfb-runtime`, and `@takazudo/zfb-adapter-cloudflare` are exact-pinned and in lockstep at `2.10.1`. `wrangler` is also exact-pinned, at `4.85.0`. The package manager is pnpm `10.34.1`, and the required Node version is `>=22.12.0`. There is no `tailwindcss` dependency: Tailwind v4 is compiled inside the zfb binary.
+
+The checked-in upload path keeps `sharp` Node-only: it is used by the operator backfill script, never imported by the Worker bundle. The `blurhash` package is shared by the Worker encoder and the Node backfill encoder.
 
 ## Local development
 
@@ -195,6 +197,32 @@ The committed manifest contains 293 usable slugs. The procedure below is deliber
 
    D1 and bucket names default from `wrangler.toml`; `--photos-dir`, `--manifest`, `--d1`, `--bucket`, `--persist-to`, `--concurrency`, `--force`, and `--remote` are supported. Local mode uses Wrangler's `--local --persist-to`; remote mode uses `--remote` for D1 and S3-compatible R2 credentials from `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_ACCOUNT_ID` (or `R2_ENDPOINT`) for object puts. The default bounded concurrency is four. Already populated thumbnails are skipped unless `--force` is supplied, and missing seeded rows or individual failures are reported without preventing other jobs from completing. Database rows whose titles are not in the seed manifest are treated as genuine user uploads and skipped normally, leaving `thumb_key = NULL`; this backfill is not an application feature.
 
+6. **Backfill legacy BlurHashes (optional, deliberate).** New uploads already attempt the upload-time Images transformation, but old rows can still have `blurhash IS NULL`. This workflow scans every photo row by increasing immutable id; it is not tied to `data/photos/manifest.json`, never mutates an R2 object, and writes only successfully decoded hashes. The default work unit is bounded to 100 selected rows, four concurrent reads, a 4 MiB original/download cap, 16 million Sharp input pixels, 32×32 output, a 30-second row timeout, and 50 SQL updates per batch. `--limit`, `--concurrency`, `--max-object-bytes`, `--max-download-bytes`, `--max-pixels`, `--row-timeout-ms`, and `--sql-batch-size` can lower those budgets within the documented hard bounds.
+
+   First inspect a local persisted state without changing D1 or R2:
+
+   ```sh
+   PERSIST=.wrangler/state
+   node scripts/backfill-blurhash.mjs --d1 img-gallery --bucket img-gallery --persist-to "$PERSIST" --dry-run --limit 100
+   ```
+
+   Apply a bounded local batch after the dry run (stop `wrangler dev` first if the state lock is held):
+
+   ```sh
+   node scripts/backfill-blurhash.mjs --d1 img-gallery --bucket img-gallery --persist-to "$PERSIST" --limit 100
+   ```
+
+   A normal run updates with `WHERE id = … AND blurhash IS NULL`, so a concurrent writer is not clobbered. `--force` intentionally includes non-null rows and uses `WHERE id = …`; use it only when replacing hashes is the explicit goal. Failed rows remain nullable and are printed without image bytes or secrets, so rerunning the same bounded command is the recovery path. A typical result is `Backfill summary: selected 3, decoded 2, updated 2, conflicts 0, failed 1`.
+
+   Remote mode is command construction for an operator who has deliberately chosen the resources; it does not infer the production names. Name both resources every time, and authenticate Wrangler with a token/account that can read the named D1/R2 resources and update the named D1 database:
+
+   ```sh
+   node scripts/backfill-blurhash.mjs --remote --d1 img-gallery --bucket img-gallery --dry-run --limit 100
+   node scripts/backfill-blurhash.mjs --remote --d1 img-gallery --bucket img-gallery --limit 100
+   ```
+
+   The first remote command only selects, reads, decodes, and reports. The second performs D1 updates; neither command writes, replaces, or deletes an R2 object. Keep `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (or an existing Wrangler login) out of files and shell history. This checkout documents the remote path but does not run a remote backfill.
+
 For local mode, all Wrangler CLI operations and the dev server must address the same `.wrangler/state` directory. If local state locking prevents the backfill, stop `wrangler dev`, run the backfill, then restart the Worker for verification.
 
 ## Known limitations
@@ -204,7 +232,7 @@ For local mode, all Wrangler CLI operations and the dev server must address the 
 - **Uploads go through the Worker, not presigned URLs.** A presigned PUT would avoid the request-body limit, but would need another credential type and upload-specific client code beyond the narrow navigation/theme runtime.
 - **Magic-byte MIME checks.** Only JPEG, PNG, and WebP are allowed, and the allowlist is enforced from file bytes rather than the declared `Content-Type`. A PNG renamed `.jpg` is rejected; the stored extension comes from the sniff.
 - **Tags are deliberately constrained but free-form.** Input is comma-separated. Normalisation trims, strips one leading `#`, applies Unicode NFKC, lowercases, collapses whitespace to `-`, drops empties, and deduplicates. `/`, `%`, `?`, `#`, and control characters are rejected; each tag is 1–32 Unicode code points, with at most 10 tags per photo.
-- **`blurhash` is stored but unused.** See the data-model note above.
+- **Nullable BlurHash degradation.** Upload-time generation is best-effort and legacy rows may remain `NULL` until the deliberate backfill completes. The UI must keep its ordinary image/fallback path for those rows. Each new upload that reaches generation asks the Cloudflare Images binding for one small transformation, which consumes the account's Images transformation quota and may incur the applicable Images usage cost; if the quota is exhausted, the upload still keeps its original and the hash remains nullable.
 - **Offset pagination has a concurrent-insert boundary.** The feed uses `created_at DESC, id DESC` with `LIMIT/OFFSET`; if a new photo is inserted between requests, a later offset can omit one item (or expose a repeat). Client-side append deduplication removes repeats, but it cannot recover an item shifted past the requested offset. Cursor pagination is intentionally outside this feature.
 - **Descriptions are plain text.** There is no Markdown parser; the detail page renders them with `white-space: pre-wrap`.
 
