@@ -17,4 +17,8 @@ describe("production origin configuration", () => {
     expect(route?.index).toBeLessThan(previewHeader?.index ?? -1);
     expect(wranglerConfig).toMatch(/\[env\.preview\]\s*\nroutes\s*=\s*\[\]/);
   });
+
+  it("routes both bare and child My Photos paths through the Worker", () => {
+    expect(wranglerConfig).toMatch(/"\/my-photos", "\/my-photos\/\*"/);
+  });
 });

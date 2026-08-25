@@ -7,7 +7,7 @@ import * as photos from "../../lib/db/photos";
 import * as tags from "../../lib/db/tags";
 
 const surface: Record<string, [Record<string, unknown>, string[]]> = {
-  photos: [photos, ["listPhotoPage", "countPhotos", "getPhotoDetail", "resolvePage"]],
+  photos: [photos, ["listPhotoPage", "countPhotos", "listUserPhotoPage", "countPhotosByUser", "getPhotoDetail", "resolvePage"]],
   authors: [authors, ["listAuthorsWithPhotos", "getAuthorByUsername", "listAuthorPhotoPage"]],
   tags: [tags, ["listAllTags", "listTagPhotoPage", "countPhotosByTag"]],
   favorites: [favorites, ["getFavoriteState", "setFavoriteState", "addFavorite", "removeFavorite", "listFavoritePage", "countUserFavorites", "countFavoritesForPhoto"]],
@@ -27,6 +27,7 @@ export async function __typeOnly(db: D1Database) {
   const env = { DB: db } as Env;
   return {
     page: await photos.listPhotoPage(env, 1),
+    userPage: await photos.listUserPhotoPage(env, 1, 1, 1),
     detail: await photos.getPhotoDetail(env, 1),
     authors: await authors.listAuthorsWithPhotos(env),
     author: await authors.getAuthorByUsername(env, "alice"),
