@@ -198,7 +198,12 @@ export default function GalleryLayout({
                       )}
                       <span class="hidden max-w-40 truncate lg:inline">@{user.username}</span>
                       <ChevronDownIcon class="size-3.5" />
-                      <span aria-hidden="true" class={`${tooltipClass} lg:hidden`}>@{user.username}</span>
+                      <span
+                        aria-hidden="true"
+                        class={`${tooltipClass} right-0 left-auto translate-x-0 lg:hidden`}
+                      >
+                        @{user.username}
+                      </span>
                     </button>
                     <div
                       id="account-menu"
