@@ -5,6 +5,7 @@ import GalleryLayout, { type LayoutUser } from "../layouts/gallery-layout";
 import { getSessionUser, type SessionUser } from "../lib/auth";
 import {
   chunkD1Values,
+  MAX_BULK_DELETE,
   parsePhotoIds,
   purgePhotos,
   type PhotoPurgeResult,
@@ -358,11 +359,26 @@ function renderCollection(request: Request, user: SessionUser, result: Awaited<R
           <h1 class="text-display font-semibold tracking-tight">My Photos</h1>
           <p class="text-body text-ink-soft">Photos you have uploaded to Stillframe.</p>
         </div>
+        <div data-photo-selection-toolbar="true" class="photo-selection-toolbar">
+          <p data-photo-selected-count="true" aria-live="polite" aria-atomic="true">0 photos selected</p>
+          <div class="flex flex-wrap gap-hsp-xs">
+            <button type="button" data-photo-select-all="true" class="photo-toolbar-action">Select all loaded (up to {MAX_BULK_DELETE})</button>
+            <button type="button" data-photo-clear="true" class="photo-toolbar-action" disabled>Clear</button>
+            <form id="photo-bulk-delete-form" data-photo-bulk-delete-form="true" action="/my-photos" method="post">
+              <input type="hidden" name="return_to" value={canonicalPath} />
+              <button type="submit" data-photo-bulk-delete="true" class="photo-toolbar-delete" disabled>Delete selected</button>
+            </form>
+          </div>
+          <p class="text-micro text-ink-soft">You can delete up to {MAX_BULK_DELETE} loaded photos per operation.</p>
+        </div>
         <PhotoFeed
           scope={`my-photos:${user.id}`}
           page={result}
           nextHref={nextHref}
           photos={result.items}
+          viewerId={user.id}
+          returnTo={canonicalPath}
+          selectable
           empty={result.totalItems === 0 ? (
             <EmptyState title="No photos yet" action={{ href: "/upload", label: "Upload a photo" }}>
               Upload your first photo to start your personal collection.

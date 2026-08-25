@@ -177,6 +177,15 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
               {favoriteCountLabel(detail.favorite_count)}
             </p>
             <div data-photo-owner-actions-slot="true" />
+            {sessionUser?.id === photo.user_id ? (
+              <form data-photo-delete-form="true" data-zfb-reload="" method="post" action="/my-photos">
+                <input type="hidden" name="photo_id" value={String(photo.id)} />
+                <input type="hidden" name="return_to" value={`/photos/${photo.id}`} />
+                <button type="submit" data-photo-title={photo.title} class="photo-detail-delete-action" aria-label={`Delete ${photo.title}`}>
+                  Delete photo
+                </button>
+              </form>
+            ) : null}
           </div>
 
           {tags.length > 0 && (

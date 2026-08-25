@@ -107,4 +107,13 @@ describe("semantic theme architecture", () => {
     expect(readFileSync("components/photo-card.tsx", "utf8")).toContain('class="photo-card-image"');
     expect(globalCss).toContain("aspect-ratio: var(--gallery-thumbnail-aspect-ratio);");
   });
+
+  it("keeps card actions in distinct 44px-class corners and the modal viewport-bound", () => {
+    expect(globalCss).toMatch(/\.favorite-action-card\s*{[^}]*right:[^}]*bottom:/s);
+    expect(globalCss).toMatch(/\.photo-delete-form-card\s*{[^}]*top:[^}]*right:/s);
+    expect(globalCss).toMatch(/\.photo-select-action\s*{[^}]*top:[^}]*left:/s);
+    expect(globalCss).toMatch(/\.photo-delete-action,[\s\S]*?\.photo-select-action\s*{[^}]*width:\s*2\.75rem;[^}]*height:\s*2\.75rem;/s);
+    expect(globalCss).toMatch(/\.photo-select-action input\s*{[^}]*accent-color:\s*var\(--theme-brand\)/s);
+    expect(globalCss).toMatch(/\.photo-delete-dialog\s*{[^}]*width:\s*min\(32rem, calc\(100vw - 2rem\)\);[^}]*max-height:\s*calc\(100dvh - 2rem\)/s);
+  });
 });

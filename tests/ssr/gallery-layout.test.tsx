@@ -80,17 +80,25 @@ describe("GalleryLayout", () => {
     expect(html).toContain('href="/login"'); expect(html).toContain('href="/register"');
     expect(html).not.toContain('href="/upload"'); expect(html).not.toContain('href="/settings"');
     expect(html).not.toContain('action="/logout"');
+    expect(html).not.toContain('href="/my-photos"');
+    expect(html).not.toContain('href="/favorites"');
   });
   it("renders signed-in controls and a POST logout form", () => {
     const html = render(<GalleryLayout user={{ username: "takazudo" }}>content</GalleryLayout>);
     expect(html).toContain("@takazudo"); expect(html).toContain('href="/authors/takazudo"');
     expect(html).toContain('href="/upload"'); expect(html).toContain('href="/settings"');
+    expect(html).toContain('href="/my-photos"'); expect(html).toContain('href="/favorites"');
     expect(html).toContain('<form method="post" action="/logout">');
   });
   it("marks only the matching navigation link as current", () => {
     const html = render(<GalleryLayout activePath="/tags">content</GalleryLayout>);
     expect(html.match(/aria-current="page"/g)).toHaveLength(1);
     expect(html).toMatch(/href="\/tags" aria-current="page"/);
+  });
+  it("marks My Photos as current without changing Favorites", () => {
+    const html = render(<GalleryLayout user={{ username: "takazudo" }} activePath="/my-photos">content</GalleryLayout>);
+    expect(html).toMatch(/href="\/my-photos" aria-current="page"/);
+    expect(html).toMatch(/href="\/favorites"(?! aria-current)/);
   });
   it("contains only the intentional bootstrap and module scripts with no inline event handler", () => {
     const html = render(<GalleryLayout>content</GalleryLayout>);
@@ -212,6 +220,26 @@ describe("shared presentational components", () => {
     expect(signedIn).toMatch(/data-zfb-reload(?:="")?/);
     expect(signedIn).toMatch(/<\/a><form data-favorite-control/);
     expect(signedIn).toContain('class="favorite-action-card"');
+  });
+  it("renders owner delete and selection controls only for owned cards in distinct corners", () => {
+    const photo = { id: 7, ownerId: 3, title: "Photo", src: "/img/7", width: 20, height: 20, blurhash: null };
+    const owner = render(<PhotoCard photo={photo} viewerId={3} returnTo="/my-photos" selectable />);
+    expect(owner).toContain('data-photo-delete-form="true"');
+    expect(owner).toContain('class="photo-delete-form-card"');
+    expect(owner).toContain('data-photo-select="true"');
+    expect(owner).toContain('class="photo-select-action"');
+    expect(owner).toContain('class="favorite-action-card"');
+    expect(owner).toMatch(/<a[^>]*photo-card-link[\s\S]*<\/a><form data-favorite-control/);
+    expect(owner).not.toMatch(/<a[^>]*data-photo-(?:delete|select)/);
+    expect(render(<PhotoCard photo={photo} viewerId={4} selectable />)).not.toContain("data-photo-delete-form");
+    expect(render(<PhotoCard photo={photo} selectable />)).not.toContain("data-photo-select");
+  });
+  it("renders one labelled native delete dialog in the existing controller island", () => {
+    const html = render(<GalleryLayout>content</GalleryLayout>);
+    expect(html.match(/data-photo-delete-dialog="true"/g)).toHaveLength(1);
+    expect(html).toContain('aria-labelledby="photo-delete-dialog-title"');
+    expect(html).toContain('aria-describedby="photo-delete-dialog-message"');
+    expect(html).toContain('data-photo-delete-error="true" role="alert" hidden');
   });
   it("renders one atomic polite toast above the sticky header with reduced-motion styling", () => {
     const html = render(<GalleryLayout>content</GalleryLayout>);

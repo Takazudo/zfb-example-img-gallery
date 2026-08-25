@@ -89,7 +89,11 @@ describe("My Photos collection SSR", () => {
     expect(body).toContain("My Photos");
     expect(body).toContain("No photos yet");
     expect(body).toContain('href="/upload"');
-    expect(body).toContain('data-gallery-scope="my-photos:7"');
+    expect(body).toContain('data-gallery-scope="my-photos:7|viewer:7"');
+    expect(body).toContain('data-photo-selection-toolbar="true"');
+    expect(body).toContain('data-photo-selected-count="true" aria-live="polite" aria-atomic="true">0 photos selected');
+    expect(body).toContain("Select all loaded (up to 100)");
+    expect(body).toMatch(/data-photo-bulk-delete="true"[^>]*disabled/);
     expect(body).toContain('data-gallery-terminal="true"');
     expect(mocks.listUserPhotoPage).toHaveBeenCalledWith(mocks.context.env, 7, 1, 7);
   });
@@ -100,11 +104,14 @@ describe("My Photos collection SSR", () => {
     mocks.listUserPhotoPage.mockResolvedValueOnce(page(items, 49, 2, 3));
 
     const body = await html(await MyPhotosPagedPage({ params: { page: "2" } }));
-    expect(body).toContain('data-gallery-scope="my-photos:7"');
+    expect(body).toContain('data-gallery-scope="my-photos:7|viewer:7"');
     expect(body).toContain('data-gallery-page="2"');
     expect(body).toContain('data-gallery-total-items="49"');
     expect(body).toContain('href="/my-photos/page/3"');
     expect(body).toContain('href="https://canonical.example/my-photos/page/2"');
+    expect(body.match(/data-photo-select="true"/g)).toHaveLength(24);
+    expect(body.match(/name="photo_id"[^>]*form="photo-bulk-delete-form"/g)).toHaveLength(24);
+    expect(body.match(/data-photo-delete-form="true"/g)).toHaveLength(24);
     expect(body).not.toContain('href="https://foreign.example/my-photos/page/2?from=bad"');
     expect(mocks.listUserPhotoPage).toHaveBeenCalledWith(mocks.context.env, 7, 2, 7);
   });

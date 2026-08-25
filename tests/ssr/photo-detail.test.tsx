@@ -117,6 +117,17 @@ describe("photo detail SSR", () => {
     expect(html).toContain('aria-label="Remove A quiet lake from favorites"');
     expect(html).toContain('fill="currentColor"');
     expect(html).toContain(">2 favorites</p>");
+    expect(html).not.toContain('data-photo-delete-form="true"');
+  });
+
+  it("renders the owner-only ordinary delete form as a sibling detail action", async () => {
+    const owner = { id: 7, username: "alice", email: "alice@example.com", avatar_key: null };
+    const html = await (await invoke(mockEnv(photoRow, owner), true)).text();
+    expect(html).toContain('data-photo-delete-form="true"');
+    expect(html).toContain('method="post" action="/my-photos"');
+    expect(html).toContain('name="photo_id" value="42"');
+    expect(html).toContain('aria-label="Delete A quiet lake"');
+    expect(html).toMatch(/data-photo-detail-actions[^>]*>[\s\S]*data-favorite-control[\s\S]*data-photo-delete-form/);
   });
 
   it("renders the complete absolute social metadata contract", async () => {
