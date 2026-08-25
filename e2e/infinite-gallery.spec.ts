@@ -186,7 +186,7 @@ test("keeps the canonical next link with JavaScript disabled @smoke", async ({ b
 
 test("keeps manual loading available when IntersectionObserver is absent @smoke", async ({ page }) => {
   await page.addInitScript(() => {
-    delete (window as typeof window & { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver;
+    Reflect.deleteProperty(window, "IntersectionObserver");
   });
   await page.goto(FIXTURE_PATH);
   await expect(grid(page)).toHaveCount(24);

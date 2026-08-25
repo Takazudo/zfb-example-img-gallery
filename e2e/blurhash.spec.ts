@@ -65,7 +65,7 @@ test("reveals image errors and leaves nullable rows immediately visible @smoke",
 
 test("uses cover in the grid, contain on detail, and keeps appended cards through Back @smoke", async ({ page }) => {
   await page.addInitScript(() => {
-    delete (window as typeof window & { IntersectionObserver?: typeof IntersectionObserver }).IntersectionObserver;
+    Reflect.deleteProperty(window, "IntersectionObserver");
   });
   await stubImageRequests(page);
   await page.goto(FIXTURE_PATH);
