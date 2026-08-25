@@ -52,6 +52,7 @@ class FakeD1 {
   tags = [{ id: 1, name: "shared" }];
   mutationSql: string[] = [];
   batchSql: string[][] = [];
+  failBatch = false;
   forceUsernameRace = false;
 
   readonly DB: D1Database;
@@ -60,6 +61,7 @@ class FakeD1 {
     this.DB = { prepare: (sql: string) => this.statement(sql) } as unknown as D1Database;
     (this.DB as unknown as { batch: (statements: BoundStatement[]) => Promise<unknown> }).batch = async (statements) => {
       this.batchSql.push(statements.map((statement) => statement.sql));
+      if (this.failBatch) throw new Error("D1 batch failed");
       for (const statement of statements) this.applyDelete(statement.sql, statement.params);
       return { success: true };
     };
@@ -113,6 +115,7 @@ class FakeD1 {
   private applyDelete(sql: string, params: unknown[]): void {
     const normalized = sql.replace(/\s+/g, " ").trim().toLowerCase();
     const userId = Number(params[0]);
+    if (normalized.startsWith("delete from favorites")) return;
     if (normalized.startsWith("delete from photo_tags")) return;
     if (normalized.startsWith("delete from photos")) {
       this.photos = this.photos.filter((photo) => photo.user_id !== userId);
@@ -301,7 +304,8 @@ describe("settings route", () => {
     expect(fake.photos.map((photo) => photo.user_id)).toEqual([2]);
     expect(fake.sessions).toEqual([]);
     expect(fake.tags).toEqual([{ id: 1, name: "shared" }]);
-    expect(fake.batchSql[0]).toHaveLength(4);
+    expect(fake.batchSql[0]).toHaveLength(5);
+    expect(fake.batchSql[0]?.[0]).toContain("DELETE FROM favorites");
   });
 
   it("aborts before D1 when a later R2 batch fails, then succeeds on retry", async () => {
@@ -325,6 +329,20 @@ describe("settings route", () => {
     const healed = await invoke("POST", form({ intent: "delete", confirm: "alice" }));
     expect(healed.status).toBe(303);
     expect(fake.batchSql).toHaveLength(1);
+    expect(fake.users.some((user) => user.id === 1)).toBe(false);
+  });
+
+  it("maps an atomic D1 cleanup failure to retryable account deletion", async () => {
+    fake.photos = [{ id: 7, user_id: 1, r2_key: "photos/7.jpg", thumb_key: null }];
+    fake.failBatch = true;
+    const failed = await invoke("POST", form({ intent: "delete", confirm: "alice" }));
+    expect(failed.status).toBe(503);
+    expect(fake.users.some((user) => user.id === 1)).toBe(true);
+    expect(fake.photos).toHaveLength(1);
+
+    fake.failBatch = false;
+    const retried = await invoke("POST", form({ intent: "delete", confirm: "alice" }));
+    expect(retried.status).toBe(303);
     expect(fake.users.some((user) => user.id === 1)).toBe(false);
   });
 });
