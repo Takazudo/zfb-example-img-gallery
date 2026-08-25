@@ -1,7 +1,10 @@
 import type { Env } from "../env";
 import type { SessionUser, User, UserCredentials } from "../types";
-import { OG_GENERATION } from "../og";
-import { listPrefixes } from "../storage";
+import {
+  chunkR2Keys,
+  collectPhotoObjectKeys,
+  deleteR2ObjectKeys,
+} from "./photo-purge";
 
 /** Lowercase and trim an email before storage or comparison. */
 export function normalizeEmail(raw: string): string {
@@ -206,7 +209,7 @@ export interface AccountObjectKeys {
 
 export interface AccountObjects {
   photoIds: number[];
-  /** Original and thumbnail photo blobs plus the avatar, deduplicated. */
+  /** Photo blobs, every retained OG generation, and the avatar, deduplicated. */
   blobKeys: string[];
 }
 
@@ -230,10 +233,7 @@ export async function collectAccountObjects(source: DbSource, userId: number): P
 
   const blobKeys = new Set<string>();
   if (user?.avatar_key) blobKeys.add(user.avatar_key);
-  for (const photo of photos.results) {
-    blobKeys.add(photo.r2_key);
-    if (photo.thumb_key) blobKeys.add(photo.thumb_key);
-  }
+  for (const key of collectPhotoObjectKeys(photos.results)) blobKeys.add(key);
 
   return {
     photoIds: photos.results.map((photo) => photo.id),
@@ -264,6 +264,13 @@ export async function deleteAccountRows(source: DbSource, userId: number): Promi
   const db = database(source);
   await db.batch([
     db
+      .prepare(
+        `DELETE FROM favorites
+          WHERE user_id = ?
+             OR photo_id IN (SELECT id FROM photos WHERE user_id = ?)`,
+      )
+      .bind(userId, userId),
+    db
       .prepare("DELETE FROM photo_tags WHERE photo_id IN (SELECT id FROM photos WHERE user_id = ?)")
       .bind(userId),
     db.prepare("DELETE FROM photos WHERE user_id = ?").bind(userId),
@@ -274,15 +281,12 @@ export async function deleteAccountRows(source: DbSource, userId: number): Promi
 
 /** Split an object-key list into R2-safe batches without reordering it. */
 export function chunkKeys(keys: string[], size = 1000): string[][] {
-  if (!Number.isInteger(size) || size <= 0) throw new RangeError("chunk size must be positive");
-  const chunks: string[][] = [];
-  for (let offset = 0; offset < keys.length; offset += size) {
-    chunks.push(keys.slice(offset, offset + size));
-  }
-  return chunks;
+  return chunkR2Keys(keys, size);
 }
 
-export type PurgeResult = { ok: true } | { ok: false; reason: "r2-delete-failed" };
+export type PurgeResult =
+  | { ok: true }
+  | { ok: false; reason: "r2-delete-failed" | "d1-delete-failed" };
 
 /**
  * Delete R2 objects first. D1 rows are removed only after all R2 batches have
@@ -290,25 +294,23 @@ export type PurgeResult = { ok: true } | { ok: false; reason: "r2-delete-failed"
  * missing object and remains safe when a key was already deleted.
  */
 export async function purgeAccount(env: Env, userId: number): Promise<PurgeResult> {
-  const objects = await collectAccountObjects(env.DB, userId);
-  const keys = new Set(objects.blobKeys);
+  let objects: AccountObjects;
+  try {
+    objects = await collectAccountObjects(env.DB, userId);
+  } catch {
+    return { ok: false, reason: "d1-delete-failed" };
+  }
 
   try {
-    const generations = new Set([
-      ...(await listPrefixes(env, "derived/og/")),
-      `derived/og/${OG_GENERATION}/`,
-    ]);
-    for (const generation of generations) {
-      for (const photoId of objects.photoIds) keys.add(`${generation}${photoId}.jpg`);
-    }
-
-    for (const batch of chunkKeys([...keys])) {
-      await env.BUCKET.delete(batch);
-    }
+    await deleteR2ObjectKeys(env.BUCKET, objects.blobKeys);
   } catch {
     return { ok: false, reason: "r2-delete-failed" };
   }
 
-  await deleteAccountRows(env.DB, userId);
+  try {
+    await deleteAccountRows(env.DB, userId);
+  } catch {
+    return { ok: false, reason: "d1-delete-failed" };
+  }
   return { ok: true };
 }
