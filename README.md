@@ -64,7 +64,9 @@ run_worker_first = [
 
 ### Stable SSR assets are hard-coded on purpose
 
-zfb rewrites generated (SSG) HTML to hashed assets, but dynamic documents returned by `htmlResponse()` are created after the build. `layouts/gallery-layout.tsx` therefore links `/assets/app.css` and `/assets/islands.js`. The postbuild step `scripts/stable-assets.mjs` discovers exactly one hashed stylesheet and exactly one generated islands entry (excluding chunks/resources), copies them to the stable names, verifies the islands alias byte-for-byte, and rejects missing relative runtime assets. The prerendered 404 suppresses the manual stable module tag because zfb injects its one hashed module entry during SSG.
+zfb rewrites generated (SSG) HTML to hashed assets, but dynamic documents returned by `htmlResponse()` are created after the build. `layouts/gallery-layout.tsx` therefore links `/assets/app.css` and `/assets/islands.js`. The postbuild step `scripts/stable-assets.mjs` discovers exactly one hashed stylesheet and exactly one generated islands entry (excluding chunks/resources), normalizes source-module diagnostics to portable project-relative identifiers, hashes the finalized bytes, rewrites every emitted HTML reference to `islands-<first-eight-sha256-hex>.js`, and copies that final file to the stable names. It verifies the islands alias byte-for-byte and rejects missing relative runtime assets or a checkout prefix left in the finalized entry. The prerendered 404 suppresses the manual stable module tag because zfb injects its one finalized hashed module entry during SSG.
+
+`node scripts/assert-ssr-invariants.mjs` enforces the same production artifact contract after the build: the finalized filename must match the SHA-256 of its final bytes, `404.html` must reference that exact reachable entry (never `/assets/islands.js`), all reachable client JavaScript must be free of absolute POSIX/Windows/`file:` source diagnostics, and the generated entry must retain the three portable component identifiers (`components/display-settings.tsx`, `components/infinite-gallery-controller.tsx`, and `components/theme-toggle.tsx`).
 
 ### SPA navigation is progressive enhancement
 
