@@ -122,7 +122,7 @@ test("restores two loaded batches through a router photo click and Back without 
   await nextLink(page).click();
   await expect(grid(page)).toHaveCount(48);
 
-  const target = grid(page).nth(35).locator("a");
+  const target = grid(page).nth(35).locator('[data-photo-card-media-wrapper] > a.photo-card-link');
   const targetHref = await target.getAttribute("href");
   const before = await page.evaluate((href) => {
     const anchor = document.querySelector(`a[href="${href}"]`);
@@ -147,7 +147,9 @@ test("restores two loaded batches through a router photo click and Back without 
   await expect.poll(() => page.evaluate(() => (
     window as typeof window & { __e2eNoReload?: string }
   ).__e2eNoReload ?? null)).toBe("alive");
-  await expect(page.locator(`a[href="${targetHref}"]`)).toBeVisible();
+  await expect(page.locator(
+    `[data-gallery-grid="true"] [data-photo-card-media-wrapper] > a[href="${targetHref}"]`,
+  )).toBeVisible();
 
   const after = await page.evaluate((href) => {
     const anchor = document.querySelector(`a[href="${href}"]`);

@@ -35,10 +35,12 @@ function notFound(user: LayoutUser | null): Response {
   );
 }
 
-function TagDetailBody({ tag, page, nextHref }: {
+function TagDetailBody({ tag, page, nextHref, viewerId, returnTo }: {
   tag: TagRow;
   page: Awaited<ReturnType<typeof listTagPhotoPage>>;
   nextHref: string;
+  viewerId?: number | null;
+  returnTo: string;
 }) {
   return (
     <>
@@ -53,6 +55,8 @@ function TagDetailBody({ tag, page, nextHref }: {
         page={page}
         nextHref={nextHref}
         photos={page.items}
+        viewerId={viewerId}
+        returnTo={returnTo}
         empty={<EmptyState title={`No photos tagged #${tag.name}`} />}
       />
     </>
@@ -71,7 +75,7 @@ export async function renderTagDetailRoute(params?: TagRouteParams): Promise<Tag
 
   // Keep the tag route's established strict page-param contract while using
   // the shared page result shape for the feed metadata.
-  const pageMeta = await listTagPhotoPage(env, tag.id, parseTagPage(params?.page));
+  const pageMeta = await listTagPhotoPage(env, tag.id, parseTagPage(params?.page), sessionUser?.id);
   const encoded = encodeURIComponent(tag.name);
   const canonicalPath = pageMeta.page === 1
     ? `/tags/${encoded}`
@@ -94,6 +98,8 @@ export async function renderTagDetailRoute(params?: TagRouteParams): Promise<Tag
         tag={tag}
         page={pageMeta}
         nextHref={nextHref}
+        viewerId={sessionUser?.id}
+        returnTo={new URL(request.url).pathname}
       />
     </GalleryLayout>
   );

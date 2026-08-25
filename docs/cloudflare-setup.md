@@ -184,6 +184,8 @@ run_worker_first = [
   "/photos/*",
   "/authors", "/authors/*",
   "/tags", "/tags/*",
+  "/favorites", "/favorites/*",
+  "/my-photos", "/my-photos/*",
   "/img/*",
   "/og/*",
   "/register", "/login", "/logout", "/settings", "/upload",
@@ -493,9 +495,10 @@ BASE=https://zfb-example-img-gallery.takazudomodular.com
 NAV='-H sec-fetch-mode:navigate'
 
 # Every bare collection root is listed explicitly because "/authors/*" does not match "/authors".
-for p in / /authors /tags /register /login; do
+# Public roots return 200; the two protected collection roots return a login redirect (303).
+for p in / /authors /tags /favorites /my-photos /register /login; do
   printf '%s ' "$p"
-  curl -s -o /dev/null -w '%{http_code}\n' $NAV "$BASE$p"        # 200 each
+  curl -s -o /dev/null -w '%{http_code}\n' $NAV "$BASE$p"
 done
 
 curl -s -o /dev/null -w '%{http_code}\n' "$BASE/assets/app.css"  # 200: styles shipped

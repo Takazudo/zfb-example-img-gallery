@@ -7,6 +7,11 @@ import type { PageMeta, PhotoCard as PhotoRow } from "../lib/types";
 /** Stable collection identity used by the global server-rendered feed. */
 export const GLOBAL_FEED_SCOPE = "global";
 
+/** Personalized card markup must never share a history snapshot across viewers. */
+export function viewerFeedScope(scope: string, viewerId: number | null | undefined): string {
+  return `${scope}|viewer:${viewerId ?? "anonymous"}`;
+}
+
 /** Stable collection identity used by an author feed. */
 export function authorFeedScope(authorId: number): string {
   return `author:${authorId}`;
@@ -25,11 +30,13 @@ export function remainingPhotoCount(page: Pick<PageMeta, "page" | "pageSize" | "
 function toPhotoCardPhoto(photo: PhotoRow): PhotoCardPhoto {
   return {
     id: photo.id,
+    ownerId: photo.user_id,
     title: photo.title,
     src: `/img/${photo.thumb_key ?? photo.r2_key}`,
     width: photo.width,
     height: photo.height,
     blurhash: photo.blurhash,
+    isFavorited: photo.is_favorited,
   };
 }
 
@@ -43,6 +50,11 @@ type Props = {
   photos: PhotoRow[];
   /** Empty-state content remains server-authored inside the marked feed. */
   empty?: ComponentChildren;
+  /** Server-authored collection heading refreshed with offset-sensitive feeds. */
+  header?: ComponentChildren;
+  viewerId?: number | null;
+  returnTo?: string;
+  selectable?: boolean;
 };
 
 /**
@@ -52,7 +64,7 @@ type Props = {
  * the client enhancement can discover and replace the marked metadata later,
  * while direct page URLs remain useful with JavaScript disabled.
  */
-export function PhotoFeed({ scope, page, nextHref, photos, empty }: Props) {
+export function PhotoFeed({ scope, page, nextHref, photos, empty, header, viewerId = null, returnTo = "/", selectable = false }: Props) {
   const nextCount = remainingPhotoCount(page);
   const hasNext = page.hasNext && nextCount > 0;
   const terminal = !hasNext;
@@ -64,7 +76,7 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty }: Props) {
   return (
     <section
       data-gallery-feed="true"
-      data-gallery-scope={scope}
+      data-gallery-scope={viewerFeedScope(scope, viewerId)}
       data-gallery-page={String(page.page)}
       data-gallery-total-pages={String(page.totalPages)}
       data-gallery-total-items={String(page.totalItems)}
@@ -73,6 +85,7 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty }: Props) {
       data-gallery-next-count={String(nextCount)}
       data-gallery-terminal={String(terminal)}
     >
+      {header ?? null}
       {photos.length > 0 ? (
         <PhotoGrid>
           {photos.map((photo, index) => (
@@ -80,6 +93,9 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty }: Props) {
               key={photo.id}
               photo={toPhotoCardPhoto(photo)}
               priority={page.page === 1 && index === 0}
+              viewerId={viewerId}
+              returnTo={returnTo}
+              selectable={selectable}
             />
           ))}
         </PhotoGrid>

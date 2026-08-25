@@ -94,7 +94,7 @@ describe("top page SSR", () => {
     expect(html.includes('data-gallery-next-link="true"')).toBe(hasNext);
     expect(html).not.toContain('aria-label="Pagination"');
     if (hasNext) {
-      expect(html).toContain('data-gallery-scope="global"');
+      expect(html).toContain('data-gallery-scope="global|viewer:anonymous"');
       expect(html).toContain('data-gallery-page="1"');
       expect(html).toContain(`data-gallery-total-pages="${totalPages}"`);
       expect(html).toContain(`data-gallery-total-items="${totalItems}"`);

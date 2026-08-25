@@ -99,7 +99,7 @@ describe("tag page SSR markup", () => {
     expect(html).toContain('loading="lazy"');
     expect(html).toContain('property="og:type" content="website"');
     expect(html).toContain(`href="https://gallery.example/tags/${encodeURIComponent("東京")}"`);
-    expect(html).toContain('data-gallery-scope="tag:1"');
+    expect(html).toContain('data-gallery-scope="tag:1|viewer:anonymous"');
     expect(html).toContain('data-gallery-terminal="true"');
     expect(html.match(/<script\b/g)).toHaveLength(2);
     expect(html).toContain("data-theme-bootstrap");
@@ -128,7 +128,7 @@ describe("tag page SSR markup", () => {
     const html = render(result);
     expect(html).toContain("No photos tagged #empty");
     expect(html).not.toMatch(/aria-label="Pagination"/);
-    expect(html).toContain('data-gallery-scope="tag:1"');
+    expect(html).toContain('data-gallery-scope="tag:1|viewer:anonymous"');
     expect(html).toContain('data-gallery-terminal="true"');
   });
 });

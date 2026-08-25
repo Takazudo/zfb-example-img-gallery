@@ -13,6 +13,45 @@ import type {
 /** Page size for every grid in the app: top page, author detail, tag detail. */
 export const PHOTO_PAGE_SIZE = 24;
 
+/** A positive trusted viewer id, or the explicit anonymous state. */
+export function normalizeViewerId(viewerId: unknown): number | null {
+  return typeof viewerId === "number" && Number.isSafeInteger(viewerId) && viewerId > 0
+    ? viewerId
+    : null;
+}
+
+/** SQLite returns EXISTS/CASE expressions as 0/1 integers. */
+export function normalizeFavoriteFlag(value: unknown): boolean {
+  return value === true || value === 1 || value === "1";
+}
+
+export interface PhotoCardQueryRow {
+  id: number;
+  user_id: number;
+  title: string;
+  r2_key: string;
+  thumb_key: string | null;
+  width: number;
+  height: number;
+  blurhash: string | null;
+  is_favorited: unknown;
+}
+
+/** Convert a raw D1 card row into one deterministic viewer-aware DTO. */
+export function normalizePhotoCard(row: PhotoCardQueryRow): PhotoCard {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    title: row.title,
+    r2_key: row.r2_key,
+    thumb_key: row.thumb_key,
+    width: row.width,
+    height: row.height,
+    blurhash: row.blurhash,
+    is_favorited: normalizeFavoriteFlag(row.is_favorited),
+  };
+}
+
 /** Raw route param -> positive safe integer id, or null. */
 export function parseId(raw: unknown): number | null {
   if (typeof raw === "number") {
@@ -59,42 +98,96 @@ export async function countPhotos(env: Env): Promise<number> {
 }
 
 /** Read one clamped page of the global photo feed, newest first. */
-export async function listPhotoPage(env: Env, rawPage: unknown): Promise<Paged<PhotoCard>> {
+export async function listPhotoPage(
+  env: Env,
+  rawPage: unknown,
+  viewerId?: number | null,
+): Promise<Paged<PhotoCard>> {
   const totalItems = await countPhotos(env);
   const pageMeta = resolvePage(rawPage, totalItems);
+  const trustedViewerId = normalizeViewerId(viewerId);
   const result = await env.DB
     .prepare(
-      `SELECT id, title, r2_key, thumb_key, width, height, blurhash
-         FROM photos
-        ORDER BY created_at DESC, id DESC
+      `SELECT p.id, p.user_id, p.title, p.r2_key, p.thumb_key, p.width, p.height, p.blurhash,
+              CASE WHEN vf.photo_id IS NULL THEN 0 ELSE 1 END AS is_favorited
+         FROM photos p
+         LEFT JOIN favorites vf ON vf.photo_id = p.id AND vf.user_id = ?
+        ORDER BY p.created_at DESC, p.id DESC
         LIMIT ? OFFSET ?`,
     )
-    .bind(pageMeta.pageSize, pageMeta.offset)
-    .all<PhotoCard>();
+    .bind(trustedViewerId, pageMeta.pageSize, pageMeta.offset)
+    .all<PhotoCardQueryRow>();
 
-  return { ...pageMeta, items: result.results };
+  return { ...pageMeta, items: result.results.map(normalizePhotoCard) };
+}
+
+/** Count the photos uploaded by one authenticated user. */
+export async function countPhotosByUser(env: Env, userId: number): Promise<number> {
+  const row = await env.DB
+    .prepare("SELECT COUNT(*) AS n FROM photos WHERE user_id = ?")
+    .bind(userId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Read one user's photo page, newest upload first, with viewer-aware cards. */
+export async function listUserPhotoPage(
+  env: Env,
+  userId: number,
+  rawPage: unknown,
+  viewerId?: number | null,
+): Promise<Paged<PhotoCard>> {
+  const totalItems = await countPhotosByUser(env, userId);
+  const pageMeta = resolvePage(rawPage, totalItems);
+  const trustedViewerId = normalizeViewerId(viewerId);
+  const result = await env.DB
+    .prepare(
+      `SELECT p.id, p.user_id, p.title, p.r2_key, p.thumb_key, p.width, p.height, p.blurhash,
+              CASE WHEN vf.photo_id IS NULL THEN 0 ELSE 1 END AS is_favorited
+         FROM photos p
+         LEFT JOIN favorites vf ON vf.photo_id = p.id AND vf.user_id = ?
+        WHERE p.user_id = ?
+        ORDER BY p.created_at DESC, p.id DESC
+        LIMIT ? OFFSET ?`,
+    )
+    .bind(trustedViewerId, userId, pageMeta.pageSize, pageMeta.offset)
+    .all<PhotoCardQueryRow>();
+
+  return { ...pageMeta, items: result.results.map(normalizePhotoCard) };
 }
 
 interface PhotoDetailRow extends Photo {
   author_id: number;
   author_username: string;
   author_avatar_key: string | null;
+  favorite_count?: number;
+  is_favorited?: unknown;
 }
 
 /** Read a photo, its author and its tags, or null for an invalid or unknown id. */
-export async function getPhotoDetail(env: Env, rawId: unknown): Promise<PhotoDetail | null> {
+export async function getPhotoDetail(
+  env: Env,
+  rawId: unknown,
+  viewerId?: number | null,
+): Promise<PhotoDetail | null> {
   const id = parseId(rawId);
   if (id === null) return null;
+  const trustedViewerId = normalizeViewerId(viewerId);
 
   const row = await env.DB
     .prepare(
       `SELECT p.id, p.user_id, p.title, p.description, p.r2_key, p.thumb_key,
               p.content_type, p.width, p.height, p.blurhash, p.created_at,
-              u.id AS author_id, u.username AS author_username, u.avatar_key AS author_avatar_key
+              u.id AS author_id, u.username AS author_username, u.avatar_key AS author_avatar_key,
+              (SELECT COUNT(*) FROM favorites f WHERE f.photo_id = p.id) AS favorite_count,
+              EXISTS (
+                SELECT 1 FROM favorites vf
+                 WHERE vf.photo_id = p.id AND vf.user_id = ?
+              ) AS is_favorited
          FROM photos p JOIN users u ON u.id = p.user_id
         WHERE p.id = ?`,
     )
-    .bind(id)
+    .bind(trustedViewerId, id)
     .first<PhotoDetailRow>();
   if (row === null) return null;
 
@@ -117,7 +210,15 @@ export async function getPhotoDetail(env: Env, rawId: unknown): Promise<PhotoDet
     avatar_key: row.author_avatar_key,
   };
 
-  return { photo, author, tags: await listPhotoTags(env, id) };
+  return {
+    photo,
+    author,
+    tags: await listPhotoTags(env, id),
+    favorite_count: Number.isSafeInteger(Number(row.favorite_count)) && Number(row.favorite_count) >= 0
+      ? Number(row.favorite_count)
+      : 0,
+    is_favorited: normalizeFavoriteFlag(row.is_favorited),
+  };
 }
 
 /** Read the bare photo row used by image and social-card routes. */

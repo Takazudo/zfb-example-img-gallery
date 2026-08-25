@@ -95,6 +95,8 @@ export default function GalleryLayout({
                 <NavLink href="/authors" activePath={activePath}>Authors</NavLink>
                 <NavLink href="/tags" activePath={activePath}>Tags</NavLink>
                 {user ? <>
+                  <NavLink href="/my-photos" activePath={activePath}>My Photos</NavLink>
+                  <NavLink href="/favorites" activePath={activePath}>Favorites</NavLink>
                   <a href="/upload" class={actionClass}>Upload</a>
                   <NavLink href="/settings" activePath={activePath}>Settings</NavLink>
                   <a href={`/authors/${user.username}`} class={`${navClass} gap-hsp-xs`}>

@@ -14,6 +14,8 @@ import {
 import { siteOrigin } from "../../lib/site";
 import GalleryLayout, { type LayoutUser } from "../../layouts/gallery-layout";
 import { PlaceholderImage } from "../../components/placeholder-image";
+import { FavoriteControl } from "../../components/favorite-control";
+import { favoriteCountLabel } from "../../lib/favorite-controller";
 
 export const prerender = false;
 
@@ -61,8 +63,9 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
   if (!/^[1-9]\d{0,14}$/.test(raw)) return notFound(request, null);
 
   const id = Number(raw);
-  const user = layoutUser(await getSessionUser(env, request));
-  const detail = await getPhotoDetail(env, id);
+  const sessionUser = await getSessionUser(env, request);
+  const user = layoutUser(sessionUser);
+  const detail = await getPhotoDetail(env, id, sessionUser?.id);
   if (!detail) return notFound(request, user);
 
   const { photo, author } = detail;
@@ -155,6 +158,35 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
           <p class="whitespace-pre-wrap break-words text-body text-ink">
             {descriptionText}
           </p>
+
+          <div data-photo-detail-actions class="flex flex-wrap items-center gap-hsp-sm">
+            <FavoriteControl
+              photoId={photo.id}
+              title={photo.title}
+              favorited={detail.is_favorited}
+              viewerId={sessionUser?.id}
+              returnTo={`/photos/${photo.id}`}
+              placement="detail"
+            />
+            <p
+              data-favorite-count="true"
+              data-photo-id={String(photo.id)}
+              data-favorite-count-value={String(detail.favorite_count)}
+              class="text-small text-ink-soft"
+            >
+              {favoriteCountLabel(detail.favorite_count)}
+            </p>
+            <div data-photo-owner-actions-slot="true" />
+            {sessionUser?.id === photo.user_id ? (
+              <form data-photo-delete-form="true" data-zfb-reload="" method="post" action="/my-photos">
+                <input type="hidden" name="photo_id" value={String(photo.id)} />
+                <input type="hidden" name="return_to" value={`/photos/${photo.id}`} />
+                <button type="submit" data-photo-title={photo.title} class="photo-detail-delete-action" aria-label={`Delete ${photo.title}`}>
+                  Delete photo
+                </button>
+              </form>
+            ) : null}
+          </div>
 
           {tags.length > 0 && (
             <ul data-testid="photo-detail-tags" class="flex flex-wrap gap-hsp-xs">

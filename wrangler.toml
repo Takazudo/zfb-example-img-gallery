@@ -30,6 +30,8 @@ run_worker_first = [
   "/photos/*",
   "/authors", "/authors/*",
   "/tags", "/tags/*",
+  "/favorites", "/favorites/*",
+  "/my-photos", "/my-photos/*",
   "/img/*",
   "/og/*",
   "/robots.txt", "/sitemap.xml",

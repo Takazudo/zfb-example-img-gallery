@@ -42,9 +42,11 @@ function makeDb(rows: DbRows = {}): D1Database {
           if (normalized.includes("GROUP BY U.ID")) {
             return { results: authors as T[] };
           }
-          if (normalized.includes("ORDER BY CREATED_AT DESC, ID DESC")) {
-            const limit = typeof params[1] === "number" ? params[1] : photos.length;
-            const offset = typeof params[2] === "number" ? params[2] : 0;
+          if (normalized.includes("ORDER BY P.CREATED_AT DESC, P.ID DESC")) {
+            const limitIndex = params.length === 4 ? 2 : 1;
+            const offsetIndex = params.length === 4 ? 3 : 2;
+            const limit = typeof params[limitIndex] === "number" ? params[limitIndex] : photos.length;
+            const offset = typeof params[offsetIndex] === "number" ? params[offsetIndex] : 0;
             return { results: photos.slice(offset, offset + limit) as T[] };
           }
           return { results: [] as T[] };
@@ -70,12 +72,14 @@ const alice: AuthorProfile = {
 function photo(id: number): PhotoCard {
   return {
     id,
+    user_id: 1,
     title: `photo-${id}`,
     r2_key: `photos/${id}.jpg`,
     thumb_key: id % 2 === 0 ? `thumbs/${id}.webp` : null,
     width: 1600,
     height: 1200,
     blurhash: null,
+    is_favorited: false,
   };
 }
 
@@ -143,7 +147,7 @@ describe("author page handlers", () => {
 
     setContext("/authors/alice", { author: [alice], counts: [49], photos });
     const first = await body(await AuthorDetailPage({ params: { username: "alice" } }));
-    expect(first).toContain('data-gallery-scope="author:1"');
+    expect(first).toContain('data-gallery-scope="author:1|viewer:anonymous"');
     expect(first).toContain('data-gallery-page="1"');
     expect(first).toContain('data-gallery-total-pages="3"');
     expect(first).toContain('data-gallery-total-items="49"');
@@ -196,7 +200,7 @@ describe("author page handlers", () => {
     expect(response.status).toBe(200);
     expect(html).toContain("No photos yet");
     expect(html).not.toContain('aria-label="Pagination"');
-    expect(html).toContain('data-gallery-scope="author:1"');
+    expect(html).toContain('data-gallery-scope="author:1|viewer:anonymous"');
     expect(html).toContain('data-gallery-terminal="true"');
   });
 
