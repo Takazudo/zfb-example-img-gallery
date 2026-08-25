@@ -254,6 +254,70 @@ html[data-theme="dark"] {
   }
 }
 
+@layer components {
+  .photo-card-media-wrapper { position: relative; }
+  .photo-card-link { display: block; }
+  .photo-card-media {
+    overflow: hidden;
+    background: var(--theme-surface-sunken);
+  }
+  .photo-card-image {
+    display: block;
+    width: 100%;
+    aspect-ratio: var(--gallery-thumbnail-aspect-ratio);
+    object-fit: var(--gallery-thumbnail-object-fit);
+    object-position: center;
+    transition: transform 200ms ease;
+  }
+  .photo-card-title {
+    margin-top: var(--spacing-vsp-2xs);
+    overflow: hidden;
+    color: var(--theme-ink-soft);
+    font-size: var(--text-small);
+    line-height: var(--text-small--line-height);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (hover: hover) {
+    .photo-card:hover .photo-card-image { transform: scale(1.03); }
+    .photo-card:hover .photo-card-title { color: var(--theme-ink); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .photo-card-image { transform: none; }
+  }
+
+  /* Shared native favorite actions stay compact in serialized gallery
+     snapshots while preserving one semantic form/link implementation. */
+  .favorite-action {
+    display: inline-flex;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--theme-line-strong);
+    border-radius: var(--radius-pill);
+    background: color-mix(in oklch, var(--theme-surface) 95%, transparent);
+    box-shadow: var(--shadow-card);
+    transition: color 150ms ease, background-color 150ms ease, transform 150ms ease;
+  }
+  .favorite-action-card {
+    position: absolute;
+    right: var(--spacing-hsp-xs);
+    bottom: var(--spacing-hsp-xs);
+  }
+  .favorite-action:disabled {
+    cursor: wait;
+    opacity: 0.7;
+  }
+  @media (hover: hover) {
+    .favorite-action:hover { background: var(--theme-surface-sunken); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .favorite-action { transform: none; }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -7,6 +7,11 @@ import type { PageMeta, PhotoCard as PhotoRow } from "../lib/types";
 /** Stable collection identity used by the global server-rendered feed. */
 export const GLOBAL_FEED_SCOPE = "global";
 
+/** Personalized card markup must never share a history snapshot across viewers. */
+export function viewerFeedScope(scope: string, viewerId: number | null | undefined): string {
+  return `${scope}|viewer:${viewerId ?? "anonymous"}`;
+}
+
 /** Stable collection identity used by an author feed. */
 export function authorFeedScope(authorId: number): string {
   return `author:${authorId}`;
@@ -30,6 +35,7 @@ function toPhotoCardPhoto(photo: PhotoRow): PhotoCardPhoto {
     width: photo.width,
     height: photo.height,
     blurhash: photo.blurhash,
+    isFavorited: photo.is_favorited,
   };
 }
 
@@ -43,6 +49,8 @@ type Props = {
   photos: PhotoRow[];
   /** Empty-state content remains server-authored inside the marked feed. */
   empty?: ComponentChildren;
+  viewerId?: number | null;
+  returnTo?: string;
 };
 
 /**
@@ -52,7 +60,7 @@ type Props = {
  * the client enhancement can discover and replace the marked metadata later,
  * while direct page URLs remain useful with JavaScript disabled.
  */
-export function PhotoFeed({ scope, page, nextHref, photos, empty }: Props) {
+export function PhotoFeed({ scope, page, nextHref, photos, empty, viewerId = null, returnTo = "/" }: Props) {
   const nextCount = remainingPhotoCount(page);
   const hasNext = page.hasNext && nextCount > 0;
   const terminal = !hasNext;
@@ -64,7 +72,7 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty }: Props) {
   return (
     <section
       data-gallery-feed="true"
-      data-gallery-scope={scope}
+      data-gallery-scope={viewerFeedScope(scope, viewerId)}
       data-gallery-page={String(page.page)}
       data-gallery-total-pages={String(page.totalPages)}
       data-gallery-total-items={String(page.totalItems)}
@@ -80,6 +88,8 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty }: Props) {
               key={photo.id}
               photo={toPhotoCardPhoto(photo)}
               priority={page.page === 1 && index === 0}
+              viewerId={viewerId}
+              returnTo={returnTo}
             />
           ))}
         </PhotoGrid>

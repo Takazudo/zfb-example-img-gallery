@@ -14,6 +14,8 @@ import {
 import { siteOrigin } from "../../lib/site";
 import GalleryLayout, { type LayoutUser } from "../../layouts/gallery-layout";
 import { PlaceholderImage } from "../../components/placeholder-image";
+import { FavoriteControl } from "../../components/favorite-control";
+import { favoriteCountLabel } from "../../lib/favorite-controller";
 
 export const prerender = false;
 
@@ -156,6 +158,26 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
           <p class="whitespace-pre-wrap break-words text-body text-ink">
             {descriptionText}
           </p>
+
+          <div data-photo-detail-actions class="flex flex-wrap items-center gap-hsp-sm">
+            <FavoriteControl
+              photoId={photo.id}
+              title={photo.title}
+              favorited={detail.is_favorited}
+              viewerId={sessionUser?.id}
+              returnTo={`/photos/${photo.id}`}
+              placement="detail"
+            />
+            <p
+              data-favorite-count="true"
+              data-photo-id={String(photo.id)}
+              data-favorite-count-value={String(detail.favorite_count)}
+              class="text-small text-ink-soft"
+            >
+              {favoriteCountLabel(detail.favorite_count)}
+            </p>
+            <div data-photo-owner-actions-slot="true" />
+          </div>
 
           {tags.length > 0 && (
             <ul data-testid="photo-detail-tags" class="flex flex-wrap gap-hsp-xs">

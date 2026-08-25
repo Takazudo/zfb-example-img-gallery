@@ -107,7 +107,7 @@ describe("Favorites collection routes", () => {
     expect(typeof result).toBe("string");
     const html = result as string;
     expect(html).toContain("Favorites");
-    expect(html).toContain('data-gallery-scope="favorites:7"');
+    expect(html).toContain('data-gallery-scope="favorites:7|viewer:7"');
     expect(html).toContain('data-gallery-page="1"');
     expect(html).toContain('data-gallery-total-items="49"');
     expect(html).toContain('data-gallery-next-url="/favorites/page/2"');

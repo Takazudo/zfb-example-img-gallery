@@ -147,7 +147,7 @@ describe("author page handlers", () => {
 
     setContext("/authors/alice", { author: [alice], counts: [49], photos });
     const first = await body(await AuthorDetailPage({ params: { username: "alice" } }));
-    expect(first).toContain('data-gallery-scope="author:1"');
+    expect(first).toContain('data-gallery-scope="author:1|viewer:anonymous"');
     expect(first).toContain('data-gallery-page="1"');
     expect(first).toContain('data-gallery-total-pages="3"');
     expect(first).toContain('data-gallery-total-items="49"');
@@ -200,7 +200,7 @@ describe("author page handlers", () => {
     expect(response.status).toBe(200);
     expect(html).toContain("No photos yet");
     expect(html).not.toContain('aria-label="Pagination"');
-    expect(html).toContain('data-gallery-scope="author:1"');
+    expect(html).toContain('data-gallery-scope="author:1|viewer:anonymous"');
     expect(html).toContain('data-gallery-terminal="true"');
   });
 

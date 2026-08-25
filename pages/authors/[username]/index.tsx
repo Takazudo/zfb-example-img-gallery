@@ -89,6 +89,8 @@ export async function renderAuthorDetail(username: string, rawPage?: string): Pr
         page={result}
         nextHref={authorHref(author.username, result.page + 1)}
         photos={result.items}
+        viewerId={sessionUser?.id}
+        returnTo={new URL(request.url).pathname}
         empty={result.totalItems === 0 ? (
           <EmptyState title="No photos yet">
             This author has not shared a photograph.
