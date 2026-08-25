@@ -12,8 +12,9 @@ import {
   type ThumbnailRatio,
   type ThumbnailWidth,
 } from "../lib/gallery-preferences";
+import { SlidersHorizontalIcon } from "./icons";
 
-const triggerClass = "inline-flex min-h-[2.75rem] cursor-pointer items-center rounded-md px-hsp-xs text-small text-ink-soft transition-colors hover:bg-surface-sunken hover:text-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+const triggerClass = "group relative flex w-full min-h-12 cursor-pointer items-center gap-hsp-sm rounded-md px-hsp-sm text-small text-ink transition-colors hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand md:min-h-[2.75rem] md:w-[2.75rem] md:min-w-[2.75rem] md:justify-center md:px-0 md:text-ink-soft md:hover:text-ink";
 const optionClass = "flex min-h-[2.75rem] cursor-pointer items-center gap-hsp-xs rounded-md px-hsp-xs text-small text-ink transition-colors hover:bg-surface-sunken";
 
 export function DisplaySettings() {
@@ -58,6 +59,13 @@ export function DisplaySettings() {
     } catch {
       // The trigger may have left the document during a soft navigation.
     }
+    if (typeof document !== "undefined" && document.activeElement !== returnFocus.current) {
+      const menuTarget = document.querySelector<HTMLElement>('[popovertarget="primary-menu"]');
+      menuTarget?.focus();
+      if (document.activeElement !== menuTarget) {
+        document.querySelector<HTMLElement>('[popovertarget="primary-menu"][aria-label="Menu"]')?.focus();
+      }
+    }
     returnFocus.current = null;
   };
 
@@ -82,10 +90,18 @@ export function DisplaySettings() {
           ref={trigger}
           type="button"
           aria-haspopup="dialog"
+          aria-label="Display settings"
           class={triggerClass}
           onClick={openDialog}
         >
-          Display settings
+          <SlidersHorizontalIcon class="size-5 text-ink-soft md:text-inherit" />
+          <span class="md:sr-only">Display settings</span>
+          <span
+            aria-hidden="true"
+            class="pointer-events-none absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-hsp-xs py-hsp-2xs text-micro font-medium text-paper opacity-0 transition-opacity delay-200 [.group:hover_&]:opacity-100 group-focus-visible:opacity-100 group-active:opacity-100 hidden md:block"
+          >
+            Display settings
+          </span>
         </button>
       ) : null}
       <dialog
