@@ -15,10 +15,12 @@ The source exposes `SITE_NAME` and `SITE_TWITTER` (`Stillframe` and `@takazudo`)
 - Supports registration, login, and POST-only logout.
 - Lets a signed-in user change their username, upload an avatar, or delete their account.
 - Lets a signed-in user upload a photo with a title, plain-text description, and comma-separated tags.
+- Lets signed-in viewers keep current Favorites: every card/detail read shows the all-viewer favorite count separately from the current viewer's membership, and the enhanced control announces add/remove results without changing the star geometry.
+- Lets photo owners delete one photo or up to 100 loaded photos from My Photos. The owner-only controls use an accessible confirmation dialog when JavaScript is available and ordinary confirmation pages when it is not.
 - Provides one global Display settings dialog for the gallery thumbnail ratio (Original, Portrait 3:4, Square 1:1, or Landscape 4:3) and width (Small, Medium, or Large). Choices are stored in local storage, synchronized across tabs, and applied to cards loaded later.
 - Enhances the server-rendered 24-item pages with progressive infinite loading: a visible loading/error/end status, an automatic IntersectionObserver path, and a manual `Load next … photos` path. Each history entry keeps a bounded expanded-gallery snapshot so router navigation and Back can restore it; the canonical `/page/[page]` links remain the no-JavaScript fallback.
 
-Every mutation remains a plain `<form method="post">` followed by a 303 redirect, so the application works with full navigations when JavaScript is unavailable. The intentional zfb client runtime progressively enhances same-origin navigation, soft-submits eligible forms, hydrates the theme toggle, and preserves the user's theme choice.
+Every mutation remains a plain `<form method="post">` fallback. Favorites and owner deletion additionally expose bounded same-origin JSON POST contracts to their progressive enhancements; an ordinary browser submit still receives a 303 redirect or a no-JavaScript confirmation page. The intentional zfb client runtime progressively enhances same-origin navigation, soft-submits eligible forms, hydrates the theme toggle, and preserves the user's theme choice. Favorite/delete controls stop the event in capture phase and use one fetch, so the zfb router cannot replay a mutation as a second write.
 
 ## Architecture
 
@@ -30,7 +32,7 @@ Every mutation remains a plain `<form method="post">` followed by a 303 redirect
 | Image blobs | Cloudflare R2 (`env.BUCKET`), served through a Worker proxy route |
 | Social cards | Cloudflare Images binding (`env.IMAGES`), generated once and persisted to R2 |
 | Auth | email + password, PBKDF2 (Web Crypto), opaque server-side session cookie |
-| Client JS | zfb navigation/island runtime + the theme toggle only |
+| Client JS | zfb navigation/island runtime plus theme/display/favorite/delete controllers |
 | Deploy | GitHub Actions → `wrangler deploy`; D1 migrations applied in CI |
 
 ### Clean URLs, no `paths()`
@@ -65,7 +67,7 @@ zfb rewrites generated (SSG) HTML to hashed assets, but dynamic documents return
 
 ### SPA navigation is progressive enhancement
 
-The shared layout mounts zfb's `ClientRouter` with animated fallback, `data-theme` preservation, and traversal refetching. Refetching matters because these pages are per-request SSR: auth, D1 content, active navigation, title/meta, and header controls are server-authored and must be replaced on every swap, including repeated history URLs. The router keeps its accessible route announcer.
+The shared layout mounts zfb's `ClientRouter` with animated fallback, `data-theme` preservation, and traversal refetching. Refetching matters because these pages are per-request SSR: auth, D1 content, active navigation, title/meta, and header controls are server-authored and must be replaced on every swap, including repeated history URLs. The router keeps its accessible route announcer. Cloudflare Static Assets runs assets before the Worker unless a path matches `assets.run_worker_first`; this project therefore lists every SSR root and wildcard explicitly. See the [Worker-first routing reference](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/) when adding another dynamic prefix.
 
 Forms intentionally have no `data-zfb-reload`. With the runtime active, eligible same-origin GET forms navigate with encoded queries; non-GET methods are transported as POST, multipart bodies remain `FormData`, URL-encoded forms keep their encoding, redirects update the final URL, and validation/error HTML swaps without replaying a mutation. Ordinary form markup remains the no-JavaScript fallback.
 
@@ -76,6 +78,10 @@ Forms intentionally have no `data-zfb-reload`. With the runtime active, eligible
 The Display settings dialog is available from the global header on every page. It offers four ratios (Original, Portrait 3:4, Square 1:1, and Landscape 4:3) and three widths (Small 9rem, Medium 12.5rem, and Large 16rem). Preferences are versioned in local storage, restored before the first paint, synchronized with other tabs, preserved by zfb soft navigation, and inherited by newly appended cards. Original uses each image's intrinsic width and height; the other ratios crop with `object-fit: cover`.
 
 The first server-rendered page always contains up to 24 cards and a canonical next-page link. With JavaScript, the controller can append the next page while keeping the current URL; an automatic load is one request per leave/re-enter intersection, while the visible link always remains a manual retry/fallback. Loading, one-shot non-success, retry, and terminal `All photos loaded` states are announced in the feed's live region. Router history stores only bounded per-entry markup snapshots, so a photo navigation followed by Back can restore the loaded cards and scroll position without requiring a full reload. Disabling JavaScript follows the ordinary `/page/[page]` link and renders that page directly.
+
+Favorite state is a current membership read model, not an audit history. `GET` collection/detail reads calculate the public count from all rows and the viewer membership from the viewer id; `POST /favorites` accepts `photoId` plus an explicit `favorited`/`unfavorited` state and returns `{ photoId, favorited, favoriteCount }` for same-origin JSON callers. The HTML form uses the same fields and redirects to its safe `return_to` path. The top-center live toast says `You made this a favorite!` or `Removed from favorites.` and remains a plain status region for screen readers.
+
+Owner deletion is available only on `/my-photos` cards and the owner's `/photos/[id]` detail action. `POST /my-photos` accepts one or more owned ids, requires explicit confirmation, and caps a bulk operation at 100 ids. The JSON enhancement returns deleted ids plus a safe redirect target; the ordinary form first renders a confirmation page, so Escape/cancel and no-JavaScript confirmation never mutate. The purge deletes originals, thumbnails, and derived objects from R2 first, then removes D1 links/rows in one batch. R2 object deletes are strongly consistent through the binding, but the R2 and D1 operations are not one cross-service transaction: a failed R2 step leaves D1 intact for a safe retry, while a failed D1 batch is reported as retryable. See Cloudflare's [R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/), [R2 delete API](https://developers.cloudflare.com/r2/objects/delete-objects/), and [D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/) references when operating storage.
 
 ## Routes
 
@@ -91,6 +97,8 @@ The first server-rendered page always contains up to 24 cards and a canonical ne
 /tags/[tag]/page/[page]            tag detail, page N
 /favorites                         signed-in user's favorites, page 1
 /favorites/page/[page]             signed-in user's favorites, page N
+/my-photos                          signed-in user's uploaded photos, page 1
+/my-photos/page/[page]              signed-in user's uploaded photos, page N
 /register  /login  /logout         auth (logout is POST-only)
 /settings                          auth-gated: username, avatar, delete account
 /upload                            auth-gated: photo + title + description + tags
@@ -98,6 +106,8 @@ The first server-rendered page always contains up to 24 cards and a canonical ne
 /og/v2/[id].jpg                    1200x630 social card (v1 retained and generation-pinned)
 /robots.txt  /sitemap.xml          SSR, generated from D1
 ```
+
+The protected mutation contracts are `POST /favorites` (explicit current membership state, URL-encoded or same-origin JSON) and `POST /my-photos` (one or more owned `photo_id` values, explicit confirmation/cancel, URL-encoded or same-origin JSON). Child collection paths are `GET`-only; their bare roots are the mutation targets. Both roots and their `/*` children are listed in `run_worker_first` because Cloudflare's glob `*` does not match a bare root.
 
 ## Data model
 
@@ -110,6 +120,7 @@ photos(id, user_id, title, description, r2_key UNIQUE, thumb_key NULL,
        content_type, width NOT NULL, height NOT NULL, blurhash NULL, created_at)
 tags(id, name UNIQUE)                    -- stored lowercased
 photo_tags(photo_id, tag_id)
+favorites(user_id, photo_id, created_at)  -- current membership; composite primary key
 ```
 
 Three choices are easy to miss:
@@ -129,7 +140,7 @@ derived/og/v2/{photoId}.jpg  # 1200x630 social card (v1 retained and generation-
 
 R2 has no atomic rename. A key derived from a mutable title or filename would require copy-then-delete on every edit; immutable keys are also what justify `Cache-Control: public, max-age=31536000, immutable` on `/img/*`.
 
-The write order is R2 `put()` first, then the D1 row. A crash between them leaves a recoverable orphan rather than a row pointing at a missing blob. Account deletion collects every original, thumbnail, avatar, and generated-card key, deletes the R2 objects first, and only if every R2 delete succeeds removes the D1 rows in one `batch()`. D1 `batch()` rolls back on a failing statement, while the R2 half does not, which is why R2 goes first.
+The write order is R2 `put()` first, then the D1 row. A crash between them leaves a recoverable orphan rather than a row pointing at a missing blob. Photo deletion collects every original, thumbnail, and generated-card key, deletes R2 objects first, and only if every R2 delete succeeds removes favorite/tag links and the owned D1 rows in one `batch()`. The same R2-first ordering is used for account deletion. D1 `batch()` rolls back on a failing statement, while the R2 half does not, which is why R2 goes first; a retry can safely reconcile the still-present D1 rows. The application caps a single owner bulk request at 100 photos to keep both the request and the D1 placeholder batches bounded.
 
 There is deliberately no `og_key` column. The card key is derived from the photo id and generation segment: new cards use `v2`, while the `v1` route and objects remain retained and generation-pinned. Changing the card design is a code change rather than a data migration.
 
@@ -271,6 +282,14 @@ pnpm exec vitest run --project unit --project ssr --project handlers
 ```
 
 The browser-driven `@smoke` lane is part of the T1 CI gate. Its strategy and agent rules are documented in [TESTING.md](TESTING.md).
+
+The integrated photo-management browser check is the serial command below; it is intentionally run only by the manager after all feature branches are merged:
+
+```sh
+bash $HOME/.claude/scripts/playwright-guard.sh --wait 300 -- pnpm exec playwright test e2e/photo-management.spec.ts --grep @smoke
+```
+
+Responsive computed-style evidence is recorded separately with the repository's `verify-styles.mjs` command at 375, 800, and 1200 pixels; see [TESTING.md](TESTING.md) for the exact guarded commands and the pending width/motion evidence policy.
 
 ## zfb upgrade procedure
 

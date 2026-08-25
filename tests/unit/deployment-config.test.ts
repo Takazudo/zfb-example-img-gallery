@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const wranglerConfig = readFileSync("wrangler.toml", "utf8");
@@ -20,5 +20,16 @@ describe("production origin configuration", () => {
 
   it("routes both bare and child My Photos paths through the Worker", () => {
     expect(wranglerConfig).toMatch(/"\/my-photos", "\/my-photos\/\*"/);
+  });
+
+  it("routes both bare and child Favorites paths through the Worker", () => {
+    expect(wranglerConfig).toMatch(/"\/favorites", "\/favorites\/\*"/);
+  });
+
+  it("keeps the favorites migration after the initial schema for fresh state", () => {
+    const migrations = readdirSync("migrations").filter((name) => name.endsWith(".sql")).sort();
+    expect(migrations).toContain("0001_init.sql");
+    expect(migrations).toContain("0002_favorites.sql");
+    expect(migrations.indexOf("0002_favorites.sql")).toBeGreaterThan(migrations.indexOf("0001_init.sql"));
   });
 });

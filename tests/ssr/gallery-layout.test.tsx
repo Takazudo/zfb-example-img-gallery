@@ -247,7 +247,7 @@ describe("shared presentational components", () => {
     expect(html).toContain('role="status" aria-live="polite" aria-atomic="true"');
     expect(html).toContain("z-20");
     expect(html).toContain("motion-reduce:translate-y-0");
-    expect(html).toContain("transition-[opacity,transform]");
+    expect(html).toContain("transition-[opacity,translate]");
   });
   it("renders tag text and applies percent encoding exactly once", () => {
     const html = render(<TagList tags={[{ name: "acrylic" }, { name: "東京" }]} />);
