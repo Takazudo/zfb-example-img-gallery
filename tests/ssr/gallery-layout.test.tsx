@@ -56,10 +56,48 @@ describe("GalleryLayout", () => {
     for (const user of [null, { username: "takazudo" }]) {
       const html = render(<GalleryLayout user={user}>content</GalleryLayout>);
       expect(html.match(/data-zfb-island="DisplaySettings"/g)).toHaveLength(1);
+      expect(html.match(/data-zfb-island="ThemeToggle"/g)).toHaveLength(1);
       expect(html).toMatch(
         /<nav[^>]*>[\s\S]*data-zfb-island="DisplaySettings" data-when="load"[\s\S]*<\/nav>/,
       );
+      expect(html.indexOf('data-zfb-island="DisplaySettings"')).toBeLessThan(
+        html.indexOf('data-zfb-island="ThemeToggle"'),
+      );
       expect(html).not.toContain('aria-haspopup="dialog"');
+    }
+  });
+  it("renders one responsive primary popover with its three explicit controls", () => {
+    const html = render(<GalleryLayout>content</GalleryLayout>);
+    expect(html.match(/id="primary-menu" popover/g)).toHaveLength(1);
+    expect(html.match(/popovertarget="primary-menu"/g)).toHaveLength(3);
+    expect(html).toContain('aria-label="Menu"');
+    expect(html).toContain('aria-label="Close"');
+    expect(html).toContain('aria-label="Close menu"');
+    expect(html).toMatch(/id="primary-menu" popover[\s\S]*href="\/"[^>]*autofocus/);
+    expect(html.match(/href="\/authors"/g)).toHaveLength(1);
+    expect(html.match(/href="\/tags"/g)).toHaveLength(1);
+  });
+  it("renders the account popover only for a signed-in user", () => {
+    const signedOut = render(<GalleryLayout user={null}>content</GalleryLayout>);
+    const signedIn = render(<GalleryLayout user={{ username: "takazudo" }}>content</GalleryLayout>);
+    expect(signedOut).not.toContain('id="account-menu"');
+    expect(signedOut).not.toContain('popovertarget="account-menu"');
+    expect(signedOut).not.toContain('aria-label="Account menu"');
+    expect(signedIn.match(/id="account-menu" popover/g)).toHaveLength(1);
+    expect(signedIn.match(/popovertarget="account-menu"/g)).toHaveLength(1);
+    expect(signedIn).toContain('aria-label="Account menu"');
+    expect(signedIn).toMatch(/href="\/authors\/takazudo"[\s\S]*@takazudo/);
+  });
+  it("uses accessible tooltip markup without native title attributes", () => {
+    for (const user of [null, { username: "takazudo" }]) {
+      const html = render(<GalleryLayout user={user}>content</GalleryLayout>);
+      const header = html.match(/<header\b[\s\S]*?<\/header>/)?.[0];
+      expect(header).toBeDefined();
+      expect(header).not.toContain('title="');
+      expect(html).not.toContain("hover:text-brand");
+      const tooltipSpans = header?.match(/<span[^>]*class="[^"]*pointer-events-none[^"]*"[^>]*>/g) ?? [];
+      expect(tooltipSpans.length).toBeGreaterThan(0);
+      for (const tooltip of tooltipSpans) expect(tooltip).toContain('aria-hidden="true"');
     }
   });
   it("mounts the single layout controller island in the existing runtime", () => {
