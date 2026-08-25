@@ -1,6 +1,13 @@
 import type { Env } from "../env";
 import type { Paged, PhotoCard, TagWithCount } from "../types";
-import { PHOTO_PAGE_SIZE, resolvePage } from "./photos";
+import {
+  normalizeFavoriteFlag,
+  normalizePhotoCard,
+  normalizeViewerId,
+  PHOTO_PAGE_SIZE,
+  resolvePage,
+  type PhotoCardQueryRow,
+} from "./photos";
 
 /** Maximum number of canonical tags that may be attached to one photo. */
 export const MAX_TAGS_PER_PHOTO = 10;
@@ -18,12 +25,14 @@ export type TagSummary = { id: number; name: string; photo_count: number };
 export type TagRow = { id: number; name: string };
 export type TaggedPhoto = {
   id: number;
+  user_id: number;
   title: string;
   r2_key: string;
   thumb_key: string | null;
   width: number;
   height: number;
   blurhash: string | null;
+  is_favorited: boolean;
   created_at: string;
   username: string;
 };
@@ -131,20 +140,24 @@ export async function listTagPhotoPage(
   env: Env,
   tagId: number,
   rawPage: unknown,
+  viewerId?: number | null,
 ): Promise<Paged<PhotoCard>> {
   const totalItems = await countPhotosByTag(env, tagId);
   const pageMeta = resolvePage(rawPage, totalItems, PHOTO_PAGE_SIZE);
+  const trustedViewerId = normalizeViewerId(viewerId);
   const result = await env.DB
     .prepare(
-      `SELECT p.id, p.title, p.r2_key, p.thumb_key, p.width, p.height, p.blurhash
+      `SELECT p.id, p.user_id, p.title, p.r2_key, p.thumb_key, p.width, p.height, p.blurhash,
+              CASE WHEN vf.photo_id IS NULL THEN 0 ELSE 1 END AS is_favorited
          FROM photos p JOIN photo_tags pt ON pt.photo_id = p.id
+         LEFT JOIN favorites vf ON vf.photo_id = p.id AND vf.user_id = ?
         WHERE pt.tag_id = ?
         ORDER BY p.created_at DESC, p.id DESC
         LIMIT ? OFFSET ?`,
     )
-    .bind(tagId, pageMeta.pageSize, pageMeta.offset)
-    .all<PhotoCard>();
-  return { ...pageMeta, items: result.results };
+    .bind(trustedViewerId, tagId, pageMeta.pageSize, pageMeta.offset)
+    .all<PhotoCardQueryRow>();
+  return { ...pageMeta, items: result.results.map(normalizePhotoCard) };
 }
 
 /** One page of photos carrying this tag, newest first. */
@@ -153,21 +166,25 @@ export async function listPhotosByTag(
   tagId: number,
   limit: number,
   offset: number,
+  viewerId?: number | null,
 ): Promise<TaggedPhoto[]> {
+  const trustedViewerId = normalizeViewerId(viewerId);
   const { results } = await env.DB.prepare(
-    `SELECT p.id AS id, p.title AS title, p.r2_key AS r2_key, p.thumb_key AS thumb_key,
+    `SELECT p.id AS id, p.user_id AS user_id, p.title AS title, p.r2_key AS r2_key, p.thumb_key AS thumb_key,
             p.width AS width, p.height AS height, p.blurhash AS blurhash, p.created_at AS created_at,
+            CASE WHEN vf.photo_id IS NULL THEN 0 ELSE 1 END AS is_favorited,
             u.username AS username
        FROM photos p
        JOIN photo_tags pt ON pt.photo_id = p.id
        JOIN users u ON u.id = p.user_id
+       LEFT JOIN favorites vf ON vf.photo_id = p.id AND vf.user_id = ?
       WHERE pt.tag_id = ?
       ORDER BY p.created_at DESC, p.id DESC
       LIMIT ? OFFSET ?`,
   )
-    .bind(tagId, limit, offset)
-    .all<TaggedPhoto>();
-  return results;
+    .bind(trustedViewerId, tagId, limit, offset)
+    .all<TaggedPhoto & { is_favorited: unknown }>();
+  return results.map((row) => ({ ...row, is_favorited: normalizeFavoriteFlag(row.is_favorited) }));
 }
 
 /** Parse a tag page parameter with the stricter route contract. */

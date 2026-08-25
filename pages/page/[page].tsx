@@ -35,10 +35,8 @@ function lastPathSegment(pathname: string): string | undefined {
 export default async function PhotoGridPage({ params }: PageProps = {}) {
   const { env, request } = getCloudflareContext<Env>();
   const rawPage = params?.page ?? lastPathSegment(new URL(request.url).pathname);
-  const [sessionUser, result] = await Promise.all([
-    getSessionUser(env, request),
-    listPhotoPage(env, parsePageParam(rawPage)),
-  ]);
+  const sessionUser = await getSessionUser(env, request);
+  const result = await listPhotoPage(env, parsePageParam(rawPage), sessionUser?.id);
   const user = sessionUser
     ? { username: sessionUser.username, avatarKey: sessionUser.avatar_key }
     : null;

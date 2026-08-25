@@ -150,7 +150,7 @@ describe("shared presentational components", () => {
       scope="global"
       page={{ page: 1, pageSize: 24, totalItems: 1, totalPages: 1, offset: 0, hasPrev: false, hasNext: false }}
       nextHref="/page/2"
-      photos={[{ id: 7, title: "Photo", r2_key: "photos/7.jpg", thumb_key: null, width: 1200, height: 800, blurhash: null }]}
+      photos={[{ id: 7, user_id: 1, title: "Photo", r2_key: "photos/7.jpg", thumb_key: null, width: 1200, height: 800, blurhash: null, is_favorited: false }]}
     />);
     expect(html).toContain('data-gallery-feed="true"');
     expect(html).toContain('data-gallery-scope="global"');
@@ -169,7 +169,7 @@ describe("shared presentational components", () => {
       scope="tag:3"
       page={{ page: 1, pageSize: 24, totalItems: 25, totalPages: 2, offset: 0, hasPrev: false, hasNext: true }}
       nextHref="/tags/foo/page/2"
-      photos={Array.from({ length: 24 }, (_, id) => ({ id, title: `Photo ${id}`, r2_key: `photos/${id}.jpg`, thumb_key: null, width: 1200, height: 800, blurhash: null }))}
+      photos={Array.from({ length: 24 }, (_, id) => ({ id, user_id: 1, title: `Photo ${id}`, r2_key: `photos/${id}.jpg`, thumb_key: null, width: 1200, height: 800, blurhash: null, is_favorited: false }))}
     />);
     expect(html).toContain('data-gallery-scope="tag:3"');
     expect(html).toContain('data-gallery-next-url="/tags/foo/page/2"');
