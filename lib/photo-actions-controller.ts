@@ -161,6 +161,10 @@ export class PhotoActionsController {
   };
 
   readonly #onClose = (): void => {
+    // Native dialog close events are queued. If the user reopens the same
+    // dialog before an earlier close event runs, that stale event must not
+    // clear the newly prepared deletion action.
+    if (this.#env.dialog.open) return;
     const invoker = this.#pending?.invoker;
     this.#pending = null;
     if (invoker?.isConnected) invoker.focus();

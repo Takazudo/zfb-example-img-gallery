@@ -167,6 +167,25 @@ describe("photo actions controller", () => {
     expect(h.controller.selectedCount).toBe(0);
   });
 
+  it("keeps a reopened action when an earlier queued close event arrives", async () => {
+    const h = harness();
+    const first = h.singleForm(1, "First photo");
+    const second = h.singleForm(2, "Second photo");
+
+    h.dispatch("submit", first.form, { submitter: first.button });
+    h.dialog.open = false;
+    h.dispatch("submit", second.form, { submitter: second.button });
+
+    // Browsers queue the first dialog's close event. It may run after the
+    // second showModal() call when interactions happen in quick succession.
+    h.dialog.listeners.get("close")?.({});
+    expect(h.dialog.open).toBe(true);
+
+    h.confirm.listeners.get("click")?.({});
+    expect(h.fetchMock).toHaveBeenCalledOnce();
+    await h.controller.pending;
+  });
+
   it("keeps the dialog and selected state on failure so confirmation can be retried", async () => {
     const h = harness(1, new Response(JSON.stringify({ error: "Server unavailable" }), { status: 503 }));
     h.inputs[0]!.checked = true; h.dispatch("change", h.inputs[0]!);
