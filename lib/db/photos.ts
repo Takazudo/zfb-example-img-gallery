@@ -121,6 +121,41 @@ export async function listPhotoPage(
   return { ...pageMeta, items: result.results.map(normalizePhotoCard) };
 }
 
+/** Count the photos uploaded by one authenticated user. */
+export async function countPhotosByUser(env: Env, userId: number): Promise<number> {
+  const row = await env.DB
+    .prepare("SELECT COUNT(*) AS n FROM photos WHERE user_id = ?")
+    .bind(userId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Read one user's photo page, newest upload first, with viewer-aware cards. */
+export async function listUserPhotoPage(
+  env: Env,
+  userId: number,
+  rawPage: unknown,
+  viewerId?: number | null,
+): Promise<Paged<PhotoCard>> {
+  const totalItems = await countPhotosByUser(env, userId);
+  const pageMeta = resolvePage(rawPage, totalItems);
+  const trustedViewerId = normalizeViewerId(viewerId);
+  const result = await env.DB
+    .prepare(
+      `SELECT p.id, p.user_id, p.title, p.r2_key, p.thumb_key, p.width, p.height, p.blurhash,
+              CASE WHEN vf.photo_id IS NULL THEN 0 ELSE 1 END AS is_favorited
+         FROM photos p
+         LEFT JOIN favorites vf ON vf.photo_id = p.id AND vf.user_id = ?
+        WHERE p.user_id = ?
+        ORDER BY p.created_at DESC, p.id DESC
+        LIMIT ? OFFSET ?`,
+    )
+    .bind(trustedViewerId, userId, pageMeta.pageSize, pageMeta.offset)
+    .all<PhotoCardQueryRow>();
+
+  return { ...pageMeta, items: result.results.map(normalizePhotoCard) };
+}
+
 interface PhotoDetailRow extends Photo {
   author_id: number;
   author_username: string;
