@@ -13,6 +13,7 @@
     "preview:og": "node scripts/preview-og-card.mjs",
     "preview": "zfb preview",
     "typecheck": "zfb check",
+    "typecheck:e2e": "tsc --project tsconfig.e2e.json",
     "test": "vitest run --project unit --project ssr --project handlers",
     "test:all": "vitest run",
     "//cf": "Binding-realistic dev loop. Port 8788 is the base URL the seeding script defaults to. --persist-to pins ONE local state dir so dev, the CLI and the seeder all address the same D1/R2.",

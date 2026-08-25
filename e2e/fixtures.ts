@@ -40,8 +40,8 @@ export function pngWithDimensions(width: number, height: number): Buffer {
     const crcInput = Buffer.concat([name, data]);
     const result = Buffer.alloc(12 + data.length);
     result.writeUInt32BE(data.length, 0);
-    name.copy(result, 4);
-    data.copy(result, 8);
+    result.set(name, 4);
+    result.set(data, 8);
     result.writeUInt32BE(pngCrc32(crcInput), 8 + data.length);
     return result;
   };

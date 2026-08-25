@@ -49,6 +49,8 @@ jobs:
       # `zfb build` does not type-check TS/TSX, so this runs first and fails fast.
       - name: Typecheck
         run: pnpm typecheck
+      - name: E2E typecheck
+        run: pnpm typecheck:e2e
       - name: Unit / SSR / handler tests
         run: pnpm exec vitest run --project unit --project ssr --project handlers
       - name: Build
