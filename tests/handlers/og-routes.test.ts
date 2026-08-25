@@ -318,7 +318,7 @@ describe("crawler routes", () => {
     const response = await RobotsRoute();
     const body = await response.text();
     expect(response.headers.get("content-type")).toContain("text/plain");
-    for (const path of ["/settings", "/upload", "/login", "/logout", "/register"]) {
+    for (const path of ["/settings", "/upload", "/login", "/logout", "/register", "/favorites"]) {
       expect(body).toContain(`Disallow: ${path}`);
     }
     expect(body).toContain("Sitemap: https://gallery.example/sitemap.xml");

@@ -172,4 +172,42 @@ describe("authentication route handlers", () => {
     expect(registerResponse.headers.get("location")).toBe("/");
     expect(loginResponse.headers.get("location")).toBe("/");
   });
+
+  it("preserves a safe login next path through validation errors and success", async () => {
+    const get = await invoke(LoginPage, "/login?next=%2Ffavorites%2Fpage%2F2", "GET");
+    expect(get.status).toBe(200);
+    expect(await get.text()).toContain('name="next" value="/favorites/page/2"');
+
+    const invalid = await invoke(LoginPage, "/login?next=%2Ffavorites%2Fpage%2F2", "POST", {
+      email: "alice@example.com",
+      password: "",
+      next: "/favorites/page/2",
+    });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.text()).toContain('name="next" value="/favorites/page/2"');
+
+    const registered = await register({ username: "next-user", email: "next@example.com", password: "password1" });
+    expect(registered.status).toBe(303);
+    const response = await invoke(LoginPage, "/login", "POST", {
+      email: "next@example.com",
+      password: "password1",
+      next: "/favorites/page/2",
+    });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/favorites/page/2");
+  });
+
+  it("falls back to the root for unsafe login next values", async () => {
+    const get = await invoke(LoginPage, "/login?next=https%3A%2F%2Fevil.example", "GET");
+    expect(get.status).toBe(200);
+    expect(await get.text()).not.toContain("evil.example");
+
+    const response = await invoke(LoginPage, "/login", "POST", {
+      email: "missing@example.com",
+      password: "password1",
+      next: "//evil.example/",
+    });
+    expect(response.status).toBe(401);
+    expect(await response.text()).not.toContain("evil.example");
+  });
 });

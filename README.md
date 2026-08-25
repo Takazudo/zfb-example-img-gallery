@@ -49,6 +49,7 @@ run_worker_first = [
   "/photos/*",
   "/authors", "/authors/*",
   "/tags", "/tags/*",
+  "/favorites", "/favorites/*",
   "/img/*",
   "/og/*",
   "/robots.txt", "/sitemap.xml",
@@ -88,6 +89,8 @@ The first server-rendered page always contains up to 24 cards and a canonical ne
 /tags                              all tags + nav
 /tags/[tag]                        tag detail, page 1
 /tags/[tag]/page/[page]            tag detail, page N
+/favorites                         signed-in user's favorites, page 1
+/favorites/page/[page]             signed-in user's favorites, page N
 /register  /login  /logout         auth (logout is POST-only)
 /settings                          auth-gated: username, avatar, delete account
 /upload                            auth-gated: photo + title + description + tags

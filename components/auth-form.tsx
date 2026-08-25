@@ -6,6 +6,8 @@ type Props = {
   error?: string;
   username?: string;
   email?: string;
+  /** Validated relative destination retained by the login form. */
+  next?: string;
 };
 
 function PasswordField({ mode }: { mode: Props["mode"] }) {
@@ -27,7 +29,7 @@ function PasswordField({ mode }: { mode: Props["mode"] }) {
   );
 }
 
-export function AuthForm({ mode, error, username, email }: Props) {
+export function AuthForm({ mode, error, username, email, next }: Props) {
   const register = mode === "register";
   return (
     <section class="mx-auto flex w-full max-w-[30rem] flex-col gap-vsp-md">
@@ -50,6 +52,10 @@ export function AuthForm({ mode, error, username, email }: Props) {
           <p role="alert" class="rounded-md border border-danger bg-danger-soft px-hsp-sm py-vsp-xs text-small text-danger">
             {error}
           </p>
+        ) : null}
+
+        {!register && next && next !== "/" ? (
+          <input type="hidden" name="next" value={next} />
         ) : null}
 
         {register ? (

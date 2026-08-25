@@ -158,6 +158,7 @@ export function robotsBody(origin: string): string {
     "Disallow: /register",
     "Disallow: /settings",
     "Disallow: /upload",
+    "Disallow: /favorites",
     "",
     `Sitemap: ${absoluteUrl("/sitemap.xml", origin)}`,
     "",
