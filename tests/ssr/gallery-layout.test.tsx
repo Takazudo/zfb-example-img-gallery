@@ -4,6 +4,7 @@ import { Button } from "../../components/button";
 import { EmptyState } from "../../components/empty-state";
 import { Field } from "../../components/field";
 import { PhotoCard } from "../../components/photo-card";
+import { FAVORITE_STAR_PATH } from "../../components/favorite-control";
 import { PhotoFeed } from "../../components/photo-feed";
 import { PhotoGrid } from "../../components/photo-grid";
 import { TagList } from "../../components/tag-list";
@@ -61,7 +62,7 @@ describe("GalleryLayout", () => {
       expect(html).not.toContain('aria-haspopup="dialog"');
     }
   });
-  it("mounts the zero-DOM infinite-feed controller in the existing island runtime", () => {
+  it("mounts the single layout controller island in the existing runtime", () => {
     const html = render(<GalleryLayout>content</GalleryLayout>);
     expect(html.match(/data-zfb-island="InfiniteGalleryControllerIsland"/g)).toHaveLength(1);
     expect(html).toContain('data-zfb-island="InfiniteGalleryControllerIsland" data-when="load"');
@@ -115,10 +116,10 @@ describe("shared presentational components", () => {
   });
   it("renders the PhotoCard structural and metadata contract", () => {
     const html = render(<PhotoCard photo={{ id: 7, title: "Acrylic macro", src: "/img/photo.webp", width: 2000, height: 1500, blurhash: null }} />);
-    expect(html).toMatch(/^<li data-photo-id="7">/); expect(html).toContain('<a href="/photos/7"');
+    expect(html).toMatch(/^<li data-photo-id="7"/); expect(html).toContain('<a href="/photos/7"');
     expect(html).toContain('width="2000"'); expect(html).toContain('height="1500"');
     expect(html).toContain('alt="Acrylic macro"');
-    expect(html).toContain("[object-fit:var(--gallery-thumbnail-object-fit)]");
+    expect(html).toContain('class="photo-card-image"');
   });
   it("renders a bounded cover placeholder only for a valid hash while keeping the image visible by default", () => {
     const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 2400, height: 1600, blurhash: VALID_BLURHASH };
@@ -153,7 +154,7 @@ describe("shared presentational components", () => {
       photos={[{ id: 7, user_id: 1, title: "Photo", r2_key: "photos/7.jpg", thumb_key: null, width: 1200, height: 800, blurhash: null, is_favorited: false }]}
     />);
     expect(html).toContain('data-gallery-feed="true"');
-    expect(html).toContain('data-gallery-scope="global"');
+    expect(html).toContain('data-gallery-scope="global|viewer:anonymous"');
     expect(html).toContain('data-gallery-page="1"');
     expect(html).toContain('data-gallery-total-pages="1"');
     expect(html).toContain('data-gallery-total-items="1"');
@@ -171,21 +172,54 @@ describe("shared presentational components", () => {
       nextHref="/tags/foo/page/2"
       photos={Array.from({ length: 24 }, (_, id) => ({ id, user_id: 1, title: `Photo ${id}`, r2_key: `photos/${id}.jpg`, thumb_key: null, width: 1200, height: 800, blurhash: null, is_favorited: false }))}
     />);
-    expect(html).toContain('data-gallery-scope="tag:3"');
+    expect(html).toContain('data-gallery-scope="tag:3|viewer:anonymous"');
     expect(html).toContain('data-gallery-next-url="/tags/foo/page/2"');
     expect(html).toContain('data-gallery-next-count="1"');
     expect(html).toContain('data-gallery-terminal="false"');
     expect(html).toContain('href="/tags/foo/page/2"');
     expect(html).toContain(">Load next 1 photos</a>");
   });
+  it("includes the trusted viewer identity in personalized collection scopes", () => {
+    const html = render(<PhotoFeed
+      scope="global"
+      viewerId={7}
+      page={{ page: 1, pageSize: 24, totalItems: 0, totalPages: 1, offset: 0, hasPrev: false, hasNext: false }}
+      nextHref="/page/2"
+      photos={[]}
+    />);
+    expect(html).toContain('data-gallery-scope="global|viewer:7"');
+  });
   it("keeps an expanded placeholder-bearing cardsHtml payload below the 512 KiB entry cap", () => {
-    const cardsHtml = render(<PhotoGrid>{Array.from({ length: 240 }, (_, id) => (
-      <PhotoCard key={id} photo={{
-        id, title: `Photo ${id}`, src: `/img/${id}.webp`, width: 2400, height: 1600, blurhash: VALID_BLURHASH,
-      }} />
-    ))}</PhotoGrid>);
-    expect(cardsHtml).toContain("data:image/png;base64,");
-    expect(utf8ByteLength(cardsHtml)).toBeLessThan(DEFAULT_SNAPSHOT_LIMITS.maxEntryBytes);
+    for (const viewerId of [null, 7]) {
+      const cardsHtml = render(<PhotoGrid>{Array.from({ length: 240 }, (_, id) => (
+        <PhotoCard key={id} viewerId={viewerId} returnTo="/" photo={{
+          id, title: `Photo ${id}`, src: `/img/${id}.webp`, width: 2400, height: 1600, blurhash: VALID_BLURHASH,
+        }} />
+      ))}</PhotoGrid>);
+      expect(cardsHtml).toContain("data:image/png;base64,");
+      expect(utf8ByteLength(cardsHtml)).toBeLessThan(DEFAULT_SNAPSHOT_LIMITS.maxEntryBytes);
+    }
+  });
+  it("renders shared outline/filled star geometry with valid sibling card controls", () => {
+    const anonymous = render(<PhotoCard photo={{ id: 7, title: "Photo", src: "/img/7", width: 20, height: 20, blurhash: null }} returnTo="/tags/art" />);
+    const signedIn = render(<PhotoCard photo={{ id: 7, title: "Photo", src: "/img/7", width: 20, height: 20, blurhash: null, isFavorited: true }} viewerId={3} returnTo="/tags/art" />);
+    expect(anonymous).toContain(`d="${FAVORITE_STAR_PATH}" fill="none"`);
+    expect(anonymous).toContain('href="/login?next=%2Ftags%2Fart"');
+    expect(anonymous).not.toContain("aria-pressed");
+    expect(signedIn).toContain(`d="${FAVORITE_STAR_PATH}" fill="currentColor"`);
+    expect(signedIn).toContain('aria-pressed="true"');
+    expect(signedIn).toContain('aria-label="Remove Photo from favorites"');
+    expect(signedIn).toMatch(/data-zfb-reload(?:="")?/);
+    expect(signedIn).toMatch(/<\/a><form data-favorite-control/);
+    expect(signedIn).toContain('class="favorite-action-card"');
+  });
+  it("renders one atomic polite toast above the sticky header with reduced-motion styling", () => {
+    const html = render(<GalleryLayout>content</GalleryLayout>);
+    expect(html.match(/data-favorite-toast="true"/g)).toHaveLength(1);
+    expect(html).toContain('role="status" aria-live="polite" aria-atomic="true"');
+    expect(html).toContain("z-20");
+    expect(html).toContain("motion-reduce:translate-y-0");
+    expect(html).toContain("transition-[opacity,transform]");
   });
   it("renders tag text and applies percent encoding exactly once", () => {
     const html = render(<TagList tags={[{ name: "acrylic" }, { name: "東京" }]} />);

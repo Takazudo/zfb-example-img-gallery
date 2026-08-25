@@ -337,6 +337,41 @@ export type InfiniteGalleryEnvironment = {
   store: GallerySnapshotStore;
 };
 
+export type GalleryRefreshEnvironment = Pick<
+  InfiniteGalleryEnvironment,
+  "document" | "location" | "fetch" | "parseHtml"
+>;
+
+/** Replace the active feed from its canonical server response after an
+ * offset-sensitive collection mutation (notably an unfavorite). */
+export async function refreshActiveGalleryFeed(
+  environment?: GalleryRefreshEnvironment,
+): Promise<boolean> {
+  const env = environment ?? defaultEnvironment();
+  if (!env) return false;
+  const currentElements = feedElements(env.document);
+  if (!currentElements) return false;
+  const current = feedMetadata(currentElements.feed);
+  if (!current) return false;
+  try {
+    const response = await env.fetch(env.location.href, {
+      headers: { Accept: "text/html, application/xhtml+xml" },
+    });
+    if (!response.ok || !isHtmlContentType(response.headers.get("content-type"))) return false;
+    if (response.redirected && response.url && response.url !== env.location.href) return false;
+    const mediaType = (response.headers.get("content-type") ?? "text/html").split(";", 1)[0]!.trim() as DOMParserSupportedType;
+    const incomingDocument = env.parseHtml(await response.text(), mediaType);
+    const incomingElements = feedElements(incomingDocument);
+    const incoming = incomingElements ? feedMetadata(incomingElements.feed) : null;
+    if (!incomingElements || !incoming || incoming.scope !== current.scope) return false;
+    const imported = env.document.importNode(incomingElements.feed, true) as HTMLElement;
+    currentElements.feed.replaceWith(imported);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function defaultEnvironment(): InfiniteGalleryEnvironment | null {
   if (typeof document === "undefined" || typeof location === "undefined" || typeof history === "undefined") return null;
   const createObserver = typeof IntersectionObserver === "undefined"

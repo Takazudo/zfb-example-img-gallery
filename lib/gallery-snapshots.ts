@@ -203,6 +203,21 @@ export class GallerySnapshotStore {
     return [...this.#memory.keys()];
   }
 
+  /** Clear every bounded personalized card snapshot after viewer-state writes. */
+  invalidateAll(): void {
+    this.#memory.clear();
+    if (!this.#storage) return;
+    try {
+      for (const item of parseIndex(this.#storage)) {
+        this.#storage.removeItem(`${GALLERY_SNAPSHOT_STORAGE_PREFIX}${item.key}`);
+      }
+      this.#storage.removeItem(GALLERY_SNAPSHOT_INDEX_KEY);
+    } catch {
+      // Storage access can be blocked independently of the live UI. Reads still
+      // validate scope and the server-refetched traversal remains authoritative.
+    }
+  }
+
   #evictMemory(): void {
     let total = [...this.#memory.values()].reduce((sum, item) => sum + item.bytes, 0);
     while (this.#memory.size > this.#limits.maxEntries || total > this.#limits.maxTotalBytes) {

@@ -21,13 +21,15 @@ const photoRow = {
   author_id: 7,
   author_username: "alice",
   author_avatar_key: null,
+  favorite_count: 2,
+  is_favorited: 0,
 };
 
-function mockEnv(row = photoRow): Env {
+function mockEnv(row = photoRow, sessionUser?: { id: number; username: string; email: string; avatar_key: null }): Env {
   const prepare = vi.fn((sql: string) => {
     const statement = {
       bind: vi.fn(() => statement),
-      first: vi.fn(async () => row),
+      first: vi.fn(async () => sql.includes("FROM sessions") ? (sessionUser ?? null) : row),
       all: vi.fn(async () => ({
         results: sql.includes("FROM photo_tags")
           ? [{ id: 1, name: "landscape" }, { id: 2, name: "東京 scene" }]
@@ -39,12 +41,12 @@ function mockEnv(row = photoRow): Env {
   return Object.assign(Object.create(null), { DB: { prepare } }) as Env;
 }
 
-function invoke(env: Env): Promise<Response> {
+function invoke(env: Env, signedIn = false): Promise<Response> {
   return runWithCloudflareContext(
     {
       env,
       ctx: { waitUntil() {}, passThroughOnException() {} },
-      request: new Request("https://request.example/photos/42?preview=1"),
+      request: new Request("https://request.example/photos/42?preview=1", signedIn ? { headers: { cookie: "sid=test-session" } } : {}),
     },
     () => PhotoDetailPage({ params: { id: "42" } }),
   );
@@ -102,6 +104,19 @@ describe("photo detail SSR", () => {
 
     expect(html).toMatch(/data-testid="photo-detail" class="[^"]*md:grid-cols-\[1fr_20rem\]/);
     expect(html).toMatch(/data-testid="photo-detail-media" class="[^"]*min-w-0/);
+    expect(html).toContain('data-favorite-count="true" data-photo-id="42" data-favorite-count-value="2"');
+    expect(html).toContain(">2 favorites</p>");
+    expect(html).toContain('data-photo-owner-actions-slot="true"');
+    expect(html).toContain('href="/login?next=%2Fphotos%2F42"');
+  });
+
+  it("keeps viewer membership independent from the all-user favorite count", async () => {
+    const viewer = { id: 9, username: "bob", email: "bob@example.com", avatar_key: null };
+    const html = await (await invoke(mockEnv({ ...photoRow, favorite_count: 2, is_favorited: 1 }, viewer), true)).text();
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('aria-label="Remove A quiet lake from favorites"');
+    expect(html).toContain('fill="currentColor"');
+    expect(html).toContain(">2 favorites</p>");
   });
 
   it("renders the complete absolute social metadata contract", async () => {

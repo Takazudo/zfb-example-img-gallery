@@ -104,8 +104,7 @@ describe("semantic theme architecture", () => {
     expect(readFileSync("components/photo-grid.tsx", "utf8")).toContain(
       "minmax(min(100%,var(--gallery-thumbnail-width)),1fr)",
     );
-    expect(readFileSync("components/photo-card.tsx", "utf8")).toContain(
-      "aspect-ratio:var(--gallery-thumbnail-aspect-ratio)",
-    );
+    expect(readFileSync("components/photo-card.tsx", "utf8")).toContain('class="photo-card-image"');
+    expect(globalCss).toContain("aspect-ratio: var(--gallery-thumbnail-aspect-ratio);");
   });
 });

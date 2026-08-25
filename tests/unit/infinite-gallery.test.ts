@@ -18,6 +18,7 @@ import {
   isHtmlContentType,
   isSequentialFeed,
   parseFeedMetadata,
+  refreshActiveGalleryFeed,
   stateWithGalleryIdentity,
   unseenPhotoIds,
   type FeedMetadata,
@@ -114,6 +115,39 @@ describe("infinite gallery response invariants", () => {
     expect(isHtmlContentType("APPLICATION/XHTML+XML")).toBe(true);
     expect(isHtmlContentType("application/json")).toBe(false);
     expect(isHtmlContentType(null)).toBe(false);
+  });
+
+  it("authoritatively replaces the active feed from the same personalized scope", async () => {
+    const grid = {};
+    let replacedWith: unknown = null;
+    const feed = {
+      dataset: {
+        galleryScope: "favorites:7|viewer:7", galleryPage: "1", galleryTotalPages: "2",
+        galleryTotalItems: "25", galleryPageSize: "24", galleryNextUrl: "/favorites/page/2",
+        galleryNextCount: "1", galleryTerminal: "false",
+      },
+      querySelectorAll: (selector: string) => selector === '[data-gallery-grid="true"]' ? [grid] : [],
+      replaceWith: (value: unknown) => { replacedWith = value; },
+    };
+    const incomingGrid = {};
+    const incomingFeed = {
+      dataset: { ...feed.dataset, galleryTotalItems: "24", galleryTotalPages: "1", galleryNextUrl: "", galleryNextCount: "0", galleryTerminal: "true" },
+      querySelectorAll: (selector: string) => selector === '[data-gallery-grid="true"]' ? [incomingGrid] : [],
+    };
+    const document = {
+      querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [feed] : [],
+      importNode: (node: unknown) => node,
+    };
+    const incomingDocument = {
+      querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [incomingFeed] : [],
+    };
+    await expect(refreshActiveGalleryFeed({
+      document: document as unknown as Document,
+      location: { href: "https://example.test/favorites", origin: "https://example.test" } as Location,
+      fetch: (async () => new Response("<html></html>", { headers: { "content-type": "text/html" } })) as typeof fetch,
+      parseHtml: () => incomingDocument as unknown as Document,
+    })).resolves.toBe(true);
+    expect(replacedWith).toBe(incomingFeed);
   });
 
   it("deduplicates against rendered IDs and within the batch without changing order", () => {
@@ -395,6 +429,19 @@ describe("gallery entry identity and bounded snapshots", () => {
     expect(storage.values.has(`${GALLERY_SNAPSHOT_STORAGE_PREFIX}gallery-00000001`)).toBe(false);
     expect(JSON.parse(storage.values.get(GALLERY_SNAPSHOT_INDEX_KEY) ?? "[]").map((item: { key: string }) => item.key))
       .toEqual(["gallery-00000002", "gallery-00000003"]);
+  });
+
+  it("invalidates every bounded memory and session snapshot after personalized writes", () => {
+    const storage = new MemoryStorage();
+    const store = new GallerySnapshotStore(storage);
+    store.set(snapshot("gallery-00000001"));
+    store.set(snapshot("gallery-00000002", { scope: "tag:1|viewer:7" }));
+    expect(store.memoryKeys()).toHaveLength(2);
+    store.invalidateAll();
+    expect(store.memoryKeys()).toEqual([]);
+    expect(storage.values.has(GALLERY_SNAPSHOT_INDEX_KEY)).toBe(false);
+    expect(storage.values.has(`${GALLERY_SNAPSHOT_STORAGE_PREFIX}gallery-00000001`)).toBe(false);
+    expect(storage.values.has(`${GALLERY_SNAPSHOT_STORAGE_PREFIX}gallery-00000002`)).toBe(false);
   });
 
   it("restores from session storage and rejects corrupt or mismatched fallback data", () => {

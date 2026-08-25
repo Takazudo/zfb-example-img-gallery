@@ -259,7 +259,7 @@ export function parseFavoritesPageParam(raw: unknown): number {
   return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : 1;
 }
 
-function FavoritesBody({ page, userId }: { page: Awaited<ReturnType<typeof listFavoritePage>>; userId: number }) {
+function FavoritesBody({ page, userId, returnTo }: { page: Awaited<ReturnType<typeof listFavoritePage>>; userId: number; returnTo: string }) {
   return (
     <>
       <section class="mb-vsp-lg flex flex-col gap-vsp-2xs">
@@ -273,6 +273,8 @@ function FavoritesBody({ page, userId }: { page: Awaited<ReturnType<typeof listF
         page={page}
         nextHref={`/favorites/page/${page.page + 1}`}
         photos={page.items}
+        viewerId={userId}
+        returnTo={returnTo}
         empty={<EmptyState title="No favorites yet">Favorite a photo to find it here.</EmptyState>}
       />
     </>
@@ -363,7 +365,7 @@ export async function renderFavoritesRoute(rawPage?: string): Promise<FavoritesR
         path: canonicalPath,
       })}
     >
-      <FavoritesBody page={page} userId={sessionUser.id} />
+      <FavoritesBody page={page} userId={sessionUser.id} returnTo={new URL(request.url).pathname} />
     </GalleryLayout>
   );
 }

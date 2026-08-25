@@ -28,6 +28,8 @@ export default async function TopPage() {
           page={result}
           nextHref="/page/2"
           photos={result.items}
+          viewerId={sessionUser?.id}
+          returnTo={new URL(request.url).pathname}
           empty={result.totalItems === 0 ? (
             <EmptyState
               title="No photos yet"

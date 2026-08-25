@@ -120,7 +120,7 @@ describe("tag route handlers", () => {
       photos: [photo],
     };
     const first = await invoke(TagDetailPage, "/tags/foo", { tag: "foo" }, mockDb(options));
-    expect(first.body).toContain('data-gallery-scope="tag:3"');
+    expect(first.body).toContain('data-gallery-scope="tag:3|viewer:anonymous"');
     expect(first.body).toContain('data-gallery-page="1"');
     expect(first.body).toContain('data-gallery-total-pages="3"');
     expect(first.body).toContain('data-gallery-total-items="49"');

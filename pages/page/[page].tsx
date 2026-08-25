@@ -59,6 +59,8 @@ export default async function PhotoGridPage({ params }: PageProps = {}) {
           page={result}
           nextHref={`/page/${effectivePage + 1}`}
           photos={result.items}
+          viewerId={sessionUser?.id}
+          returnTo={new URL(request.url).pathname}
           empty={result.totalItems === 0 ? (
             <EmptyState
               title="No photos yet"
