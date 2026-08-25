@@ -37,7 +37,11 @@ class FakeElement {
   close(): void { if (!this.open) return; this.open = false; this.listeners.get("close")?.({}); }
 }
 
-function harness(inputCount = 3, response?: Response | Promise<Response>) {
+function harness(
+  inputCount = 3,
+  response?: Response | Promise<Response>,
+  currentUrl = "https://example.test/my-photos",
+) {
   const inputs = Array.from({ length: inputCount }, (_, index) => {
     const input = new FakeElement();
     input.dataset.photoSelect = "true";
@@ -79,17 +83,17 @@ function harness(inputCount = 3, response?: Response | Promise<Response>) {
     invalidateSnapshots,
     refreshFeed,
     navigate,
-    currentUrl: () => "https://example.test/my-photos",
+    currentUrl: () => currentUrl,
   });
   const dispatch = (type: string, target: FakeElement, extra: Record<string, unknown> = {}) => {
     const event = { target, preventDefault: vi.fn(), stopImmediatePropagation: vi.fn(), ...extra };
     documentListeners.get(type)!.listener(event);
     return event;
   };
-  const singleForm = (id = 1, title = "Photo 1") => {
+  const singleForm = (id = 1, title = "Photo 1", returnTo = "/my-photos") => {
     const form = new FakeElement(); form.kind = "single";
     const idInput = new FakeElement(); idInput.value = String(id);
-    const returnInput = new FakeElement(); returnInput.value = "/my-photos";
+    const returnInput = new FakeElement(); returnInput.value = returnTo;
     const button = new FakeElement(); button.dataset.photoTitle = title;
     form.queries.set('input[name="photo_id"]', idInput);
     form.queries.set('input[name="return_to"]', returnInput);
@@ -198,5 +202,37 @@ describe("photo actions controller", () => {
     await h.controller.pending;
     expect(h.navigate).toHaveBeenCalledWith("/favorites");
     expect(h.refreshFeed).not.toHaveBeenCalled();
+  });
+
+  it("uses the live route when an appended card carries its source page fallback", async () => {
+    const h = harness(
+      1,
+      new Response(JSON.stringify({ deletedIds: [1], redirectTo: "/my-photos?expanded=1" }), { status: 200 }),
+      "https://example.test/my-photos?expanded=1",
+    );
+    const { form, button } = h.singleForm(1, "Appended photo", "/my-photos/page/2");
+    h.dispatch("submit", form, { submitter: button });
+    h.confirm.listeners.get("click")?.({});
+    await h.controller.pending;
+
+    const calls = h.fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>;
+    const request = calls[0]?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      photo_ids: [1],
+      return_to: "/my-photos?expanded=1",
+    });
+    expect(h.refreshFeed).toHaveBeenCalledOnce();
+    expect(h.navigate).not.toHaveBeenCalled();
+  });
+
+  it("falls back to navigation if post-delete feed reconciliation throws", async () => {
+    const h = harness();
+    h.refreshFeed.mockRejectedValueOnce(new Error("refresh failed"));
+    const { form, button } = h.singleForm();
+    h.dispatch("submit", form, { submitter: button });
+    h.confirm.listeners.get("click")?.({});
+    await h.controller.pending;
+    expect(h.navigate).toHaveBeenCalledWith("/my-photos");
+    expect(h.error.hidden).toBe(true);
   });
 });

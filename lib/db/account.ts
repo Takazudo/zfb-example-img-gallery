@@ -289,9 +289,9 @@ export type PurgeResult =
   | { ok: false; reason: "r2-delete-failed" | "d1-delete-failed" };
 
 /**
- * Delete R2 objects first. D1 rows are removed only after all R2 batches have
- * completed, so a failed/retried purge never leaves a row pointing at a
- * missing object and remains safe when a key was already deleted.
+ * Delete R2 objects first, then remove D1 rows. An R2 failure leaves the
+ * database untouched. If the later D1 batch fails, an idempotent retry can
+ * delete the already-missing objects again and finish the retained rows.
  */
 export async function purgeAccount(env: Env, userId: number): Promise<PurgeResult> {
   let objects: AccountObjects;

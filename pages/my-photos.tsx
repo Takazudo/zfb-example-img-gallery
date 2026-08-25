@@ -12,6 +12,7 @@ import {
 } from "../lib/db/photo-purge";
 import { listUserPhotoPage } from "../lib/db/photos";
 import type { Env } from "../lib/env";
+import { loginPath, requestRelativePath, safeRelativePath, wantsJsonResponse } from "../lib/navigation";
 import { htmlResponse, redirect } from "../lib/render";
 import { buildPageSeo } from "../lib/seo";
 
@@ -23,6 +24,7 @@ export const MAX_DELETE_BODY_BYTES = 64 * 1024;
 const INVALID_BATCH_MESSAGE = "We could not verify those photos. No photos were deleted.";
 const RETRYABLE_DELETE_MESSAGE = "We could not delete those photos right now. Please try again.";
 const UNREADABLE_BODY_MESSAGE = "We could not read that deletion request.";
+const TOO_LARGE_BODY_MESSAGE = "That deletion request is too large.";
 const LOGIN_MESSAGE = "Sign in to manage your photos.";
 
 type DeletePayload = {
@@ -65,15 +67,6 @@ function bodyTooLarge(request: Request): boolean {
   if (raw === null || !/^\d+$/.test(raw)) return false;
   const length = Number(raw);
   return !Number.isSafeInteger(length) || length > MAX_DELETE_BODY_BYTES;
-}
-
-function wantsJson(request: Request): boolean {
-  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (contentType === "application/json") return true;
-  return request.headers
-    .get("accept")
-    ?.split(",")
-    .some((value) => value.trim().toLowerCase().startsWith("application/json")) ?? false;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -144,7 +137,12 @@ function payloadFromJson(value: unknown): DeletePayload | null {
   };
 }
 
-function payloadFromForm(form: FormData): DeletePayload {
+type FormFields = {
+  get(name: string): unknown;
+  getAll(name: string): unknown[];
+};
+
+function payloadFromForm(form: FormFields): DeletePayload {
   const ids = form.getAll("photo_id");
   const aliases = ids.length > 0 ? ids : form.getAll("photo_ids");
   const action = form.get("action") ?? form.get("intent") ?? form.get("decision");
@@ -163,14 +161,85 @@ function payloadFromForm(form: FormData): DeletePayload {
   };
 }
 
-async function readPayload(request: Request): Promise<DeletePayload | null> {
-  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+type ReadBodyResult =
+  | { ok: true; text: string }
+  | { ok: false; message: string; status: number };
+
+type ReadPayloadResult =
+  | { ok: true; payload: DeletePayload }
+  | { ok: false; message: string; status: number };
+
+/** Enforce the request limit while streaming, even without Content-Length. */
+async function readBody(request: Request): Promise<ReadBodyResult> {
+  if (!request.body) return { ok: true, text: "" };
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = "";
   try {
-    if (contentType === "application/json") return payloadFromJson(await request.json());
-    return payloadFromForm(await request.formData());
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      if (!chunk.value) continue;
+      bytesRead += chunk.value.byteLength;
+      if (bytesRead > MAX_DELETE_BODY_BYTES) {
+        try {
+          await reader.cancel();
+        } catch {
+          // The size violation remains authoritative if cancellation fails.
+        }
+        return { ok: false, message: TOO_LARGE_BODY_MESSAGE, status: 413 };
+      }
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    text += decoder.decode();
+    return { ok: true, text };
   } catch {
-    return null;
+    try {
+      await reader.cancel();
+    } catch {
+      // Preserve the original body-read failure.
+    }
+    return { ok: false, message: UNREADABLE_BODY_MESSAGE, status: 400 };
   }
+}
+
+async function readPayload(request: Request): Promise<ReadPayloadResult> {
+  if (bodyTooLarge(request)) {
+    return { ok: false, message: TOO_LARGE_BODY_MESSAGE, status: 413 };
+  }
+
+  const body = await readBody(request);
+  if (!body.ok) return body;
+
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  const looksLikeJson = (contentType === undefined || contentType === "")
+    && body.text.trimStart().startsWith("{");
+  if (contentType === "application/json" || looksLikeJson) {
+    try {
+      const payload = payloadFromJson(JSON.parse(body.text));
+      return payload === null
+        ? { ok: false, message: UNREADABLE_BODY_MESSAGE, status: 400 }
+        : { ok: true, payload };
+    } catch {
+      return { ok: false, message: UNREADABLE_BODY_MESSAGE, status: 400 };
+    }
+  }
+
+  if (
+    contentType !== undefined
+    && contentType !== ""
+    && contentType !== "application/x-www-form-urlencoded"
+  ) {
+    return {
+      ok: false,
+      message: "Use a JSON or URL-encoded deletion request.",
+      status: 415,
+    };
+  }
+
+  return { ok: true, payload: payloadFromForm(new URLSearchParams(body.text)) };
 }
 
 /**
@@ -179,18 +248,10 @@ async function readPayload(request: Request): Promise<DeletePayload | null> {
  * value reaches a Location header.
  */
 export function safeReturnPath(raw: unknown, request: Request, fallback = "/my-photos"): string {
-  if (typeof raw !== "string" || raw.length === 0) return fallback;
-  if (
-    !raw.startsWith("/")
-    || raw.startsWith("//")
-    || raw.includes("\\")
-    || /[\u0000-\u001f\u007f]/.test(raw)
-  ) {
-    return fallback;
-  }
+  const safe = safeRelativePath(raw, fallback);
 
   try {
-    const candidate = new URL(raw, request.url);
+    const candidate = new URL(safe, request.url);
     if (candidate.origin !== new URL(request.url).origin) return fallback;
     return `${candidate.pathname}${candidate.search}${candidate.hash}`;
   } catch {
@@ -391,15 +452,20 @@ function renderCollection(request: Request, user: SessionUser, result: Awaited<R
 }
 
 async function handlePost(request: Request, env: Env, user: SessionUser): Promise<Response> {
-  const asJson = wantsJson(request);
-  if (bodyTooLarge(request)) {
-    return renderRouteError(request, user, "That deletion request is too large.", 413, "/my-photos", asJson);
-  }
+  const asJson = wantsJsonResponse(request);
 
-  const payload = await readPayload(request);
-  if (payload === null) {
-    return renderRouteError(request, user, UNREADABLE_BODY_MESSAGE, 400, "/my-photos", asJson);
+  const parsedPayload = await readPayload(request);
+  if (!parsedPayload.ok) {
+    return renderRouteError(
+      request,
+      user,
+      parsedPayload.message,
+      parsedPayload.status,
+      "/my-photos",
+      asJson,
+    );
   }
+  const { payload } = parsedPayload;
 
   const returnTo = safeReturnPath(payload.returnTo, request);
   if (payload.cancel) {
@@ -457,8 +523,11 @@ export async function renderMyPhotosPage(rawPage: unknown = 1): Promise<Response
 
   const sessionUser = await getSessionUser(env, request);
   if (!sessionUser) {
-    if (request.method === "POST" && wantsJson(request)) return jsonError(LOGIN_MESSAGE, 401);
-    return redirect("/login");
+    const login = loginPath(requestRelativePath(request, "/my-photos"));
+    if (request.method === "POST" && wantsJsonResponse(request)) {
+      return jsonResponse({ error: LOGIN_MESSAGE, login, loginUrl: login }, 401);
+    }
+    return redirect(login);
   }
 
   if (request.method === "POST") return handlePost(request, env, sessionUser);

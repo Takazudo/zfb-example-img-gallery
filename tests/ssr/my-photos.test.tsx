@@ -78,7 +78,7 @@ describe("My Photos collection SSR", () => {
     mocks.getSessionUser.mockResolvedValueOnce(null);
     const response = await MyPhotosPage();
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("/login");
+    expect(response.headers.get("location")).toBe("/login?next=%2Fmy-photos");
     expect(mocks.listUserPhotoPage).not.toHaveBeenCalled();
   });
 

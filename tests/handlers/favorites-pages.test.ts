@@ -111,6 +111,7 @@ describe("Favorites collection routes", () => {
     expect(html).toContain('data-gallery-page="1"');
     expect(html).toContain('data-gallery-total-items="49"');
     expect(html).toContain('data-gallery-next-url="/favorites/page/2"');
+    expect(html).toMatch(/data-gallery-feed="true"[\s\S]*data-favorites-collection-heading="true"[\s\S]*49 favorites/);
     expect(html).toContain('href="/favorites" aria-current="page"');
     expect(html).toContain('rel="canonical"');
     expect(html).toContain("https://gallery.example/favorites");

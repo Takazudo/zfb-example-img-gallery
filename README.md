@@ -15,8 +15,8 @@ The source exposes `SITE_NAME` and `SITE_TWITTER` (`Stillframe` and `@takazudo`)
 - Supports registration, login, and POST-only logout.
 - Lets a signed-in user change their username, upload an avatar, or delete their account.
 - Lets a signed-in user upload a photo with a title, plain-text description, and comma-separated tags.
-- Lets signed-in viewers keep current Favorites: every card/detail read shows the all-viewer favorite count separately from the current viewer's membership, and the enhanced control announces add/remove results without changing the star geometry.
-- Lets photo owners delete one photo or up to 100 loaded photos from My Photos. The owner-only controls use an accessible confirmation dialog when JavaScript is available and ordinary confirmation pages when it is not.
+- Lets signed-in viewers keep current Favorites: every card/detail read shows the current viewer's membership, detail pages additionally show the all-viewer favorite count, and the enhanced control announces add/remove results without changing the star geometry.
+- Lets photo owners delete their cards throughout the gallery or delete up to 100 loaded photos from My Photos. The owner-only controls use an accessible confirmation dialog when JavaScript is available and ordinary confirmation pages when it is not.
 - Provides one global Display settings dialog for the gallery thumbnail ratio (Original, Portrait 3:4, Square 1:1, or Landscape 4:3) and width (Small, Medium, or Large). Choices are stored in local storage, synchronized across tabs, and applied to cards loaded later.
 - Enhances the server-rendered 24-item pages with progressive infinite loading: a visible loading/error/end status, an automatic IntersectionObserver path, and a manual `Load next … photos` path. Each history entry keeps a bounded expanded-gallery snapshot so router navigation and Back can restore it; the canonical `/page/[page]` links remain the no-JavaScript fallback.
 
@@ -52,6 +52,7 @@ run_worker_first = [
   "/authors", "/authors/*",
   "/tags", "/tags/*",
   "/favorites", "/favorites/*",
+  "/my-photos", "/my-photos/*",
   "/img/*",
   "/og/*",
   "/robots.txt", "/sitemap.xml",
@@ -69,7 +70,7 @@ zfb rewrites generated (SSG) HTML to hashed assets, but dynamic documents return
 
 The shared layout mounts zfb's `ClientRouter` with animated fallback, `data-theme` preservation, and traversal refetching. Refetching matters because these pages are per-request SSR: auth, D1 content, active navigation, title/meta, and header controls are server-authored and must be replaced on every swap, including repeated history URLs. The router keeps its accessible route announcer. Cloudflare Static Assets runs assets before the Worker unless a path matches `assets.run_worker_first`; this project therefore lists every SSR root and wildcard explicitly. See the [Worker-first routing reference](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/) when adding another dynamic prefix.
 
-Forms intentionally have no `data-zfb-reload`. With the runtime active, eligible same-origin GET forms navigate with encoded queries; non-GET methods are transported as POST, multipart bodies remain `FormData`, URL-encoded forms keep their encoding, redirects update the final URL, and validation/error HTML swaps without replaying a mutation. Ordinary form markup remains the no-JavaScript fallback.
+Ordinary route forms remain eligible for zfb navigation. With the runtime active, same-origin GET forms navigate with encoded queries; non-GET methods are transported as POST, multipart bodies remain `FormData`, URL-encoded forms keep their encoding, redirects update the final URL, and validation/error HTML swaps without replaying a mutation. Favorite and delete action forms carry `data-zfb-reload` because their capture-phase controllers own the one enhanced fetch; the same ordinary form markup remains the no-JavaScript fallback.
 
 `zfb:after-swap` is a DOM-swap milestone: it fires before incoming scripts execute and before new islands mount or hydrate. Code that needs a newly hydrated island must use that island's own lifecycle rather than treating `zfb:after-swap` as a hydration event.
 
@@ -81,7 +82,7 @@ The first server-rendered page always contains up to 24 cards and a canonical ne
 
 Favorite state is a current membership read model, not an audit history. `GET` collection/detail reads calculate the public count from all rows and the viewer membership from the viewer id; `POST /favorites` accepts `photoId` plus an explicit `favorited`/`unfavorited` state and returns `{ photoId, favorited, favoriteCount }` for same-origin JSON callers. The HTML form uses the same fields and redirects to its safe `return_to` path. The top-center live toast says `You made this a favorite!` or `Removed from favorites.` and remains a plain status region for screen readers.
 
-Owner deletion is available only on `/my-photos` cards and the owner's `/photos/[id]` detail action. `POST /my-photos` accepts one or more owned ids, requires explicit confirmation, and caps a bulk operation at 100 ids. The JSON enhancement returns deleted ids plus a safe redirect target; the ordinary form first renders a confirmation page, so Escape/cancel and no-JavaScript confirmation never mutate. The purge deletes originals, thumbnails, and derived objects from R2 first, then removes D1 links/rows in one batch. R2 object deletes are strongly consistent through the binding, but the R2 and D1 operations are not one cross-service transaction: a failed R2 step leaves D1 intact for a safe retry, while a failed D1 batch is reported as retryable. See Cloudflare's [R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/), [R2 delete API](https://developers.cloudflare.com/r2/objects/delete-objects/), and [D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/) references when operating storage.
+Owner deletion is available on the owner's cards throughout gallery feeds and on the owner's `/photos/[id]` detail action; My Photos additionally supplies selection and bulk controls. `POST /my-photos` accepts one or more owned ids, requires explicit confirmation, and caps a bulk operation at 100 ids. The JSON enhancement returns deleted ids plus a safe redirect target; the ordinary form first renders a confirmation page, so Escape/cancel and no-JavaScript confirmation never mutate. The purge deletes originals, thumbnails, and derived objects from R2 first, then removes D1 links/rows in one batch. R2 object deletes are strongly consistent through the binding, but the R2 and D1 operations are not one cross-service transaction: a failed R2 step leaves D1 intact for a safe retry, while a failed D1 batch is reported as retryable. See Cloudflare's [R2 consistency](https://developers.cloudflare.com/r2/reference/consistency/), [R2 delete API](https://developers.cloudflare.com/r2/objects/delete-objects/), and [D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/) references when operating storage.
 
 ## Routes
 
@@ -111,7 +112,7 @@ The protected mutation contracts are `POST /favorites` (explicit current members
 
 ## Data model
 
-The initial D1 migration creates these tables and columns:
+The ordered D1 migrations create these tables and columns:
 
 ```text
 users(id, username UNIQUE, email UNIQUE, password_hash, password_salt, avatar_key NULL, created_at)

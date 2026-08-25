@@ -33,6 +33,17 @@ function selectedInputs(document: Document): HTMLInputElement[] {
   return [...document.querySelectorAll<HTMLInputElement>('[data-photo-select="true"]')];
 }
 
+/** Use the live route for enhanced actions; appended page markup may carry a
+ * different canonical fallback for ordinary, no-JavaScript form submission. */
+function currentReturnPath(currentUrl: string, fallback: string): string {
+  try {
+    const current = new URL(currentUrl);
+    return `${current.pathname}${current.search}${current.hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
 export class PhotoActionsController {
   readonly #env: PhotoActionsEnvironment;
   readonly #selected = new Set<number>();
@@ -127,7 +138,8 @@ export class PhotoActionsController {
     const submitter = event.submitter as HTMLElement | null;
     const button = submitter ?? form.querySelector<HTMLElement>('button[type="submit"]');
     const title = bulk ? null : button?.dataset.photoTitle ?? null;
-    const returnTo = form.querySelector<HTMLInputElement>('input[name="return_to"]')?.value || this.#env.currentUrl();
+    const formReturnTo = form.querySelector<HTMLInputElement>('input[name="return_to"]')?.value || "/my-photos";
+    const returnTo = currentReturnPath(this.#env.currentUrl(), formReturnTo);
     this.#pending = { ids, title, returnTo, invoker: button };
     this.#env.message.textContent = ids.length === 1
       ? `Delete “${title ?? "this photo"}” permanently? This cannot be undone.`
@@ -188,7 +200,12 @@ export class PhotoActionsController {
         this.#env.navigate(body.redirectTo);
         return;
       }
-      const refreshed = await this.#env.refreshFeed();
+      let refreshed = false;
+      try {
+        refreshed = await this.#env.refreshFeed();
+      } catch {
+        // The server mutation succeeded; fall back to a normal navigation.
+      }
       if (!refreshed) this.#env.navigate(body.redirectTo);
       else this.reconcile();
     } catch {

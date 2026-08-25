@@ -44,8 +44,10 @@ function defaultEnvironment(
     fetch: globalThis.fetch.bind(globalThis),
     snapshotStore,
     toast,
-    setTimer: setTimeout,
-    clearTimer: clearTimeout,
+    // Window timer methods can enforce a receiver brand check when invoked as
+    // environment-object methods; bind them to the browser global once.
+    setTimer: globalThis.setTimeout.bind(globalThis),
+    clearTimer: globalThis.clearTimeout.bind(globalThis),
     ...(refreshFavoritesFeed ? { refreshFavoritesFeed } : {}),
   };
 }
@@ -173,7 +175,11 @@ export class FavoriteController {
         // The mutation is already authoritative. A secondary refresh failure
         // must not relabel that successful write as a mutation failure; the
         // destroyed infinite controller leaves the normal page link fallback.
-        await this.#env.refreshFavoritesFeed?.();
+        try {
+          await this.#env.refreshFavoritesFeed?.();
+        } catch {
+          // Preserve the successful mutation and toast if reconciliation fails.
+        }
       }
     } catch {
       this.#showToast(FAVORITE_FAILURE_MESSAGE);

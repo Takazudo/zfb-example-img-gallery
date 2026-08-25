@@ -50,6 +50,8 @@ type Props = {
   photos: PhotoRow[];
   /** Empty-state content remains server-authored inside the marked feed. */
   empty?: ComponentChildren;
+  /** Server-authored collection heading refreshed with offset-sensitive feeds. */
+  header?: ComponentChildren;
   viewerId?: number | null;
   returnTo?: string;
   selectable?: boolean;
@@ -62,7 +64,7 @@ type Props = {
  * the client enhancement can discover and replace the marked metadata later,
  * while direct page URLs remain useful with JavaScript disabled.
  */
-export function PhotoFeed({ scope, page, nextHref, photos, empty, viewerId = null, returnTo = "/", selectable = false }: Props) {
+export function PhotoFeed({ scope, page, nextHref, photos, empty, header, viewerId = null, returnTo = "/", selectable = false }: Props) {
   const nextCount = remainingPhotoCount(page);
   const hasNext = page.hasNext && nextCount > 0;
   const terminal = !hasNext;
@@ -83,6 +85,7 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty, viewerId = nul
       data-gallery-next-count={String(nextCount)}
       data-gallery-terminal={String(terminal)}
     >
+      {header ?? null}
       {photos.length > 0 ? (
         <PhotoGrid>
           {photos.map((photo, index) => (

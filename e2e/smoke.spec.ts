@@ -86,7 +86,7 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
 
   await page.goto("/");
-  const gridPhoto = page.locator(`a[href="${photoPath}"]`);
+  const gridPhoto = page.locator(`[data-photo-card-media-wrapper] > a[href="${photoPath}"]`);
   await expect(gridPhoto).toBeVisible();
   await expect(gridPhoto.locator("img")).toHaveAttribute("width", /\d+/);
   await expect(gridPhoto.locator("img")).toHaveAttribute("height", /\d+/);
@@ -100,7 +100,7 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
 
   await page.goto(`/authors/${username}`);
   await expect(page.locator("h1")).toHaveText(`@${username}`);
-  await expect(page.locator(`a[href="${photoPath}"]`)).toBeVisible();
+  await expect(page.locator(`[data-photo-card-media-wrapper] > a[href="${photoPath}"]`)).toBeVisible();
 
   await page.goto(photoPath);
   await expect(page.locator("h1")).toContainText(title);
@@ -124,7 +124,7 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
 
   await page.goto("/tags/e2e-smoke");
   await expect(page.locator("h1")).toHaveText("#e2e-smoke");
-  await expect(page.locator(`a[href="${photoPath}"]`)).toBeVisible();
+  await expect(page.locator(`[data-photo-card-media-wrapper] > a[href="${photoPath}"]`)).toBeVisible();
 
   // The meta tag is authoritative for the path and generation. Local zfb keeps the
   // production canonical origin, so retain that path while addressing the

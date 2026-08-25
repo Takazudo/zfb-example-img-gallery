@@ -165,10 +165,15 @@ function feedMetadata(feed: Element): FeedMetadata | null {
   return parseFeedMetadata((feed as HTMLElement).dataset as FeedDataset);
 }
 
-function feedElements(root: ParentNode): { feed: HTMLElement; grid: HTMLElement } | null {
+function singleFeed(root: ParentNode): HTMLElement | null {
   const feeds = root.querySelectorAll(FEED_SELECTOR);
   if (feeds.length !== 1) return null;
-  const feed = feeds[0] as HTMLElement;
+  return feeds[0] as HTMLElement;
+}
+
+function feedElements(root: ParentNode): { feed: HTMLElement; grid: HTMLElement } | null {
+  const feed = singleFeed(root);
+  if (!feed) return null;
   const grids = feed.querySelectorAll(GRID_SELECTOR);
   if (grids.length !== 1) return null;
   return { feed, grid: grids[0] as HTMLElement };
@@ -349,9 +354,9 @@ export async function refreshActiveGalleryFeed(
 ): Promise<boolean> {
   const env = environment ?? defaultEnvironment();
   if (!env) return false;
-  const currentElements = feedElements(env.document);
-  if (!currentElements) return false;
-  const current = feedMetadata(currentElements.feed);
+  const currentFeed = singleFeed(env.document);
+  if (!currentFeed) return false;
+  const current = feedMetadata(currentFeed);
   if (!current) return false;
   try {
     const response = await env.fetch(env.location.href, {
@@ -361,11 +366,11 @@ export async function refreshActiveGalleryFeed(
     if (response.redirected && response.url && response.url !== env.location.href) return false;
     const mediaType = (response.headers.get("content-type") ?? "text/html").split(";", 1)[0]!.trim() as DOMParserSupportedType;
     const incomingDocument = env.parseHtml(await response.text(), mediaType);
-    const incomingElements = feedElements(incomingDocument);
-    const incoming = incomingElements ? feedMetadata(incomingElements.feed) : null;
-    if (!incomingElements || !incoming || incoming.scope !== current.scope) return false;
-    const imported = env.document.importNode(incomingElements.feed, true) as HTMLElement;
-    currentElements.feed.replaceWith(imported);
+    const incomingFeed = singleFeed(incomingDocument);
+    const incoming = incomingFeed ? feedMetadata(incomingFeed) : null;
+    if (!incomingFeed || !incoming || incoming.scope !== current.scope) return false;
+    const imported = env.document.importNode(incomingFeed, true) as HTMLElement;
+    currentFeed.replaceWith(imported);
     return true;
   } catch {
     return false;

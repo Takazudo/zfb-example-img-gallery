@@ -93,7 +93,9 @@ async function upload(page: Page, title: string): Promise<string> {
 function translationY(transform: string, translate: string): number {
   if (translate !== "none") {
     const parts = translate.trim().split(/\s+/);
-    const rawY = parts.length > 1 ? parts[1] : parts[0];
+    // The one-value form of the individual `translate` property is X-only;
+    // Y defaults to zero. Tailwind emits two values while Y is nonzero.
+    const rawY = parts.length > 1 ? parts[1] : "0";
     const value = Number.parseFloat(rawY ?? "");
     if (Number.isFinite(value)) return value;
   }
@@ -304,7 +306,6 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
     const style = getComputedStyle(element);
     return {
       position: style.position,
-      left: style.left,
       top: style.top,
       zIndex: style.zIndex,
       opacity: style.opacity,
@@ -312,10 +313,12 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
       translate: style.translate,
       transitionProperty: style.transitionProperty,
       transitionDuration: style.transitionDuration,
+      rect: element.getBoundingClientRect().toJSON(),
+      viewportWidth: window.innerWidth,
     };
   });
   expect(normalBefore.position).toBe("fixed");
-  expect(normalBefore.left).toBe("50%");
+  expect(Math.abs(normalBefore.rect.left + normalBefore.rect.width / 2 - normalBefore.viewportWidth / 2)).toBeLessThanOrEqual(1);
   expect(Number.parseFloat(normalBefore.top)).toBeGreaterThan(0);
   expect(normalBefore.zIndex).toBe("20");
   expect(normalBefore.opacity).toBe("0");
@@ -380,9 +383,24 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
   await page.goto("/favorites");
   await waitForRuntime(page);
   await expect(photoCard(page, photoPaths[0]!)).toHaveCount(1);
-  await expect(photoCard(page, photoPaths[0]!).locator('[data-favorite-form] button')).toHaveAttribute("aria-pressed", "true");
-  await softClick(page, photoPaths[0]!);
+  const favoritesListButton = photoCard(page, photoPaths[0]!).locator('[data-favorite-form] button');
+  await expect(favoritesListButton).toHaveAttribute("aria-pressed", "true");
+  const favoritesListPosts = mutationPosts(page, "/favorites");
+  await resetSwapProbe(page);
+  await favoritesListButton.click();
+  await expect(photoCard(page, photoPaths[0]!)).toHaveCount(0);
+  await expect(page.locator('[data-favorites-collection-heading="true"]')).toContainText("0 favorites");
+  await expect.poll(() => favoritesListPosts.count).toBe(1);
+  expect(await swapCount(page)).toBe(0);
+  favoritesListPosts.dispose();
+
+  await page.goto(photoPaths[0]!);
   await waitForRuntime(page);
+  await expect(page.locator('[data-favorite-count="true"]')).toHaveText("1 favorite");
+  const restoredOwnerFavorite = page.locator('[data-testid="photo-detail"] [data-favorite-control] button');
+  await expect(restoredOwnerFavorite).toHaveAttribute("aria-pressed", "false");
+  await restoredOwnerFavorite.click();
+  await expect(restoredOwnerFavorite).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator('[data-favorite-count="true"]')).toHaveText("2 favorites");
 
   // A traversal after the second user changes the count must still show the
@@ -507,6 +525,11 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
   await expect(photoCard(page, photoPaths[0]!)).toHaveCount(0);
 
   // A non-owner sees the public card/detail but none of the owner delete UI.
+  // Start the identity switch from a settled direct navigation: the stale-card
+  // assertion above can complete while zfb is still finishing its traversal
+  // refetch, which would otherwise detach the header during the logout click.
+  await page.goto("/my-photos");
+  await waitForRuntime(page);
   await signOut(page);
   await signIn(page, viewer);
   await page.goto(photoPaths[1]!);

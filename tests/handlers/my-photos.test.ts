@@ -118,6 +118,16 @@ describe("/my-photos handler", () => {
     expect(mocks.purgePhotos).not.toHaveBeenCalled();
   });
 
+  it("bounds an otherwise safe return path before writing a Location header", async () => {
+    const response = await invoke(request(
+      "POST",
+      form([["photo_id", "1"], ["cancel", "1"], ["return_to", `/${"a".repeat(2_049)}`]]),
+    ));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/my-photos");
+    expect(mocks.purgePhotos).not.toHaveBeenCalled();
+  });
+
   it("deduplicates JSON ids, shares the owner purge path, and protects a deleted detail target", async () => {
     mocks.purgePhotos.mockResolvedValueOnce({ ok: true, deletedIds: [1] } satisfies PhotoPurgeResult);
     const response = await invoke(request(
@@ -196,6 +206,20 @@ describe("/my-photos handler", () => {
     expect(mocks.purgePhotos).not.toHaveBeenCalled();
   });
 
+  it("enforces the body limit when Content-Length is absent", async () => {
+    const req = request(
+      "POST",
+      `photo_id=1&padding=${"x".repeat(64 * 1024)}`,
+      { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+    );
+    expect(req.headers.get("content-length")).toBeNull();
+
+    const response = await invoke(req);
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "That deletion request is too large." });
+    expect(mocks.purgePhotos).not.toHaveBeenCalled();
+  });
+
   it("returns JSON 401 for an anonymous enhanced request", async () => {
     mocks.getSessionUser.mockResolvedValueOnce(null);
     const response = await invoke(request(
@@ -204,6 +228,20 @@ describe("/my-photos handler", () => {
       { "content-type": "application/json", accept: "application/json" },
     ));
     expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: "Sign in to manage your photos." });
+    expect(await response.json()).toEqual({
+      error: "Sign in to manage your photos.",
+      login: "/login?next=%2Fmy-photos",
+      loginUrl: "/login?next=%2Fmy-photos",
+    });
+  });
+
+  it("preserves the requested My Photos page for anonymous login redirects", async () => {
+    mocks.getSessionUser.mockResolvedValueOnce(null);
+    const response = await invoke(request("GET", undefined, undefined, "/my-photos/page/2?view=grid"));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "/login?next=%2Fmy-photos%2Fpage%2F2%3Fview%3Dgrid",
+    );
+    expect(mocks.listUserPhotoPage).not.toHaveBeenCalled();
   });
 });

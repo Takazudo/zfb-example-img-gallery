@@ -117,7 +117,11 @@ async function readBody(request: Request): Promise<ReadBodyResult> {
       if (!chunk.value) continue;
       bytesRead += chunk.value.byteLength;
       if (bytesRead > MAX_FAVORITE_BODY_BYTES) {
-        await reader.cancel();
+        try {
+          await reader.cancel();
+        } catch {
+          // The size violation remains authoritative if cancellation fails.
+        }
         return { ok: false, message: "Request body is too large.", status: 413 };
       }
       text += decoder.decode(chunk.value, { stream: true });
@@ -261,23 +265,23 @@ export function parseFavoritesPageParam(raw: unknown): number {
 
 function FavoritesBody({ page, userId, returnTo }: { page: Awaited<ReturnType<typeof listFavoritePage>>; userId: number; returnTo: string }) {
   return (
-    <>
-      <section class="mb-vsp-lg flex flex-col gap-vsp-2xs">
-        <h1 class="text-display font-semibold tracking-tight">Favorites</h1>
-        <p class="text-body text-ink-soft">
-          {page.totalItems} {page.totalItems === 1 ? "favorite" : "favorites"}
-        </p>
-      </section>
-      <PhotoFeed
-        scope={favoritesFeedScope(userId)}
-        page={page}
-        nextHref={`/favorites/page/${page.page + 1}`}
-        photos={page.items}
-        viewerId={userId}
-        returnTo={returnTo}
-        empty={<EmptyState title="No favorites yet">Favorite a photo to find it here.</EmptyState>}
-      />
-    </>
+    <PhotoFeed
+      scope={favoritesFeedScope(userId)}
+      page={page}
+      nextHref={`/favorites/page/${page.page + 1}`}
+      photos={page.items}
+      viewerId={userId}
+      returnTo={returnTo}
+      header={(
+        <section data-favorites-collection-heading="true" class="mb-vsp-lg flex flex-col gap-vsp-2xs">
+          <h1 class="text-display font-semibold tracking-tight">Favorites</h1>
+          <p class="text-body text-ink-soft">
+            {page.totalItems} {page.totalItems === 1 ? "favorite" : "favorites"}
+          </p>
+        </section>
+      )}
+      empty={<EmptyState title="No favorites yet">Favorite a photo to find it here.</EmptyState>}
+    />
   );
 }
 

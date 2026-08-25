@@ -150,6 +150,40 @@ describe("infinite gallery response invariants", () => {
     expect(replacedWith).toBe(incomingFeed);
   });
 
+  it("replaces a nonempty feed when the authoritative collection becomes empty", async () => {
+    let replacedWith: unknown = null;
+    const currentFeed = {
+      dataset: {
+        galleryScope: "favorites:7|viewer:7", galleryPage: "1", galleryTotalPages: "1",
+        galleryTotalItems: "1", galleryPageSize: "24", galleryNextUrl: "",
+        galleryNextCount: "0", galleryTerminal: "true",
+      },
+      replaceWith: (value: unknown) => { replacedWith = value; },
+    };
+    const emptyFeed = {
+      dataset: {
+        galleryScope: "favorites:7|viewer:7", galleryPage: "1", galleryTotalPages: "1",
+        galleryTotalItems: "0", galleryPageSize: "24", galleryNextUrl: "",
+        galleryNextCount: "0", galleryTerminal: "true",
+      },
+    };
+    const document = {
+      querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [currentFeed] : [],
+      importNode: (node: unknown) => node,
+    };
+    const incomingDocument = {
+      querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [emptyFeed] : [],
+    };
+
+    await expect(refreshActiveGalleryFeed({
+      document: document as unknown as Document,
+      location: { href: "https://example.test/favorites", origin: "https://example.test" } as Location,
+      fetch: (async () => new Response("<html></html>", { headers: { "content-type": "text/html" } })) as typeof fetch,
+      parseHtml: () => incomingDocument as unknown as Document,
+    })).resolves.toBe(true);
+    expect(replacedWith).toBe(emptyFeed);
+  });
+
   it("deduplicates against rendered IDs and within the batch without changing order", () => {
     expect(unseenPhotoIds(["1", "2"], ["2", "3", "3", "4"])).toEqual(["3", "4"]);
   });

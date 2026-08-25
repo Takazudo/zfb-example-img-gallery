@@ -82,7 +82,7 @@ These are the invariants that can fail silently and belong in the build/integrat
 - The client artifact inventory is exactly one generated islands entry, its reachable generated chunks/resources, and the byte-identical stable `/assets/islands.js` alias. An unrelated JavaScript artifact fails the scan.
 - `dist/404.html` has the marked pre-paint bootstrap, router meta/style output, theme island marker, and one injected hashed module entry, with no stable-module duplicate or arbitrary executable script. JSON-LD remains non-executable structured data.
 - Dynamic `GalleryLayout` documents have the bootstrap before `/assets/app.css`, the router policy/announcer, theme island, and exactly one stable module entry. The SSG layout mode suppresses that stable tag so zfb can inject its hashed entry.
-- A navigation-header (sec-fetch-mode: navigate) request against every bare collection root in run_worker_first — /, /authors, /tags, and /favorites — is answered by the Worker, not by dist/404.html. This is the failure that looks fine to curl and is broken for real browser navigation.
+- A navigation-header (sec-fetch-mode: navigate) request against every bare collection root in run_worker_first — /, /authors, /tags, /favorites, and /my-photos — is answered by the Worker, not by dist/404.html. This is the failure that looks fine to curl and is broken for real browser navigation.
 
 `scripts/assert-ssr-invariants.mjs` checks the source and built-output invariants. The test suite also covers collection-root navigation headers through the Worker entry point.
 

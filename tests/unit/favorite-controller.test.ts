@@ -61,7 +61,12 @@ function control(photoId: number, favorited = false) {
   return { form, state, button, path };
 }
 
-function harness(options: { favoritesFeed?: boolean; response?: Response | Promise<Response>; refreshSuccess?: boolean } = {}) {
+function harness(options: {
+  favoritesFeed?: boolean;
+  response?: Response | Promise<Response>;
+  refreshSuccess?: boolean;
+  refreshReject?: boolean;
+} = {}) {
   const controls = [control(7), control(7)];
   const count = new FakeElement();
   count.dataset = { favoriteCount: "true", photoId: "7", favoriteCountValue: "2" };
@@ -85,7 +90,10 @@ function harness(options: { favoritesFeed?: boolean; response?: Response | Promi
   const toast = new FakeElement();
   const timerCallbacks: Array<() => void> = [];
   const invalidateAll = vi.fn();
-  const refreshFavoritesFeed = vi.fn(async () => options.refreshSuccess ?? true);
+  const refreshFavoritesFeed = vi.fn(async () => {
+    if (options.refreshReject) throw new Error("refresh failed after mutation");
+    return options.refreshSuccess ?? true;
+  });
   const fetchMock = vi.fn(async () => options.response ?? new Response(JSON.stringify({ photoId: 7, favorited: true, favoriteCount: 3 }), {
     status: 200,
     headers: { "content-type": "application/json" },
@@ -182,6 +190,19 @@ describe("favorite controller", () => {
     const h = harness({
       favoritesFeed: true,
       refreshSuccess: false,
+      response: new Response(JSON.stringify({ photoId: 7, favorited: false, favoriteCount: 1 }), { status: 200 }),
+    });
+    h.controls[0]!.state.value = "unfavorited";
+    h.submit();
+    await h.controller.settled();
+    expect(h.refreshFavoritesFeed).toHaveBeenCalledOnce();
+    expect(h.toast.textContent).toBe(UNFAVORITE_SUCCESS_MESSAGE);
+  });
+
+  it("does not misreport a confirmed removal when feed reconciliation throws", async () => {
+    const h = harness({
+      favoritesFeed: true,
+      refreshReject: true,
       response: new Response(JSON.stringify({ photoId: 7, favorited: false, favoriteCount: 1 }), { status: 200 }),
     });
     h.controls[0]!.state.value = "unfavorited";

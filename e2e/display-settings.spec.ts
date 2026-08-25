@@ -47,7 +47,7 @@ test("supports pointer and keyboard dialog control, every choice, Original geome
   await installMixedIntrinsicImages(page);
   await page.goto(FIXTURE_PATH);
   const trigger = page.getByRole("button", { name: "Display settings", exact: true });
-  const dialog = page.locator("dialog");
+  const dialog = page.locator('dialog[aria-labelledby="display-settings-title"]');
   await expect(trigger).toBeVisible();
 
   // Pointer open, keyboard close, and focus restoration.
@@ -144,7 +144,7 @@ test("defaults invalid or deleted storage and persists through reload, tabs, and
   await expect(page.locator("html")).not.toHaveAttribute("data-thumb-width");
 
   const trigger = page.getByRole("button", { name: "Display settings", exact: true });
-  const dialog = page.locator("dialog");
+  const dialog = page.locator('dialog[aria-labelledby="display-settings-title"]');
   await trigger.click();
   await ratioInput(page, "portrait").click();
   await widthInput(page, "large").click();
