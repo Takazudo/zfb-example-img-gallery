@@ -184,6 +184,7 @@ run_worker_first = [
   "/photos/*",
   "/authors", "/authors/*",
   "/tags", "/tags/*",
+  "/favorites", "/favorites/*",
   "/img/*",
   "/og/*",
   "/register", "/login", "/logout", "/settings", "/upload",
@@ -493,7 +494,7 @@ BASE=https://zfb-example-img-gallery.takazudomodular.com
 NAV='-H sec-fetch-mode:navigate'
 
 # Every bare collection root is listed explicitly because "/authors/*" does not match "/authors".
-for p in / /authors /tags /register /login; do
+for p in / /authors /tags /favorites /register /login; do
   printf '%s ' "$p"
   curl -s -o /dev/null -w '%{http_code}\n' $NAV "$BASE$p"        # 200 each
 done
