@@ -124,6 +124,13 @@ describe("photo purge input contract", () => {
     });
   });
 
+  it("rejects more than 100 submitted entries even when they deduplicate", () => {
+    expect(parsePhotoIds(Array.from({ length: MAX_BULK_DELETE + 1 }, () => 1))).toEqual({
+      ok: false,
+      reason: "invalid-or-unauthorized",
+    });
+  });
+
   it("chunks D1 values with reserved bindings below the 100-parameter ceiling", () => {
     const chunks = chunkD1Values(Array.from({ length: 199 }, (_, index) => index), 1);
     expect(chunks.map((chunk) => chunk.length)).toEqual([99, 99, 1]);

@@ -35,18 +35,16 @@ function parsePhotoId(value: unknown): number | null {
 
 /** Validate and deduplicate an untrusted list of photo ids without coercive parsing. */
 export function parsePhotoIds(values: readonly unknown[]): ParsedPhotoIds {
+  if (values.length === 0 || values.length > MAX_BULK_DELETE) {
+    return { ok: false, reason: "invalid-or-unauthorized" };
+  }
   const ids = new Set<number>();
   for (const value of values) {
     const id = parsePhotoId(value);
     if (id === null) return { ok: false, reason: "invalid-or-unauthorized" };
     ids.add(id);
-    if (ids.size > MAX_BULK_DELETE) {
-      return { ok: false, reason: "invalid-or-unauthorized" };
-    }
   }
-  return ids.size === 0
-    ? { ok: false, reason: "invalid-or-unauthorized" }
-    : { ok: true, ids: [...ids] };
+  return { ok: true, ids: [...ids] };
 }
 
 /** Chunk values while reserving parameter slots for other statement bindings. */
