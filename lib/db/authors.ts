@@ -1,5 +1,11 @@
 import type { Env } from "../env";
-import { PHOTO_PAGE_SIZE, resolvePage } from "./photos";
+import {
+  normalizePhotoCard,
+  normalizeViewerId,
+  PHOTO_PAGE_SIZE,
+  resolvePage,
+  type PhotoCardQueryRow,
+} from "./photos";
 import type { AuthorSummary, Paged, PhotoCard } from "../types";
 
 export type { AuthorSummary } from "../types";
@@ -70,18 +76,23 @@ export async function listPhotosByAuthor(
   userId: number,
   limit: number,
   offset: number,
+  viewerId?: number | null,
 ): Promise<PhotoCard[]> {
+  const trustedViewerId = normalizeViewerId(viewerId);
   const result = await env.DB
     .prepare(
-      `SELECT id, title, r2_key, thumb_key, width, height, blurhash, created_at
-         FROM photos
-        WHERE user_id = ?
-        ORDER BY created_at DESC, id DESC
+      `SELECT p.id, p.user_id, p.title, p.r2_key, p.thumb_key, p.width, p.height, p.blurhash,
+              p.created_at,
+              CASE WHEN vf.photo_id IS NULL THEN 0 ELSE 1 END AS is_favorited
+         FROM photos p
+         LEFT JOIN favorites vf ON vf.photo_id = p.id AND vf.user_id = ?
+        WHERE p.user_id = ?
+        ORDER BY p.created_at DESC, p.id DESC
         LIMIT ? OFFSET ?`,
     )
-    .bind(userId, limit, offset)
-    .all<PhotoCard>();
-  return result.results;
+    .bind(trustedViewerId, userId, limit, offset)
+    .all<PhotoCardQueryRow>();
+  return result.results.map(normalizePhotoCard);
 }
 
 /** Resolve a one-based author page, clamping garbage and out-of-range input. */
@@ -111,18 +122,22 @@ export async function listAuthorPhotoPage(
   env: Env,
   userId: number,
   rawPage: unknown,
+  viewerId?: number | null,
 ): Promise<Paged<PhotoCard>> {
   const totalItems = await countPhotosByAuthor(env, userId);
   const pageMeta = resolvePage(rawPage, totalItems, PHOTO_PAGE_SIZE);
+  const trustedViewerId = normalizeViewerId(viewerId);
   const result = await env.DB
     .prepare(
-      `SELECT id, title, r2_key, thumb_key, width, height, blurhash
-         FROM photos
-        WHERE user_id = ?
-        ORDER BY created_at DESC, id DESC
+      `SELECT p.id, p.user_id, p.title, p.r2_key, p.thumb_key, p.width, p.height, p.blurhash,
+              CASE WHEN vf.photo_id IS NULL THEN 0 ELSE 1 END AS is_favorited
+         FROM photos p
+         LEFT JOIN favorites vf ON vf.photo_id = p.id AND vf.user_id = ?
+        WHERE p.user_id = ?
+        ORDER BY p.created_at DESC, p.id DESC
         LIMIT ? OFFSET ?`,
     )
-    .bind(userId, pageMeta.pageSize, pageMeta.offset)
-    .all<PhotoCard>();
-  return { ...pageMeta, items: result.results };
+    .bind(trustedViewerId, userId, pageMeta.pageSize, pageMeta.offset)
+    .all<PhotoCardQueryRow>();
+  return { ...pageMeta, items: result.results.map(normalizePhotoCard) };
 }

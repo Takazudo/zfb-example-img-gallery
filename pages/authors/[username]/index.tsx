@@ -61,7 +61,7 @@ export async function renderAuthorDetail(username: string, rawPage?: string): Pr
     : null;
   if (author === null) return notFoundResponse(user);
 
-  const result = await listAuthorPhotoPage(env, author.id, rawPage);
+  const result = await listAuthorPhotoPage(env, author.id, rawPage, sessionUser?.id);
   const href = authorHref(author.username, result.page);
 
   return htmlResponse(

@@ -12,10 +12,8 @@ export const prerender = false;
 
 export default async function TopPage() {
   const { env, request } = getCloudflareContext<Env>();
-  const [sessionUser, result] = await Promise.all([
-    getSessionUser(env, request),
-    listPhotoPage(env, 1),
-  ]);
+  const sessionUser = await getSessionUser(env, request);
+  const result = await listPhotoPage(env, 1, sessionUser?.id);
   const user = sessionUser
     ? { username: sessionUser.username, avatarKey: sessionUser.avatar_key }
     : null;

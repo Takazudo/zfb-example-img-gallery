@@ -38,12 +38,16 @@ export interface Photo {
 /** One tile in a thumbnail grid. Deliberately narrow — no description, no joins. */
 export interface PhotoCard {
   id: number;
+  /** Public owner identity used by owner-only card actions. */
+  user_id: number;
   title: string;
   r2_key: string;
   thumb_key: string | null;
   width: number;
   height: number;
   blurhash: string | null;
+  /** Authoritative membership for the trusted viewer, or false anonymously. */
+  is_favorited: boolean;
 }
 
 export interface Tag {
@@ -67,6 +71,10 @@ export interface PhotoDetail {
   photo: Photo;
   author: SessionUser;
   tags: Tag[];
+  /** Count across every user, independent of the current viewer. */
+  favorite_count: number;
+  /** Membership for the trusted viewer, or false when anonymous. */
+  is_favorited: boolean;
 }
 
 /** Pagination state, independent of what is being paged. */

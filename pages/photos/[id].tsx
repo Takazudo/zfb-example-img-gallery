@@ -61,8 +61,9 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
   if (!/^[1-9]\d{0,14}$/.test(raw)) return notFound(request, null);
 
   const id = Number(raw);
-  const user = layoutUser(await getSessionUser(env, request));
-  const detail = await getPhotoDetail(env, id);
+  const sessionUser = await getSessionUser(env, request);
+  const user = layoutUser(sessionUser);
+  const detail = await getPhotoDetail(env, id, sessionUser?.id);
   if (!detail) return notFound(request, user);
 
   const { photo, author } = detail;

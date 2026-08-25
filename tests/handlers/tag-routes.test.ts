@@ -152,7 +152,7 @@ describe("tag route handlers", () => {
     );
     expect(result.status).toBe(200);
     expect(result.body).toContain("A tagged photo");
-    expect(db.bound.at(-1)).toEqual([3, 24, 0]);
+    expect(db.bound.at(-1)).toEqual([null, 3, 24, 0]);
   });
 
   it("renders every index tag, including a zero-photo tag", async () => {
