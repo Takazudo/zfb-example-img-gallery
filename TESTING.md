@@ -80,7 +80,10 @@ These are the invariants that can fail silently and belong in the build/integrat
 - Every page except pages/404.tsx exports the literal prerender = false.
 - dist/404.html is the only HTML file emitted by the build.
 - The client artifact inventory is exactly one generated islands entry, its reachable generated chunks/resources, and the byte-identical stable `/assets/islands.js` alias. An unrelated JavaScript artifact fails the scan.
+- `scripts/stable-assets.mjs` normalizes source-module diagnostics to portable project-relative identifiers before hashing the finalized bytes. The generated entry filename must be `islands-<first-eight-sha256-hex>.js`, and the scanner recomputes that digest from the final bytes rather than trusting a pre-normalization name.
+- Every client JavaScript asset reachable from that finalized entry is inspected for leaked absolute POSIX paths, Windows-drive paths, or `file:` source-module diagnostics. Ordinary web paths and URLs remain valid. The entry must retain `components/display-settings.tsx`, `components/infinite-gallery-controller.tsx`, and `components/theme-toggle.tsx`.
 - `dist/404.html` has the marked pre-paint bootstrap, router meta/style output, theme island marker, and one injected hashed module entry, with no stable-module duplicate or arbitrary executable script. JSON-LD remains non-executable structured data.
+- The SSG module reference must name the finalized reachable entry exactly; stale, dangling, or stable `/assets/islands.js` references fail. The stable alias remains byte-identical to the generated entry.
 - Dynamic `GalleryLayout` documents have the bootstrap before `/assets/app.css`, the router policy/announcer, theme island, and exactly one stable module entry. The SSG layout mode suppresses that stable tag so zfb can inject its hashed entry.
 - A navigation-header (sec-fetch-mode: navigate) request against every bare collection root in run_worker_first — /, /authors, /tags, /favorites, and /my-photos — is answered by the Worker, not by dist/404.html. This is the failure that looks fine to curl and is broken for real browser navigation.
 
