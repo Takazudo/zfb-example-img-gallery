@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { installIntersectionObserverStub, stubImageRequests, uploadPng } from "./fixtures";
-import { softClick, softSubmit } from "./navigation";
+import { ensureAccountMenuOpen, softClick, softSubmit } from "./navigation";
 
 test.describe.configure({ mode: "serial" });
 
@@ -71,6 +71,7 @@ async function signIn(page: Page, user: Credentials, expectedPath = "/"): Promis
 }
 
 async function signOut(page: Page): Promise<void> {
+  await ensureAccountMenuOpen(page);
   const result = await softSubmit(page, "/logout", "Sign out");
   expect(new URL(result.finalUrl).pathname).toBe("/");
 }

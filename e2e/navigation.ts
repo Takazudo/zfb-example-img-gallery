@@ -135,3 +135,12 @@ export async function softSubmit(
   await submitter.click();
   return finishSwapProbe(page);
 }
+
+/** Open the account popover when it is not already visible. */
+export async function ensureAccountMenuOpen(page: Page): Promise<void> {
+  const menu = page.locator("#account-menu");
+  if (await menu.isVisible()) return;
+
+  await page.getByRole("button", { name: "Account menu", exact: true }).click();
+  await expect(menu).toBeVisible();
+}
