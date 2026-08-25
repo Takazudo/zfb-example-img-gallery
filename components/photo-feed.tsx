@@ -30,6 +30,7 @@ export function remainingPhotoCount(page: Pick<PageMeta, "page" | "pageSize" | "
 function toPhotoCardPhoto(photo: PhotoRow): PhotoCardPhoto {
   return {
     id: photo.id,
+    ownerId: photo.user_id,
     title: photo.title,
     src: `/img/${photo.thumb_key ?? photo.r2_key}`,
     width: photo.width,
@@ -51,6 +52,7 @@ type Props = {
   empty?: ComponentChildren;
   viewerId?: number | null;
   returnTo?: string;
+  selectable?: boolean;
 };
 
 /**
@@ -60,7 +62,7 @@ type Props = {
  * the client enhancement can discover and replace the marked metadata later,
  * while direct page URLs remain useful with JavaScript disabled.
  */
-export function PhotoFeed({ scope, page, nextHref, photos, empty, viewerId = null, returnTo = "/" }: Props) {
+export function PhotoFeed({ scope, page, nextHref, photos, empty, viewerId = null, returnTo = "/", selectable = false }: Props) {
   const nextCount = remainingPhotoCount(page);
   const hasNext = page.hasNext && nextCount > 0;
   const terminal = !hasNext;
@@ -90,6 +92,7 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty, viewerId = nul
               priority={page.page === 1 && index === 0}
               viewerId={viewerId}
               returnTo={returnTo}
+              selectable={selectable}
             />
           ))}
         </PhotoGrid>

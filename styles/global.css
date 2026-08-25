@@ -255,7 +255,7 @@ html[data-theme="dark"] {
 }
 
 @layer components {
-  .photo-card-media-wrapper { position: relative; }
+  .photo-card-media-wrapper { position: relative; isolation: isolate; }
   .photo-card-link { display: block; }
   .photo-card-media {
     overflow: hidden;
@@ -305,6 +305,81 @@ html[data-theme="dark"] {
     position: absolute;
     right: var(--spacing-hsp-xs);
     bottom: var(--spacing-hsp-xs);
+  }
+  .photo-delete-form-card {
+    position: absolute;
+    top: var(--spacing-hsp-xs);
+    right: var(--spacing-hsp-xs);
+  }
+  .photo-delete-action,
+  .photo-select-action {
+    display: inline-flex;
+    width: 2.75rem;
+    height: 2.75rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--theme-line-strong);
+    border-radius: var(--radius-pill);
+    background: color-mix(in oklch, var(--theme-surface) 95%, transparent);
+    box-shadow: var(--shadow-card);
+  }
+  .photo-delete-action { color: var(--theme-danger); }
+  .photo-select-action {
+    position: absolute;
+    top: var(--spacing-hsp-xs);
+    left: var(--spacing-hsp-xs);
+  }
+  .photo-select-action input {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--theme-brand);
+  }
+  .photo-delete-action:disabled { cursor: wait; opacity: 0.7; }
+  .photo-selection-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-vsp-xs);
+    padding: var(--spacing-hsp-sm);
+    border: 1px solid var(--theme-line);
+    border-radius: var(--radius-md);
+    background: var(--theme-surface);
+  }
+  .photo-toolbar-action,
+  .photo-toolbar-delete,
+  .photo-detail-delete-action {
+    display: inline-flex;
+    min-height: 2.75rem;
+    cursor: pointer;
+    align-items: center;
+    border-radius: var(--radius-md);
+    padding-inline: var(--spacing-hsp-sm);
+    font-size: var(--text-small);
+    font-weight: 600;
+  }
+  .photo-toolbar-action { border: 1px solid var(--theme-line-strong); }
+  .photo-toolbar-delete,
+  .photo-detail-delete-action { background: var(--theme-danger); color: var(--theme-on-danger); }
+  .photo-toolbar-action:disabled,
+  .photo-toolbar-delete:disabled { cursor: not-allowed; opacity: 0.55; }
+  .photo-delete-dialog {
+    width: min(32rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+    border: 1px solid var(--theme-line-strong);
+    border-radius: var(--radius-lg);
+    background: var(--theme-surface);
+    color: var(--theme-ink);
+    box-shadow: var(--shadow-raised);
+  }
+  .photo-delete-dialog::backdrop { background: color-mix(in oklch, var(--theme-ink) 60%, transparent); }
+  @media (hover: hover) {
+    .photo-delete-action:hover { background: var(--theme-danger-soft); }
+    .photo-toolbar-action:hover { background: var(--theme-surface-sunken); }
+    .photo-toolbar-delete:hover,
+    .photo-detail-delete-action:hover { background: color-mix(in oklch, var(--theme-danger) 84%, var(--theme-ink)); }
   }
   .favorite-action:disabled {
     cursor: wait;
