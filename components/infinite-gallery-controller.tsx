@@ -73,7 +73,7 @@ export function InfiniteGalleryControllerIsland() {
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      class="pointer-events-none fixed left-1/2 top-vsp-sm z-20 max-w-[min(90vw,30rem)] -translate-x-1/2 -translate-y-hsp-xs rounded-md bg-ink px-hsp-md py-vsp-xs text-center text-small font-semibold text-paper opacity-0 shadow-raised transition-[opacity,transform] duration-200 ease-out data-[visible=true]:translate-y-0 data-[visible=true]:opacity-100 motion-reduce:translate-y-0 motion-reduce:transition-[opacity]"
+      class="pointer-events-none fixed left-1/2 top-vsp-sm z-20 max-w-[min(90vw,30rem)] -translate-x-1/2 -translate-y-hsp-xs rounded-md bg-ink px-hsp-md py-vsp-xs text-center text-small font-semibold text-paper opacity-0 shadow-raised transition-[opacity,translate] duration-200 ease-out data-[visible=true]:translate-y-0 data-[visible=true]:opacity-100 motion-reduce:translate-y-0 motion-reduce:transition-[opacity]"
     />
     <dialog ref={dialogRef} data-photo-delete-dialog="true" aria-labelledby="photo-delete-dialog-title" aria-describedby="photo-delete-dialog-message" class="photo-delete-dialog p-hsp-lg">
       <div class="flex flex-col gap-vsp-md">
