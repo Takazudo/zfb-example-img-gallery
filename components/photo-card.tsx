@@ -26,12 +26,12 @@ export function PhotoCard({ photo, priority = false, srcSet, sizes, viewerId = n
     <li data-photo-id={String(photo.id)} class="photo-card">
       <div data-photo-card-media-wrapper class="photo-card-media-wrapper">
         <a href={`/photos/${photo.id}`} class="photo-card-link">
-        <div data-photo-card-media class="photo-card-media">
-          <PlaceholderImage src={photo.src} alt={photo.title} width={photo.width} height={photo.height}
-            blurhash={photo.blurhash} fit="cover" wrapperClass="w-full"
-            loading={priority ? "eager" : "lazy"} decoding="async"
-            class="photo-card-image" {...responsive} />
-        </div>
+          <div data-photo-card-media class="photo-card-media">
+            <PlaceholderImage src={photo.src} alt={photo.title} width={photo.width} height={photo.height}
+              blurhash={photo.blurhash} fit="cover" wrapperClass="w-full"
+              loading={priority ? "eager" : "lazy"} decoding="async"
+              class="photo-card-image" {...responsive} />
+          </div>
         </a>
         <FavoriteControl
           photoId={photo.id}

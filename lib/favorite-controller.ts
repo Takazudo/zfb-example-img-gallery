@@ -170,8 +170,10 @@ export class FavoriteController {
       this.#env.snapshotStore.invalidateAll();
       this.#showToast(result.favorited ? FAVORITE_SUCCESS_MESSAGE : UNFAVORITE_SUCCESS_MESSAGE);
       if (!result.favorited && activeFeedIsFavorites(this.#env.document)) {
-        const refreshed = await this.#env.refreshFavoritesFeed?.();
-        if (refreshed === false) throw new Error("Could not refresh Favorites");
+        // The mutation is already authoritative. A secondary refresh failure
+        // must not relabel that successful write as a mutation failure; the
+        // destroyed infinite controller leaves the normal page link fallback.
+        await this.#env.refreshFavoritesFeed?.();
       }
     } catch {
       this.#showToast(FAVORITE_FAILURE_MESSAGE);

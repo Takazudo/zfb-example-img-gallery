@@ -1,9 +1,9 @@
 /*
- * Design tokens + base layer.
+ * Design tokens + base layer + snapshot-critical shared components.
  *
- * Tokens ONLY. UI-level class names do not belong here — every visual
- * decision that is not an element default is expressed as utility
- * classes on a Preact component.
+ * Most component styling stays as utilities on Preact markup. The photo-card
+ * and favorite-control rules are deliberately shared here so hundreds of raw
+ * SSR cards remain within the bounded history snapshot budget.
  */
 
 @import "tailwindcss";

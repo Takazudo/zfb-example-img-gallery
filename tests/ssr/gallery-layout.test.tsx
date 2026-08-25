@@ -62,7 +62,7 @@ describe("GalleryLayout", () => {
       expect(html).not.toContain('aria-haspopup="dialog"');
     }
   });
-  it("mounts the zero-DOM infinite-feed controller in the existing island runtime", () => {
+  it("mounts the single layout controller island in the existing runtime", () => {
     const html = render(<GalleryLayout>content</GalleryLayout>);
     expect(html.match(/data-zfb-island="InfiniteGalleryControllerIsland"/g)).toHaveLength(1);
     expect(html).toContain('data-zfb-island="InfiniteGalleryControllerIsland" data-when="load"');
@@ -178,6 +178,16 @@ describe("shared presentational components", () => {
     expect(html).toContain('data-gallery-terminal="false"');
     expect(html).toContain('href="/tags/foo/page/2"');
     expect(html).toContain(">Load next 1 photos</a>");
+  });
+  it("includes the trusted viewer identity in personalized collection scopes", () => {
+    const html = render(<PhotoFeed
+      scope="global"
+      viewerId={7}
+      page={{ page: 1, pageSize: 24, totalItems: 0, totalPages: 1, offset: 0, hasPrev: false, hasNext: false }}
+      nextHref="/page/2"
+      photos={[]}
+    />);
+    expect(html).toContain('data-gallery-scope="global|viewer:7"');
   });
   it("keeps an expanded placeholder-bearing cardsHtml payload below the 512 KiB entry cap", () => {
     for (const viewerId of [null, 7]) {
