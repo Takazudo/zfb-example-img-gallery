@@ -8,6 +8,7 @@ import {
   type ThemeController,
   type ThemeMode,
 } from "../lib/theme";
+import { MoonIcon, SunIcon } from "./icons";
 
 export function ThemeToggle() {
   // This fixed server/client-first value keeps hydration deterministic. The
@@ -33,29 +34,16 @@ export function ThemeToggle() {
     <button
       type="button"
       aria-label={getThemeToggleLabel(theme)}
-      class="inline-flex min-h-[2.75rem] min-w-[2.75rem] cursor-pointer items-center justify-center rounded-md text-ink transition-colors hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      class="inline-flex min-h-[2.75rem] min-w-[2.75rem] cursor-pointer items-center justify-center rounded-md group relative text-ink-soft hover:text-ink transition-colors hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
       onClick={() => controller.current?.toggle()}
     >
-      <svg
+      {theme === "light" ? <SunIcon class="size-5" /> : <MoonIcon class="size-5" />}
+      <span
         aria-hidden="true"
-        viewBox="0 0 24 24"
-        width="20"
-        height="20"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+        class="pointer-events-none absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-hsp-xs py-hsp-2xs text-micro font-medium text-paper opacity-0 transition-opacity delay-200 [.group:hover_&]:opacity-100 group-focus-visible:opacity-100 group-active:opacity-100"
       >
-        {theme === "light" ? (
-          <>
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" />
-          </>
-        ) : (
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
-        )}
-      </svg>
+        {getThemeToggleLabel(theme)}
+      </span>
     </button>
   );
 }

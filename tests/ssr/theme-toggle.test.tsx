@@ -25,4 +25,10 @@ describe("ThemeToggle", () => {
     expect(html).toContain('stroke="currentColor"');
     expect(html).not.toMatch(/<svg[^>]*(?:aria-label|role)=/);
   });
+
+  it("renders the shared light-mode glyph and matching tooltip", () => {
+    const html = render(<ThemeToggle />);
+    expect(html).toContain('<circle cx="12" cy="12" r="4">');
+    expect(html).toMatch(/<span[^>]*aria-hidden="true"[^>]*>Switch to dark mode<\/span>/);
+  });
 });

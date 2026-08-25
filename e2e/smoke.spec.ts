@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { stubImageRequests, uploadPng } from "./fixtures";
-import { softSubmit } from "./navigation";
+import { ensureAccountMenuOpen, softSubmit } from "./navigation";
 
 const runId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const username = `e2e${runId}`;
@@ -66,6 +66,7 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   }
   expect(cookies.some((cookie) => cookie.name === "sid")).toBe(true);
   await expect(page.getByRole("button", { name: /Switch to (dark|light) mode/ })).toBeVisible();
+  await ensureAccountMenuOpen(page);
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
 
   await page.goto("/upload");
@@ -83,6 +84,7 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   expect(new URL(uploadSwap.finalUrl).pathname).toMatch(/^\/photos\/\d+$/);
   const photoPath = new URL(page.url()).pathname;
   await expect(page.getByRole("button", { name: /Switch to (dark|light) mode/ })).toBeVisible();
+  await ensureAccountMenuOpen(page);
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
 
   await page.goto("/");
@@ -143,9 +145,11 @@ test("registers, uploads, browses, and fetches the social card @smoke", async ({
   const renamedAuthorLink = page
     .getByRole("navigation", { name: "Primary" })
     .locator(`a[href="/authors/${renamedUsername}"]`);
+  await ensureAccountMenuOpen(page);
   await expect(renamedAuthorLink).toBeVisible();
   await expect(renamedAuthorLink).toContainText(`@${renamedUsername}`);
 
+  await ensureAccountMenuOpen(page);
   const logoutSwap = await softSubmit(page, "/logout", "Sign out");
   expect(new URL(logoutSwap.finalUrl).pathname).toBe("/");
   expect((await page.context().cookies()).some((cookie) => cookie.name === "sid")).toBe(false);
