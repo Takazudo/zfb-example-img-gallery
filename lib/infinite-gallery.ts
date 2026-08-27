@@ -17,7 +17,7 @@ const GRID_SELECTOR = '[data-gallery-grid="true"]';
 const LINK_SELECTOR = '[data-gallery-next-link="true"]';
 const CONTROL_SELECTOR = "[data-gallery-feed-next]";
 const STATUS_SELECTOR = "[data-gallery-status]";
-const MAX_BATCH_SIZE = 24;
+export const MAX_BATCH_SIZE = 24;
 
 export type FeedMetadata = {
   scope: string;
