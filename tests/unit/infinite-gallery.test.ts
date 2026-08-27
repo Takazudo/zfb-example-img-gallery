@@ -340,6 +340,7 @@ describe("infinite gallery controller without browser-only observers", () => {
         if (this.queryLists.has(selector)) return this.queryLists.get(selector) ?? [];
         const matches = (node: FakeElement): boolean => {
           if (selector === '[data-gallery-loading-field="true"]') return node.dataset.galleryLoadingField === "true";
+          if (selector === '[data-gallery-auto-load-sentinel="true"]') return node.dataset.galleryAutoLoadSentinel === "true";
           if (selector === "img") return node.tagName === "IMG";
           return false;
         };
@@ -382,6 +383,14 @@ describe("infinite gallery controller without browser-only observers", () => {
         } else {
           this.append(node);
         }
+        return node;
+      }
+      insertBefore(node: FakeElement, reference: FakeElement | null): FakeElement {
+        if (reference === null) return this.appendChild(node);
+        const index = this.children.indexOf(reference);
+        if (index < 0) throw new Error("Reference node is not a child");
+        node.parentNode = this;
+        this.children.splice(index, 0, node);
         return node;
       }
       remove(): void {
@@ -480,8 +489,12 @@ describe("infinite gallery controller without browser-only observers", () => {
       });
       expect(controller).not.toBeNull();
       const initialField = feed.querySelector('[data-gallery-loading-field="true"]');
+      const initialSentinel = feed.querySelector('[data-gallery-auto-load-sentinel="true"]');
       expect(initialField).not.toBeNull();
-      expect(feed.children.at(-1)).toBe(initialField);
+      expect(initialSentinel).not.toBeNull();
+      expect(feed.children.at(-2)).toBe(initialField);
+      expect(feed.children.at(-1)).toBe(initialSentinel);
+      expect(initialSentinel!.style.getPropertyValue("block-size")).toBe("1px");
       expect(initialField!.children[0]!.children).toHaveLength(24);
       expect(initialField!.children[0]!.children[0]!.className).toBe("photo-card gs2");
       expect(initialField!.children[0]!.children[0]!.dataset.photoId).toBeUndefined();
@@ -554,7 +567,8 @@ describe("infinite gallery controller without browser-only observers", () => {
       expect(link.href).toBe("/page/3");
       expect(status.textContent).toBe("Loaded 24 photos.");
       const rebuiltField = feed.querySelector('[data-gallery-loading-field="true"]');
-      expect(feed.children.at(-1)).toBe(rebuiltField);
+      expect(feed.children.at(-2)).toBe(rebuiltField);
+      expect(feed.children.at(-1)).toBe(initialSentinel);
       expect(rebuiltField!.children[0]!.children).toHaveLength(2);
       expect(grid.children.slice(1).every((card) => card.animations.length === 1)).toBe(true);
       expect(grid.children[1]!.animations[0]!.options).toMatchObject({ duration: 280, delay: 0, fill: "backwards" });
@@ -590,6 +604,7 @@ describe("infinite gallery controller without browser-only observers", () => {
       reduceMotion = true;
       await expect(controller!.load("manual")).resolves.toBe(true);
       expect(feed.querySelector('[data-gallery-loading-field="true"]')).toBeNull();
+      expect(feed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
       expect(link.textContent).toBe("All photos loaded");
       expect(status.textContent).toBe("All photos loaded");
       expect(grid.children.slice(25).every((card) => card.animations.length === 0)).toBe(true);
