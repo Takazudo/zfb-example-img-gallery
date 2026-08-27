@@ -10,6 +10,7 @@ const FEED_SELECTOR = '[data-gallery-feed="true"]';
 const MAIN_GRID_SELECTOR = `${FEED_SELECTOR} > [data-gallery-grid="true"]`;
 const CARD_SELECTOR = `${MAIN_GRID_SELECTOR} > li[data-photo-id]`;
 const LOADING_FIELD_SELECTOR = '[data-gallery-loading-field="true"]';
+const AUTO_LOAD_SENTINEL_SELECTOR = '[data-gallery-auto-load-sentinel="true"]';
 
 type Layout = "uniform" | "spotlight";
 
@@ -61,6 +62,7 @@ async function fieldState(page: Page) {
     const rect = field.getBoundingClientRect();
     const tiles = [...field.querySelectorAll<HTMLElement>(":scope > .photo-grid > li.photo-card")];
     const feed = field.closest<HTMLElement>('[data-gallery-feed="true"]');
+    const sentinel = feed?.querySelector<HTMLElement>('[data-gallery-auto-load-sentinel="true"]') ?? null;
     return {
       height: rect.height,
       width: rect.width,
@@ -69,7 +71,9 @@ async function fieldState(page: Page) {
       tileHeights: tiles.map((tile) => (
         tile.querySelector<HTMLElement>(".photo-card-skeleton-fill")?.getBoundingClientRect().height ?? 0
       )),
-      isFeedLastChild: feed?.lastElementChild === field,
+      isImmediatelyBeforeSentinel: field.nextElementSibling === sentinel,
+      sentinelIsFeedLastChild: feed?.lastElementChild === sentinel,
+      sentinelBlockSize: sentinel ? getComputedStyle(sentinel).blockSize : "",
       fieldInsideMainGrid: Boolean(field.closest('[data-gallery-grid="true"]')),
     };
   });
@@ -94,7 +98,9 @@ test("reserves the next batch in uniform and spotlight layouts without moving ex
     const beforeField = await fieldState(page);
     const expectedCount = Number(await nextLink(page).getAttribute("data-gallery-next-count"));
 
-    expect(beforeField.isFeedLastChild).toBe(true);
+    expect(beforeField.isImmediatelyBeforeSentinel).toBe(true);
+    expect(beforeField.sentinelIsFeedLastChild).toBe(true);
+    expect(beforeField.sentinelBlockSize).toBe("1px");
     expect(beforeField.fieldInsideMainGrid).toBe(false);
     expect(beforeField.tileCount).toBe(expectedCount);
     expect(beforeField.tileCount).toBe(24);
@@ -110,7 +116,8 @@ test("reserves the next batch in uniform and spotlight layouts without moving ex
     // The field's metadata-derived role order must be the same order that the
     // server-authored next page uses when those tiles become real cards.
     expect(appendedClasses).toEqual(beforeField.tileClasses);
-    expect(afterField.isFeedLastChild).toBe(true);
+    expect(afterField.isImmediatelyBeforeSentinel).toBe(true);
+    expect(afterField.sentinelIsFeedLastChild).toBe(true);
     expect(afterField.fieldInsideMainGrid).toBe(false);
     expect(afterField.tileCount).toBe(Number(await nextLink(page).getAttribute("data-gallery-next-count")));
 
@@ -192,6 +199,7 @@ test("keeps Original loading tiles, reduced-motion cards, terminal removal, and 
   await nextLink(page).click();
   await expect(cards(page)).toHaveCount(50);
   await expect(loadingField(page)).toHaveCount(0);
+  await expect(page.locator(AUTO_LOAD_SENTINEL_SELECTOR)).toHaveCount(0);
   await expect(nextLink(page)).toHaveText("All photos loaded");
 
   const gridPurity = await page.locator(MAIN_GRID_SELECTOR).evaluate((grid) => {

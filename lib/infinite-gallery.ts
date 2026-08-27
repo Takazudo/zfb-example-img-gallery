@@ -23,6 +23,7 @@ const LINK_SELECTOR = '[data-gallery-next-link="true"]';
 const CONTROL_SELECTOR = "[data-gallery-feed-next]";
 const STATUS_SELECTOR = "[data-gallery-status]";
 const LOADING_FIELD_SELECTOR = '[data-gallery-loading-field="true"]';
+const AUTO_LOAD_SENTINEL_SELECTOR = '[data-gallery-auto-load-sentinel="true"]';
 export const MAX_BATCH_SIZE = 24;
 
 export type FeedMetadata = {
@@ -412,6 +413,7 @@ export class InfiniteGalleryController {
   readonly #flight = new GallerySingleFlight();
   #abortController: AbortController | null = null;
   #loadingField: HTMLElement | null = null;
+  #autoLoadSentinel: HTMLElement | null = null;
   readonly #revealAnimations = new Set<Animation>();
   #generation = 0;
   #destroyed = false;
@@ -463,9 +465,9 @@ export class InfiniteGalleryController {
     this.#rebuildLoadingField(feedMetadata(feed));
     this.#link?.addEventListener("click", this.#onClick);
     environment.document.addEventListener("zfb:before-preparation", this.#onBeforePreparation);
-    if (this.#link && environment.createObserver) {
+    if (this.#link && this.#autoLoadSentinel && environment.createObserver) {
       this.#observer = environment.createObserver(this.#onIntersection, { rootMargin: "0px 0px 240px" });
-      this.#observer.observe(this.#link);
+      this.#observer.observe(this.#autoLoadSentinel);
     }
   }
 
@@ -522,6 +524,7 @@ export class InfiniteGalleryController {
     this.#abortController?.abort();
     this.#cancelRevealAnimations();
     this.#removeLoadingField();
+    this.#removeAutoLoadSentinel();
     this.#observer?.disconnect();
     this.#link?.removeEventListener("click", this.#onClick);
     this.#env.document.removeEventListener("zfb:before-preparation", this.#onBeforePreparation);
@@ -536,7 +539,7 @@ export class InfiniteGalleryController {
   };
 
   readonly #onIntersection: IntersectionObserverCallback = (entries): void => {
-    const entry = entries.find((candidate) => candidate.target === this.#link);
+    const entry = entries.find((candidate) => candidate.target === this.#autoLoadSentinel);
     if (!entry) return;
     if (this.#autoGate.observe(entry.isIntersecting)) void this.load("observer");
   };
@@ -633,7 +636,10 @@ export class InfiniteGalleryController {
 
   #rebuildLoadingField(metadata: FeedMetadata | null): void {
     this.#removeLoadingField();
-    if (!metadata || metadata.terminal) return;
+    if (!metadata || metadata.terminal) {
+      this.#removeAutoLoadSentinel();
+      return;
+    }
 
     const ratios = photoCards(this.#grid).map((card) => Number.parseFloat(
       card.style.getPropertyValue("--a"),
@@ -669,7 +675,8 @@ export class InfiniteGalleryController {
       grid.appendChild(card);
     }
     field.appendChild(grid);
-    this.#feed.appendChild(field);
+    const sentinel = this.#ensureAutoLoadSentinel();
+    this.#feed.insertBefore(field, sentinel);
     this.#loadingField = field;
   }
 
@@ -677,6 +684,33 @@ export class InfiniteGalleryController {
     this.#loadingField?.remove();
     this.#loadingField = null;
     this.#feed.querySelectorAll(LOADING_FIELD_SELECTOR).forEach((field) => field.remove());
+  }
+
+  #ensureAutoLoadSentinel(): HTMLElement {
+    const existing = this.#autoLoadSentinel
+      ?? this.#feed.querySelector<HTMLElement>(AUTO_LOAD_SENTINEL_SELECTOR);
+    if (existing) {
+      this.#autoLoadSentinel = existing;
+      return existing;
+    }
+
+    const sentinel = this.#env.document.createElement("div");
+    // The link sits above the tall reserved field and can be skipped between
+    // observer samples. This stable target stays after that entire field.
+    sentinel.dataset.galleryAutoLoadSentinel = "true";
+    sentinel.setAttribute("aria-hidden", "true");
+    sentinel.style.setProperty("block-size", "1px");
+    this.#feed.appendChild(sentinel);
+    this.#autoLoadSentinel = sentinel;
+    this.#observer?.observe(sentinel);
+    return sentinel;
+  }
+
+  #removeAutoLoadSentinel(): void {
+    this.#observer?.disconnect();
+    this.#autoLoadSentinel?.remove();
+    this.#autoLoadSentinel = null;
+    this.#feed.querySelectorAll(AUTO_LOAD_SENTINEL_SELECTOR).forEach((sentinel) => sentinel.remove());
   }
 
   #reveal(cards: readonly HTMLElement[]): void {
