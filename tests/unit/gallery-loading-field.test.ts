@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  loadingFieldTiles,
+  loadingFieldTile,
   medianAspectRatio,
   revealSchedule,
   REVEAL_TOTAL_WINDOW_MS,
@@ -11,36 +11,34 @@ import { MAX_BATCH_SIZE } from "../../lib/infinite-gallery";
 const metadata: LoadingFieldMetadata = {
   page: 1,
   pageSize: 24,
-  nextCount: 24,
   terminal: false,
 };
 
 describe("gallery loading-field geometry", () => {
-  it("returns one descriptor per pending item with the shared tile ratio", () => {
-    expect(loadingFieldTiles({ ...metadata, nextCount: 3 }, 1.5)).toEqual([
-      { className: "gs2", aspectRatio: 1.5 },
-      { className: "gs3", aspectRatio: 1.5 },
-      { className: "gs4", aspectRatio: 1.5 },
-    ]);
+  it("returns one descriptor for the next absolute item position", () => {
+    expect(loadingFieldTile(metadata, 1.5)).toEqual({
+      className: "gs2",
+      aspectRatio: 1.5,
+    });
   });
 
   it("derives direct-page role classes from the absolute metadata offset", () => {
-    const directPage = loadingFieldTiles({ ...metadata, page: 2, nextCount: 3 }, 1);
-    const appendedPage = loadingFieldTiles({ ...metadata, page: 1, nextCount: 3 }, 1);
+    const directPage = loadingFieldTile({ ...metadata, page: 2 }, 1);
+    const appendedPage = loadingFieldTile(metadata, 1);
 
-    expect(directPage.map((tile) => tile.className)).toEqual(["gs4", "gs5", "gs6"]);
-    expect(appendedPage.map((tile) => tile.className)).toEqual(["gs2", "gs3", "gs4"]);
+    expect(directPage?.className).toBe("gs4");
+    expect(appendedPage?.className).toBe("gs2");
   });
 
-  it("returns no tiles for terminal feeds and clamps oversized batches", () => {
-    expect(loadingFieldTiles({ ...metadata, terminal: true }, 1.5)).toEqual([]);
-    expect(loadingFieldTiles({ ...metadata, nextCount: MAX_BATCH_SIZE + 10 }, 1)).toHaveLength(MAX_BATCH_SIZE);
+  it("returns no tile for terminal feeds", () => {
+    expect(loadingFieldTile({ ...metadata, terminal: true }, 1.5)).toBeNull();
   });
 
   it("uses a finite positive ratio even when the supplied estimate is invalid", () => {
-    expect(loadingFieldTiles({ ...metadata, nextCount: 1 }, Number.NaN)).toEqual([
-      { className: "gs2", aspectRatio: 1 },
-    ]);
+    expect(loadingFieldTile(metadata, Number.NaN)).toEqual({
+      className: "gs2",
+      aspectRatio: 1,
+    });
   });
 });
 

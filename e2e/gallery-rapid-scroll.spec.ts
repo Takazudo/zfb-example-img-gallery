@@ -7,7 +7,6 @@ const PAGE_THREE_PATH = `${FIXTURE_PATH}/page/3`;
 const CARD_SELECTOR = '[data-gallery-grid="true"] > li[data-photo-id]';
 const LINK_SELECTOR = '[data-gallery-next-link="true"]';
 const LOADING_TILE_SELECTOR = '[data-gallery-grid="true"] > li[data-gallery-loading-tile="true"]';
-const AUTO_LOAD_SENTINEL_SELECTOR = '[data-gallery-auto-load-sentinel="true"]';
 const STATUS_SELECTOR = '[data-gallery-status="true"]';
 
 test.beforeEach(async ({ page }) => {
@@ -50,20 +49,21 @@ async function stopBottomPin(page: Page): Promise<void> {
 }
 
 async function observerGeometry(page: Page) {
-  return page.evaluate(({ linkSelector, sentinelSelector }) => {
+  return page.evaluate(({ linkSelector, tileSelector }) => {
     const link = document.querySelector(linkSelector);
     const nav = link?.closest<HTMLElement>("[data-gallery-feed-next]");
-    const sentinel = document.querySelector(sentinelSelector);
+    const tile = document.querySelector<HTMLElement>(tileSelector);
     const grid = document.querySelector<HTMLElement>('[data-gallery-grid="true"]');
-    const sentinelRect = sentinel?.getBoundingClientRect();
+    const tileRect = tile?.getBoundingClientRect();
     return {
       linkHidden: Boolean(nav && getComputedStyle(nav).display === "none"),
-      sentinelInsideObserverRange: (sentinelRect?.top ?? Number.POSITIVE_INFINITY) <= window.innerHeight + 240
-        && (sentinelRect?.bottom ?? Number.NEGATIVE_INFINITY) >= 0,
-      gridNextIsSentinel: Boolean(grid && grid.nextElementSibling === sentinel),
-      loadingTailCount: grid?.querySelectorAll('[data-gallery-loading-tile="true"]').length ?? 0,
+      loaderInsideObserverRange: (tileRect?.top ?? Number.POSITIVE_INFINITY) <= window.innerHeight
+        && (tileRect?.bottom ?? Number.NEGATIVE_INFINITY) >= 0,
+      loaderIsGridTail: Boolean(grid && grid.lastElementChild === tile),
+      loaderActive: tile?.dataset.galleryLoadingActive === "true",
+      loadingTileCount: grid?.querySelectorAll('[data-gallery-loading-tile="true"]').length ?? 0,
     };
-  }, { linkSelector: LINK_SELECTOR, sentinelSelector: AUTO_LOAD_SENTINEL_SELECTOR });
+  }, { linkSelector: LINK_SELECTOR, tileSelector: LOADING_TILE_SELECTOR });
 }
 
 test("loads every batch after rapid scrolling passes the short pagination link @smoke", async ({ page }) => {
@@ -82,20 +82,20 @@ test("loads every batch after rapid scrolling passes the short pagination link @
 
   await page.goto(`${FIXTURE_PATH}?gallery-rapid-scroll=1`);
   await expect(page.locator(CARD_SELECTOR)).toHaveCount(24);
-  await expect(page.locator(LOADING_TILE_SELECTOR)).toHaveCount(24);
-  await expect(page.locator(AUTO_LOAD_SENTINEL_SELECTOR)).toHaveCount(1);
+  await expect(page.locator(LOADING_TILE_SELECTOR)).toHaveCount(1);
 
   try {
     await jumpPastCurrentLink(page);
     await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loading 24 photos…");
     await expect(observerGeometry(page)).resolves.toEqual({
       linkHidden: true,
-      sentinelInsideObserverRange: true,
-      gridNextIsSentinel: true,
-      loadingTailCount: 24,
+      loaderInsideObserverRange: true,
+      loaderIsGridTail: true,
+      loaderActive: true,
+      loadingTileCount: 1,
     });
     // Continued downward input can arrive while the request is in flight and
-    // the browser keeps the bottom sentinel intersecting. It must queue one
+    // the browser keeps the bottom loader intersecting. It must queue one
     // subsequent batch without requiring a synthetic leave/re-enter cycle.
     await page.mouse.wheel(0, 2_000);
     pageTwo.release();
@@ -103,9 +103,10 @@ test("loads every batch after rapid scrolling passes the short pagination link @
     await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loading 2 photos…");
     await expect(observerGeometry(page)).resolves.toEqual({
       linkHidden: true,
-      sentinelInsideObserverRange: true,
-      gridNextIsSentinel: true,
-      loadingTailCount: 2,
+      loaderInsideObserverRange: true,
+      loaderIsGridTail: true,
+      loaderActive: true,
+      loadingTileCount: 1,
     });
   } finally {
     pageTwo.release();
@@ -115,11 +116,10 @@ test("loads every batch after rapid scrolling passes the short pagination link @
   await expect(page.locator(CARD_SELECTOR)).toHaveCount(50);
   await expect(page.locator(STATUS_SELECTOR)).toHaveText("All photos loaded");
   await expect(page.locator(LOADING_TILE_SELECTOR)).toHaveCount(0);
-  await expect(page.locator(AUTO_LOAD_SENTINEL_SELECTOR)).toHaveCount(0);
   await expect(page.locator('[data-gallery-feed-next]')).toHaveCount(0);
 });
 
-test("restarts a disarmed loader when the sentinel stayed visible across append @smoke", async ({ page }) => {
+test("restarts a disarmed loader when the new tail tile stays visible after append @smoke", async ({ page }) => {
   const pageTwo = delayedResponse();
   const pageThree = delayedResponse();
   let pageThreeRequests = 0;
@@ -135,7 +135,7 @@ test("restarts a disarmed loader when the sentinel stayed visible across append 
 
   await page.goto(`${FIXTURE_PATH}?gallery-bottom-pin=1`);
   await expect(page.locator(CARD_SELECTOR)).toHaveCount(24);
-  await expect(page.locator(LOADING_TILE_SELECTOR)).toHaveCount(24);
+  await expect(page.locator(LOADING_TILE_SELECTOR)).toHaveCount(1);
 
   try {
     await jumpPastCurrentLink(page);
@@ -145,9 +145,10 @@ test("restarts a disarmed loader when the sentinel stayed visible across append 
     await expect(page.locator(CARD_SELECTOR)).toHaveCount(48);
     await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loaded 24 photos.");
     await expect(observerGeometry(page)).resolves.toMatchObject({
-      sentinelInsideObserverRange: true,
-      gridNextIsSentinel: true,
-      loadingTailCount: 2,
+      loaderInsideObserverRange: true,
+      loaderIsGridTail: true,
+      loaderActive: false,
+      loadingTileCount: 1,
     });
     expect(pageThreeRequests).toBe(0);
 
@@ -164,6 +165,5 @@ test("restarts a disarmed loader when the sentinel stayed visible across append 
   await expect(page.locator(CARD_SELECTOR)).toHaveCount(50);
   await expect(page.locator(STATUS_SELECTOR)).toHaveText("All photos loaded");
   await expect(page.locator(LOADING_TILE_SELECTOR)).toHaveCount(0);
-  await expect(page.locator(AUTO_LOAD_SENTINEL_SELECTOR)).toHaveCount(0);
   await expect(page.locator('[data-gallery-feed-next]')).toHaveCount(0);
 });

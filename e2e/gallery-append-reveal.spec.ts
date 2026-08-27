@@ -11,7 +11,6 @@ const MAIN_GRID_SELECTOR = '[data-gallery-feed="true"] > [data-gallery-grid="tru
 const CARD_SELECTOR = `${MAIN_GRID_SELECTOR} > li[data-photo-id]`;
 const TILE_SELECTOR = `${MAIN_GRID_SELECTOR} > li[data-gallery-loading-tile="true"]`;
 const FEED_NEXT_SELECTOR = '[data-gallery-feed-next]';
-const AUTO_LOAD_SENTINEL_SELECTOR = '[data-gallery-auto-load-sentinel="true"]';
 const STATUS_SELECTOR = '[data-gallery-status="true"]';
 
 type Layout = "uniform" | "spotlight" | "editorial" | "justified" | "masonry";
@@ -27,7 +26,7 @@ function loadingTiles(page: Page) {
 async function openHealthyGallery(page: Page, identity: string): Promise<void> {
   await page.goto(`${FIXTURE_PATH}?gallery-append-reveal=${identity}`);
   await expect(cards(page)).toHaveCount(24);
-  await expect(loadingTiles(page)).toHaveCount(24);
+  await expect(loadingTiles(page)).toHaveCount(1);
   await expect(page.locator(MAIN_GRID_SELECTOR)).toHaveCount(1);
   await expect(page.locator(`[data-gallery-feed="true"] > ${FEED_NEXT_SELECTOR}`)).toHaveCount(1);
   await expect(page.locator(`[data-gallery-feed="true"] > ${FEED_NEXT_SELECTOR}`)).toBeHidden();
@@ -70,7 +69,6 @@ async function gridState(page: Page) {
     const tiles = children.filter((child): child is HTMLElement => (
       child instanceof HTMLElement && child.matches(tileSelector)
     ));
-    const sentinel = feed?.querySelector<HTMLElement>('[data-gallery-auto-load-sentinel="true"]') ?? null;
     const next = feed?.querySelector<HTMLElement>("[data-gallery-feed-next]") ?? null;
     const status = feed?.querySelector<HTMLElement>("[data-gallery-status]") ?? null;
     return {
@@ -78,15 +76,18 @@ async function gridState(page: Page) {
       realIds: realCards.map((card) => card.dataset.photoId ?? ""),
       tileCount: tiles.length,
       tileClasses: tiles.map((tile) => tile.className),
+      tileLoading: tiles.map((tile) => tile.dataset.galleryLoadingActive === "true"),
       tileAnimationNames: tiles.map((tile) => {
-        const fill = tile.querySelector<HTMLElement>(".photo-card-skeleton-fill");
-        return fill ? getComputedStyle(fill).animationName : "";
+        const spinner = tile.querySelector<HTMLElement>(".gallery-loading-spinner");
+        return spinner ? getComputedStyle(spinner).animationName : "";
+      }),
+      tileSpinnerOpacities: tiles.map((tile) => {
+        const spinner = tile.querySelector<HTMLElement>(".gallery-loading-spinner");
+        return spinner ? Number(getComputedStyle(spinner).opacity) : Number.NaN;
       }),
       firstTileIndex: tiles.length > 0 ? children.indexOf(tiles[0]!) : -1,
       directOnly: children.every((child) => child.tagName === "LI" && child instanceof HTMLElement),
       nestedGridCount: grid?.querySelectorAll('[data-gallery-grid="true"]').length ?? 0,
-      gridNextIsSentinel: Boolean(grid && grid.nextElementSibling === sentinel),
-      sentinelCount: feed?.querySelectorAll('[data-gallery-auto-load-sentinel="true"]').length ?? 0,
       navInsideGrid: Boolean(grid?.querySelector("[data-gallery-feed-next]")),
       statusInsideGrid: Boolean(grid?.querySelector("[data-gallery-status]")),
       navOutsideGrid: Boolean(next && next.closest('[data-gallery-grid="true"]') === null),
@@ -112,7 +113,7 @@ test.beforeEach(async ({ page }) => {
   await installIntersectionObserverStub(page);
 });
 
-test("keeps existing boxes stable while delayed observer append replaces the direct loading tail @smoke", async ({ page }) => {
+test("shows one observed spinner tile, keeps existing boxes stable, and moves the tile to the new tail @smoke", async ({ page }) => {
   const pageTwo = delayedResponse();
   await page.route(`**${PAGE_TWO_PATH}`, async (route) => {
     await pageTwo.released;
@@ -126,16 +127,16 @@ test("keeps existing boxes stable while delayed observer append replaces the dir
 
   const beforeState = await gridState(page);
   const beforeCards = await cardBoxes(page);
-  const reservedBoxes = await cardBoxes(page, TILE_SELECTOR);
   expect(beforeState).toMatchObject({
-    directChildren: 48,
+    directChildren: 25,
     realIds: expect.any(Array),
-    tileCount: 24,
+    tileCount: 1,
+    tileLoading: [false],
+    tileAnimationNames: ["none"],
+    tileSpinnerOpacities: [0],
     firstTileIndex: 24,
     directOnly: true,
     nestedGridCount: 0,
-    gridNextIsSentinel: true,
-    sentinelCount: 1,
     navInsideGrid: false,
     statusInsideGrid: false,
     navOutsideGrid: true,
@@ -146,34 +147,34 @@ test("keeps existing boxes stable while delayed observer append replaces the dir
 
   await triggerIntersection(page, true);
   await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loading 24 photos…");
+  await expect(page.locator(TILE_SELECTOR)).toHaveAttribute("data-gallery-loading-active", "true");
+  await expect.poll(async () => (await gridState(page)).tileAnimationNames).toEqual(["gallery-loading-pulse"]);
   pageTwo.release();
   await expect(cards(page)).toHaveCount(48);
   await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loaded 24 photos.");
 
   const afterState = await gridState(page);
   const afterCards = await cardBoxes(page);
-  const appendedBoxes = afterCards.slice(24);
   const afterTailBoxes = await cardBoxes(page, TILE_SELECTOR);
-  const appendedClasses = await cards(page).evaluateAll((elements) => elements.slice(24).map((element) => element.className));
 
-  // The incoming cards consume the exact reserved rectangles. Existing cards
-  // therefore keep their boxes while the old tile nodes disappear.
+  // Existing cards keep their boxes while the consumed tile is replaced by one
+  // dormant tile after the newly appended batch.
   expect(afterState).toMatchObject({
-    directChildren: 50,
-    tileCount: 2,
+    directChildren: 49,
+    tileCount: 1,
+    tileLoading: [false],
+    tileAnimationNames: ["none"],
+    tileSpinnerOpacities: [0],
     firstTileIndex: 48,
     directOnly: true,
     nestedGridCount: 0,
-    gridNextIsSentinel: true,
-    sentinelCount: 1,
     navInsideGrid: false,
     statusInsideGrid: false,
   });
-  expect(appendedClasses).toEqual(beforeState.tileClasses);
   expect(afterState.tileClasses).not.toEqual(beforeState.tileClasses);
   expect(afterState.realIds.slice(0, 24)).toEqual(beforeState.realIds);
   expect(afterState.realIds).toHaveLength(48);
-  expect(afterTailBoxes).toHaveLength(2);
+  expect(afterTailBoxes).toHaveLength(1);
   for (const [index, card] of beforeCards.entries()) {
     const after = afterCards[index]!;
     expect(Math.abs(card.left - after.left)).toBeLessThanOrEqual(2);
@@ -181,16 +182,9 @@ test("keeps existing boxes stable while delayed observer append replaces the dir
     expect(Math.abs(card.right - after.right)).toBeLessThanOrEqual(2);
     expect(Math.abs(card.bottom - after.bottom)).toBeLessThanOrEqual(2);
   }
-  for (const [index, reserved] of reservedBoxes.entries()) {
-    const appended = appendedBoxes[index]!;
-    expect(Math.abs(reserved.left - appended.left)).toBeLessThanOrEqual(2);
-    expect(Math.abs(reserved.top - appended.top)).toBeLessThanOrEqual(2);
-    expect(Math.abs(reserved.right - appended.right)).toBeLessThanOrEqual(2);
-    expect(Math.abs(reserved.bottom - appended.bottom)).toBeLessThanOrEqual(2);
-  }
 });
 
-test("places the sixth card and direct skeleton tail across five columns without a blank band @smoke", async ({ page }) => {
+test("places the lone loader in the final open slot of a five-column row @smoke", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
   await openHealthyGallery(page, "five-column");
@@ -200,8 +194,7 @@ test("places the sixth card and direct skeleton tail across five columns without
     document.documentElement.setAttribute("data-thumb-width", "large");
     const grid = document.querySelector<HTMLElement>('[data-gallery-grid="true"]');
     if (!grid) throw new Error("gallery grid missing");
-    [...grid.querySelectorAll<HTMLElement>(":scope > li[data-photo-id]")].slice(6).forEach((card) => card.remove());
-    [...grid.querySelectorAll<HTMLElement>(':scope > li[data-gallery-loading-tile="true"]')].slice(6).forEach((tile) => tile.remove());
+    [...grid.querySelectorAll<HTMLElement>(":scope > li[data-photo-id]")].slice(9).forEach((card) => card.remove());
   });
 
   const geometry = await page.evaluate(() => {
@@ -219,18 +212,17 @@ test("places the sixth card and direct skeleton tail across five columns without
     const style = getComputedStyle(grid);
     const firstRowTop = realRects[0]?.top ?? 0;
     const sixthTop = realRects[5]?.top ?? 0;
+    const ninth = realRects[8];
+    const tile = tileRects[0];
     const tolerance = 1;
     return {
       columns: realRects.filter((rect) => Math.abs(rect.top - firstRowTop) <= tolerance).length,
       sixthStartsSecondRow: sixthTop > firstRowTop,
-      firstFourTilesShareSixthRow: tileRects.slice(0, 4).every((rect) => Math.abs(rect.top - sixthTop) <= tolerance),
-      nextTilesStartNextRow: (tileRects[4]?.top ?? 0) > sixthTop,
+      loaderSharesFinalRow: Math.abs((tile?.top ?? 0) - sixthTop) <= tolerance,
       gap: Number.parseFloat(style.columnGap),
-      rowGap: Number.parseFloat(style.rowGap),
       firstRowGap: (realRects[1]?.left ?? 0) - (realRects[0]?.right ?? 0),
-      sixthToFirstTileGap: (tileRects[0]?.left ?? 0) - (realRects[5]?.right ?? 0),
-      sixthBottom: realRects[5]?.bottom ?? 0,
-      nextTileTop: tileRects[4]?.top ?? 0,
+      ninthToLoaderGap: (tile?.left ?? 0) - (ninth?.right ?? 0),
+      loaderMatchesCardWidth: Math.abs((tile?.right ?? 0) - (tile?.left ?? 0) - ((ninth?.right ?? 0) - (ninth?.left ?? 0))) <= tolerance,
       directItemCount: items.length,
       realCount: real.length,
       tileCount: tiles.length,
@@ -240,15 +232,14 @@ test("places the sixth card and direct skeleton tail across five columns without
   expect(geometry).toMatchObject({
     columns: 5,
     sixthStartsSecondRow: true,
-    firstFourTilesShareSixthRow: true,
-    nextTilesStartNextRow: true,
-    directItemCount: 12,
-    realCount: 6,
-    tileCount: 6,
+    loaderSharesFinalRow: true,
+    loaderMatchesCardWidth: true,
+    directItemCount: 10,
+    realCount: 9,
+    tileCount: 1,
   });
   expect(Math.abs(geometry.firstRowGap - geometry.gap)).toBeLessThanOrEqual(1);
-  expect(Math.abs(geometry.sixthToFirstTileGap - geometry.gap)).toBeLessThanOrEqual(1);
-  expect(Math.abs(geometry.nextTileTop - (geometry.sixthBottom + geometry.rowGap))).toBeLessThanOrEqual(2);
+  expect(Math.abs(geometry.ninthToLoaderGap - geometry.gap)).toBeLessThanOrEqual(1);
 });
 
 test("preserves metadata-derived order through patterned layouts and responsive widths @smoke", async ({ page }) => {
@@ -267,9 +258,8 @@ test("preserves metadata-derived order through patterned layouts and responsive 
     const before = await gridState(page);
     const initialIds = before.realIds;
     const reservedClasses = before.tileClasses;
-    expect(before.tileCount).toBe(24);
+    expect(before.tileCount).toBe(1);
     expect(before.firstTileIndex).toBe(24);
-    expect(before.gridNextIsSentinel).toBe(true);
     expect(before.directOnly).toBe(true);
 
     await triggerIntersection(page, true);
@@ -277,10 +267,9 @@ test("preserves metadata-derived order through patterned layouts and responsive 
     const after = await gridState(page);
     const appendedClasses = await cards(page).evaluateAll((elements) => elements.slice(24).map((element) => element.className));
     expect(after.realIds.slice(0, 24)).toEqual(initialIds);
-    expect(appendedClasses).toEqual(reservedClasses);
-    expect(after.tileCount).toBe(2);
+    expect(appendedClasses[0]).toBe(reservedClasses[0]);
+    expect(after.tileCount).toBe(1);
     expect(after.firstTileIndex).toBe(48);
-    expect(after.gridNextIsSentinel).toBe(true);
     expect(after.navInsideGrid).toBe(false);
     expect(after.statusInsideGrid).toBe(false);
     expect(after.directOnly).toBe(true);
@@ -295,8 +284,7 @@ test("staggered appended cards expose increasing delays and non-uniform mid-reve
   await triggerIntersection(page, true);
   await expect(cards(page)).toHaveCount(48);
 
-  // Sample each card's own Web Animation rather than the skeleton pulse in the
-  // active grid tail. Setting one shared currentTime makes the opacity
+  // Sample each card's own Web Animation. Setting one shared currentTime makes the opacity
   // comparison deterministic even though the browser clock keeps advancing.
   const samples = await cards(page).evaluateAll((elements) => elements.slice(24).map((element) => {
     const animation = element.getAnimations().find((candidate) => (
@@ -322,12 +310,12 @@ test("staggered appended cards expose increasing delays and non-uniform mid-reve
   expect(new Set(opacities.map((opacity) => opacity.toFixed(3))).size).toBeGreaterThan(1);
 });
 
-test("keeps reduced-motion cards visible, disables the skeleton pulse, and removes the terminal tail @smoke", async ({ page }) => {
+test("keeps reduced-motion cards visible and removes the terminal loader @smoke", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openHealthyGallery(page, "reduced-motion");
 
   const initial = await gridState(page);
-  expect(initial.tileCount).toBe(24);
+  expect(initial.tileCount).toBe(1);
   expect(initial.tileAnimationNames.every((name) => name === "none")).toBe(true);
 
   await triggerIntersection(page, true);
@@ -342,7 +330,6 @@ test("keeps reduced-motion cards visible, disables the skeleton pulse, and remov
   await triggerIntersection(page, true);
   await expect(cards(page)).toHaveCount(50);
   await expect(page.locator(TILE_SELECTOR)).toHaveCount(0);
-  await expect(page.locator(AUTO_LOAD_SENTINEL_SELECTOR)).toHaveCount(0);
   await expect(page.locator(`[data-gallery-feed="true"] > ${FEED_NEXT_SELECTOR}`)).toHaveCount(0);
   await expect(page.locator(STATUS_SELECTOR)).toHaveText("All photos loaded");
 

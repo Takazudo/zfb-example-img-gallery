@@ -12,7 +12,7 @@ import {
   type GallerySnapshot,
 } from "./gallery-snapshots";
 import {
-  loadingFieldTiles,
+  loadingFieldTile,
   medianAspectRatio,
   revealSchedule,
 } from "./gallery-loading-field";
@@ -23,9 +23,7 @@ const LINK_SELECTOR = '[data-gallery-next-link="true"]';
 const CONTROL_SELECTOR = "[data-gallery-feed-next]";
 const STATUS_SELECTOR = "[data-gallery-status]";
 const LOADING_TILE_SELECTOR = '[data-gallery-loading-tile="true"]';
-const AUTO_LOAD_SENTINEL_SELECTOR = '[data-gallery-auto-load-sentinel="true"]';
 const AUTO_LOAD_ACTIVE_ATTRIBUTE = "data-gallery-auto-load-active";
-const AUTO_LOAD_ROOT_MARGIN_PX = 240;
 export const MAX_BATCH_SIZE = 24;
 
 export type FeedMetadata = {
@@ -287,7 +285,6 @@ export function injectGallerySnapshot(root: ParentNode, snapshot: GallerySnapsho
   if (alreadyRestored) {
     elements.feed.removeAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE);
     elements.grid.querySelectorAll(LOADING_TILE_SELECTOR).forEach((tile) => tile.remove());
-    elements.feed.querySelectorAll(AUTO_LOAD_SENTINEL_SELECTOR).forEach((sentinel) => sentinel.remove());
     return true;
   }
 
@@ -326,7 +323,6 @@ export function injectGallerySnapshot(root: ParentNode, snapshot: GallerySnapsho
 
   elements.feed.removeAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE);
   elements.grid.querySelectorAll(LOADING_TILE_SELECTOR).forEach((tile) => tile.remove());
-  elements.feed.querySelectorAll(AUTO_LOAD_SENTINEL_SELECTOR).forEach((sentinel) => sentinel.remove());
   elements.grid.replaceChildren(template.content);
   setFeedMetadata(elements.feed, snapshot);
   const currentControl = elements.feed.querySelector(CONTROL_SELECTOR);
@@ -426,7 +422,7 @@ export class InfiniteGalleryController {
   readonly #autoGate = new GalleryAutoLoadGate();
   readonly #flight = new GallerySingleFlight();
   #abortController: AbortController | null = null;
-  #autoLoadSentinel: HTMLElement | null = null;
+  #loadingTile: HTMLElement | null = null;
   #queuedAutoContinuation = false;
   readonly #revealAnimations = new Set<Animation>();
   #generation = 0;
@@ -490,7 +486,7 @@ export class InfiniteGalleryController {
     const generation = ++this.#generation;
     const abortController = new AbortController();
     this.#abortController = abortController;
-    this.#buildLoadingTail(metadata);
+    this.#setLoadingIndicator(true);
     this.#setStatus(`Loading ${metadata.nextCount} photos…`, true);
 
     const pending = this.#flight.run(() => this.#performLoad(requestedUrl, metadata, abortController.signal, generation)
@@ -561,7 +557,7 @@ export class InfiniteGalleryController {
   };
 
   readonly #onIntersection: IntersectionObserverCallback = (entries): void => {
-    const entry = entries.find((candidate) => candidate.target === this.#autoLoadSentinel);
+    const entry = entries.find((candidate) => candidate.target === this.#loadingTile);
     if (!entry) return;
     if (!entry.isIntersecting) this.#queuedAutoContinuation = false;
     if (this.#autoGate.observe(entry.isIntersecting)) void this.load("observer");
@@ -573,7 +569,7 @@ export class InfiniteGalleryController {
       this.#queuedAutoContinuation = false;
       return;
     }
-    if (event.deltaY === 0 || !this.#autoLoadSentinelIsInRange()) return;
+    if (event.deltaY === 0 || !this.#loadingTileIsInRange()) return;
     if (this.#flight.pending) {
       this.#queuedAutoContinuation = true;
       return;
@@ -654,9 +650,11 @@ export class InfiniteGalleryController {
     if (signal.aborted || generation !== this.#generation || this.#destroyed) return false;
     const liveLink = this.#link;
     if (!liveLink) return false;
-    const tailBoundary = this.#grid.querySelector<HTMLElement>(LOADING_TILE_SELECTOR);
+    const tailBoundary = this.#loadingTile?.isConnected
+      ? this.#loadingTile
+      : this.#grid.querySelector<HTMLElement>(LOADING_TILE_SELECTOR);
     this.#grid.insertBefore(fragment, tailBoundary);
-    this.#removeLoadingTail();
+    this.#removeLoadingTile();
     this.#reveal(appendedCards);
     setFeedMetadata(this.#feed, incoming);
     if (incoming.terminal) {
@@ -667,11 +665,10 @@ export class InfiniteGalleryController {
     } else {
       updateLink(liveLink, incoming);
       if (this.#observer) {
-        // Keep the successfully observed target stable across appends. In
-        // particular, do not clear a wheel-queued continuation while replacing
-        // the consumed grid tail.
-        if (this.#feed.hasAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE) && this.#autoLoadSentinel?.isConnected) {
-          this.#buildLoadingTail(incoming);
+        // Rebind the observer to the one tile now occupying the new tail. Keep
+        // any downward-input continuation queued while the old tile is replaced.
+        if (this.#feed.hasAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE)) {
+          if (!this.#observeLoadingTile(incoming)) this.#disableAutomaticMode();
         } else {
           this.#enableAutomaticMode(incoming);
         }
@@ -691,64 +688,77 @@ export class InfiniteGalleryController {
     }
   }
 
-  #buildLoadingTail(metadata: FeedMetadata | null): void {
-    this.#removeLoadingTail();
-    if (!metadata || metadata.terminal) return;
+  #buildLoadingTile(metadata: FeedMetadata | null): HTMLElement | null {
+    this.#removeLoadingTile();
+    if (!metadata || metadata.terminal) return null;
 
     const ratios = photoCards(this.#grid).map((card) => Number.parseFloat(
       card.style.getPropertyValue("--a"),
     ));
-    const tiles = loadingFieldTiles(metadata, medianAspectRatio(ratios));
-    if (tiles.length === 0) return;
+    const tile = loadingFieldTile(metadata, medianAspectRatio(ratios));
+    if (!tile) return null;
 
-    for (const tile of tiles) {
-      const card = this.#env.document.createElement("li");
-      card.className = `photo-card ${tile.className}`;
-      card.dataset.galleryLoadingTile = "true";
-      card.setAttribute("aria-hidden", "true");
-      card.style.setProperty("--a", String(tile.aspectRatio));
-      const mediaWrapper = this.#env.document.createElement("div");
-      mediaWrapper.className = "photo-card-media-wrapper";
-      const link = this.#env.document.createElement("div");
-      link.className = "photo-card-link";
-      const media = this.#env.document.createElement("div");
-      media.className = "photo-card-media";
-      const fill = this.#env.document.createElement("div");
-      fill.className = "photo-card-image photo-card-skeleton-fill";
-      media.appendChild(fill);
-      link.appendChild(media);
-      mediaWrapper.appendChild(link);
-      const title = this.#env.document.createElement("div");
-      title.className = "photo-card-title";
-      title.textContent = "\u00a0";
-      card.appendChild(mediaWrapper);
-      card.appendChild(title);
-      this.#grid.appendChild(card);
-    }
+    const card = this.#env.document.createElement("li");
+    card.className = `photo-card ${tile.className}`;
+    card.dataset.galleryLoadingTile = "true";
+    card.setAttribute("aria-hidden", "true");
+    card.style.setProperty("--a", String(tile.aspectRatio));
+    const mediaWrapper = this.#env.document.createElement("div");
+    mediaWrapper.className = "photo-card-media-wrapper";
+    const link = this.#env.document.createElement("div");
+    link.className = "photo-card-link";
+    const media = this.#env.document.createElement("div");
+    media.className = "photo-card-media photo-card-loading-media";
+    const fill = this.#env.document.createElement("div");
+    fill.className = "photo-card-image photo-card-loader-fill";
+    const spinner = this.#env.document.createElement("span");
+    spinner.className = "gallery-loading-spinner";
+    fill.appendChild(spinner);
+    media.appendChild(fill);
+    link.appendChild(media);
+    mediaWrapper.appendChild(link);
+    const title = this.#env.document.createElement("div");
+    title.className = "photo-card-title";
+    title.textContent = "\u00a0";
+    card.appendChild(mediaWrapper);
+    card.appendChild(title);
+    this.#grid.appendChild(card);
+    this.#loadingTile = card;
+    return card;
   }
 
-  #removeLoadingTail(): void {
+  #removeLoadingTile(): void {
     this.#grid.querySelectorAll(LOADING_TILE_SELECTOR).forEach((tile) => tile.remove());
+    this.#loadingTile = null;
   }
 
-  #createAutoLoadSentinel(): HTMLElement {
-    const sentinel = this.#env.document.createElement("div");
-    sentinel.dataset.galleryAutoLoadSentinel = "true";
-    sentinel.setAttribute("aria-hidden", "true");
-    sentinel.style.setProperty("block-size", "1px");
-    const parent = this.#grid.parentNode;
-    if (!parent) throw new Error("Gallery grid is detached");
-    const siblings = [...parent.children];
-    parent.insertBefore(sentinel, siblings[siblings.indexOf(this.#grid) + 1] ?? null);
-    this.#autoLoadSentinel = sentinel;
-    return sentinel;
+  #setLoadingIndicator(active: boolean): void {
+    if (!this.#loadingTile) return;
+    if (active) this.#loadingTile.dataset.galleryLoadingActive = "true";
+    else delete this.#loadingTile.dataset.galleryLoadingActive;
+  }
+
+  #observeLoadingTile(metadata: FeedMetadata): boolean {
+    if (!this.#observer || metadata.terminal || !this.#link) return false;
+    this.#observer.disconnect();
+    const tile = this.#buildLoadingTile(metadata);
+    if (!tile) return false;
+    try {
+      this.#observer.observe(tile);
+      return true;
+    } catch {
+      tile.remove();
+      this.#loadingTile = null;
+      this.#observer = null;
+      return false;
+    }
   }
 
   #initializeAutomaticMode(metadata: FeedMetadata | null): void {
     if (!metadata || metadata.terminal || !this.#link || !this.#env.createObserver) return;
     try {
       this.#observer = this.#env.createObserver(this.#onIntersection, {
-        rootMargin: `0px 0px ${AUTO_LOAD_ROOT_MARGIN_PX}px`,
+        rootMargin: "0px",
       });
       this.#enableAutomaticMode(metadata);
       if (this.#feed.hasAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE)) {
@@ -762,42 +772,27 @@ export class InfiniteGalleryController {
 
   #enableAutomaticMode(metadata: FeedMetadata): void {
     if (!this.#observer || metadata.terminal || !this.#link) return;
-    this.#removeAutoLoadSentinel();
-    const sentinel = this.#createAutoLoadSentinel();
-    try {
-      this.#observer.observe(sentinel);
-    } catch {
-      sentinel.remove();
-      this.#autoLoadSentinel = null;
-      this.#observer = null;
+    if (!this.#observeLoadingTile(metadata)) {
       this.#disableAutomaticMode();
       return;
     }
     this.#feed.setAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE, "true");
-    this.#buildLoadingTail(metadata);
   }
 
   #disableAutomaticMode(): void {
     this.#feed.removeAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE);
-    this.#removeLoadingTail();
-    this.#removeAutoLoadSentinel();
-  }
-
-  #removeAutoLoadSentinel(): void {
     this.#observer?.disconnect();
     this.#queuedAutoContinuation = false;
-    this.#autoLoadSentinel?.remove();
-    this.#autoLoadSentinel = null;
-    this.#feed.querySelectorAll(AUTO_LOAD_SENTINEL_SELECTOR).forEach((sentinel) => sentinel.remove());
+    this.#removeLoadingTile();
   }
 
-  #autoLoadSentinelIsInRange(): boolean {
+  #loadingTileIsInRange(): boolean {
     const view = this.#env.document.defaultView;
-    const sentinel = this.#autoLoadSentinel;
-    if (!view || !sentinel?.isConnected) return false;
-    const rect = sentinel.getBoundingClientRect();
+    const tile = this.#loadingTile;
+    if (!view || !tile?.isConnected) return false;
+    const rect = tile.getBoundingClientRect();
     return rect.bottom >= 0
-      && rect.top <= view.innerHeight + AUTO_LOAD_ROOT_MARGIN_PX
+      && rect.top <= view.innerHeight
       && rect.right >= 0
       && rect.left <= view.innerWidth;
   }
@@ -805,7 +800,7 @@ export class InfiniteGalleryController {
   #continueAutomaticLoad(success: boolean): void {
     if (!this.#queuedAutoContinuation) return;
     this.#queuedAutoContinuation = false;
-    if (!success || this.#destroyed || !this.#autoLoadSentinelIsInRange()) return;
+    if (!success || this.#destroyed || !this.#loadingTileIsInRange()) return;
     this.#autoGate.continueAfterInput();
     void this.load("observer");
   }
@@ -823,8 +818,8 @@ export class InfiniteGalleryController {
     cards.forEach((card, index) => {
       if (typeof card.animate !== "function") return;
       const animation = card.animate([
-        { opacity: 0, transform: "translateY(4px)" },
-        { opacity: 1, transform: "translateY(0)" },
+        { opacity: 0 },
+        { opacity: 1 },
       ], {
         duration: 280,
         delay: delays[index] ?? 0,
