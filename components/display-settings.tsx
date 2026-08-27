@@ -5,8 +5,10 @@ import {
   createBrowserGalleryPreferencesEnvironment,
   createGalleryPreferencesController,
   DEFAULT_GALLERY_PREFERENCES,
+  GALLERY_LAYOUT_OPTIONS,
   THUMBNAIL_RATIO_OPTIONS,
   THUMBNAIL_WIDTH_OPTIONS,
+  type GalleryLayoutMode,
   type GalleryPreferences,
   type GalleryPreferencesController,
   type ThumbnailRatio,
@@ -83,6 +85,13 @@ export function DisplaySettings() {
     });
   };
 
+  const selectLayout = (value: GalleryLayoutMode) => {
+    setPreferences(controller.current?.setLayout(value) ?? {
+      ...preferences,
+      galleryLayout: value,
+    });
+  };
+
   return (
     <>
       {hydrated ? (
@@ -107,54 +116,77 @@ export function DisplaySettings() {
       <dialog
         ref={dialog}
         aria-labelledby="display-settings-title"
-        class="m-auto w-[min(30rem,calc(100%-2rem))] rounded-lg border border-line bg-surface p-0 text-ink shadow-raised backdrop:bg-ink/40"
+        aria-describedby="display-settings-description"
+        class="m-auto max-h-[calc(100dvh-2rem)] w-[min(30rem,calc(100%-2rem))] overflow-hidden rounded-lg border border-line bg-surface p-0 text-ink shadow-raised backdrop:bg-ink/40"
         onClose={restoreFocus}
       >
-        <form method="dialog" class="flex flex-col gap-vsp-md p-vsp-md">
-          <div>
-            <h2 id="display-settings-title" class="text-heading font-semibold">
-              Display settings
-            </h2>
-            <p class="mt-vsp-2xs text-small text-ink-soft">
-              Choose how gallery thumbnails are displayed on this device.
-            </p>
+        <form method="dialog" class="flex max-h-[calc(100dvh-2rem)] flex-col">
+          <div class="flex min-h-0 flex-1 flex-col gap-vsp-md overflow-y-auto overscroll-contain p-vsp-md">
+            <div>
+              <h2 id="display-settings-title" class="text-heading font-semibold">
+                Display settings
+              </h2>
+              <p id="display-settings-description" class="mt-vsp-2xs text-small text-ink-soft">
+                Choose how gallery thumbnails are displayed on this device.
+              </p>
+            </div>
+
+            <fieldset aria-describedby="gallery-layout-description" class="flex flex-col gap-vsp-2xs">
+              <legend class="mb-vsp-xs font-semibold">Gallery layout</legend>
+              <p id="gallery-layout-description" class="mb-vsp-xs text-small text-ink-soft">
+                Uniform uses your stored thumbnail ratio and width. Other layouts may supersede that geometry while active without erasing those choices.
+              </p>
+              {GALLERY_LAYOUT_OPTIONS.map((option) => (
+                <label class={optionClass} key={option.value}>
+                  <input
+                    type="radio"
+                    name="gallery-layout"
+                    value={option.value}
+                    checked={preferences.galleryLayout === option.value}
+                    class="size-5 cursor-pointer accent-brand"
+                    onChange={() => selectLayout(option.value)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </fieldset>
+
+            <fieldset class="flex flex-col gap-vsp-2xs">
+              <legend class="mb-vsp-xs font-semibold">Thumbnail ratio</legend>
+              {THUMBNAIL_RATIO_OPTIONS.map((option) => (
+                <label class={optionClass} key={option.value}>
+                  <input
+                    type="radio"
+                    name="thumbnail-ratio"
+                    value={option.value}
+                    checked={preferences.thumbRatio === option.value}
+                    class="size-5 cursor-pointer accent-brand"
+                    onChange={() => selectRatio(option.value)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </fieldset>
+
+            <fieldset class="flex flex-col gap-vsp-2xs">
+              <legend class="mb-vsp-xs font-semibold">Thumbnail width</legend>
+              {THUMBNAIL_WIDTH_OPTIONS.map((option) => (
+                <label class={optionClass} key={option.value}>
+                  <input
+                    type="radio"
+                    name="thumbnail-width"
+                    value={option.value}
+                    checked={preferences.thumbWidth === option.value}
+                    class="size-5 cursor-pointer accent-brand"
+                    onChange={() => selectWidth(option.value)}
+                  />
+                  <span>{option.label} <span class="text-ink-soft">({option.size})</span></span>
+                </label>
+              ))}
+            </fieldset>
           </div>
 
-          <fieldset class="flex flex-col gap-vsp-2xs">
-            <legend class="mb-vsp-xs font-semibold">Thumbnail ratio</legend>
-            {THUMBNAIL_RATIO_OPTIONS.map((option) => (
-              <label class={optionClass} key={option.value}>
-                <input
-                  type="radio"
-                  name="thumbnail-ratio"
-                  value={option.value}
-                  checked={preferences.thumbRatio === option.value}
-                  class="size-5 cursor-pointer accent-brand"
-                  onChange={() => selectRatio(option.value)}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </fieldset>
-
-          <fieldset class="flex flex-col gap-vsp-2xs">
-            <legend class="mb-vsp-xs font-semibold">Thumbnail width</legend>
-            {THUMBNAIL_WIDTH_OPTIONS.map((option) => (
-              <label class={optionClass} key={option.value}>
-                <input
-                  type="radio"
-                  name="thumbnail-width"
-                  value={option.value}
-                  checked={preferences.thumbWidth === option.value}
-                  class="size-5 cursor-pointer accent-brand"
-                  onChange={() => selectWidth(option.value)}
-                />
-                <span>{option.label} <span class="text-ink-soft">({option.size})</span></span>
-              </label>
-            ))}
-          </fieldset>
-
-          <div class="flex justify-end">
+          <div class="flex shrink-0 justify-end border-t border-line bg-surface px-hsp-md py-vsp-sm">
             <button
               type="submit"
               value="close"

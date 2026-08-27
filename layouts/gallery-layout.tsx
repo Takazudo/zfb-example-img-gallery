@@ -100,7 +100,12 @@ export default function GalleryLayout({
         />
         {ClientRouter({
           fallback: "animate",
-          preserveHtmlAttrs: ["data-theme", "data-thumb-ratio", "data-thumb-width"],
+          preserveHtmlAttrs: [
+            "data-theme",
+            "data-thumb-ratio",
+            "data-thumb-width",
+            "data-gallery-layout",
+          ],
           traverseRefetch: true,
         }) as unknown as ComponentChildren}
         {seo ? (
