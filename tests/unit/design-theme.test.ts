@@ -122,6 +122,12 @@ describe("semantic theme architecture", () => {
     expect(globalCss).toMatch(/@container \(max-width: 26rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
   });
 
+  it("keeps loading tiles in the canonical grid without field spacing compensation", () => {
+    expect(globalCss).toContain('[data-gallery-auto-load-active="true"] [data-gallery-feed-next] { display: none; }');
+    expect(globalCss).toContain("[data-gallery-loading-tile]");
+    expect(globalCss).not.toContain("[data-gallery-loading-field]");
+  });
+
   it("keeps card actions in distinct 44px-class corners and the modal viewport-bound", () => {
     expect(globalCss).toMatch(/\.favorite-action-card\s*{[^}]*right:[^}]*bottom:/s);
     expect(globalCss).toMatch(/\.photo-delete-form-card\s*{[^}]*top:[^}]*right:/s);
