@@ -53,11 +53,11 @@ describe("DisplaySettings", () => {
     expect(html).toContain(">Close</button>");
   });
 
-  it("explains layout interaction and keeps the modal usable in a short viewport", () => {
+  it("explains the active controls and keeps the modal usable in a short viewport", () => {
     const html = render(<DisplaySettings />);
     expect(html).toContain('aria-describedby="gallery-layout-description"');
-    expect(html).toContain("Uniform uses your stored thumbnail ratio and width.");
-    expect(html).toContain("without erasing those choices");
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain("Adjust thumbnail ratio and width below.");
     expect(html).toContain("max-h-[calc(100dvh-2rem)]");
     expect(html).toContain("overflow-hidden");
     expect(html).toContain("overflow-y-auto");
