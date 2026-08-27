@@ -272,6 +272,7 @@ describe("infinite gallery response invariants", () => {
 
       const destinationGrid = {
         children: [] as SnapshotElement[],
+        querySelectorAll: () => [],
         replaceChildren(fragment: { children: SnapshotElement[] }) { this.children = [...fragment.children]; },
       };
       let serializedTextNode = false;
@@ -290,6 +291,7 @@ describe("infinite gallery response invariants", () => {
       const destinationFeed = {
         dataset: { ...sourceFeed.dataset },
         ownerDocument,
+        removeAttribute: () => undefined,
         querySelectorAll: (selector: string) => selector === '[data-gallery-grid="true"]' ? [destinationGrid] : [],
         querySelector: () => null,
       };
@@ -342,7 +344,7 @@ describe("infinite gallery controller without browser-only observers", () => {
       querySelectorAll(selector: string): FakeElement[] {
         if (this.queryLists.has(selector)) return this.queryLists.get(selector) ?? [];
         const matches = (node: FakeElement): boolean => {
-          if (selector === '[data-gallery-loading-field="true"]') return node.dataset.galleryLoadingField === "true";
+          if (selector === '[data-gallery-loading-tile="true"]') return node.dataset.galleryLoadingTile === "true";
           if (selector === '[data-gallery-auto-load-sentinel="true"]') return node.dataset.galleryAutoLoadSentinel === "true";
           if (selector === "img") return node.tagName === "IMG";
           return false;
@@ -392,6 +394,14 @@ describe("infinite gallery controller without browser-only observers", () => {
         if (reference === null) return this.appendChild(node);
         const index = this.children.indexOf(reference);
         if (index < 0) throw new Error("Reference node is not a child");
+        if (node.tagName === "#FRAGMENT") {
+          node.children.forEach((child, offset) => {
+            child.parentNode = this;
+            this.children.splice(index + offset, 0, child);
+          });
+          node.children = [];
+          return node;
+        }
         node.parentNode = this;
         this.children.splice(index, 0, node);
         return node;
@@ -491,16 +501,9 @@ describe("infinite gallery controller without browser-only observers", () => {
         store,
       });
       expect(controller).not.toBeNull();
-      const initialField = feed.querySelector('[data-gallery-loading-field="true"]');
-      const initialSentinel = feed.querySelector('[data-gallery-auto-load-sentinel="true"]');
-      expect(initialField).not.toBeNull();
-      expect(initialSentinel).not.toBeNull();
-      expect(feed.children.at(-2)).toBe(initialField);
-      expect(feed.children.at(-1)).toBe(initialSentinel);
-      expect(initialSentinel!.style.getPropertyValue("block-size")).toBe("1px");
-      expect(initialField!.children[0]!.children).toHaveLength(24);
-      expect(initialField!.children[0]!.children[0]!.className).toBe("photo-card gs2");
-      expect(initialField!.children[0]!.children[0]!.dataset.photoId).toBeUndefined();
+      expect(grid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
+      expect(feed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
+      expect(feed.attrs.has("data-gallery-auto-load-active")).toBe(false);
       const clickListener = [...(link.listeners.get("click") ?? [])][0]!;
       link.href = "https://example.test/wrong-page";
       let prevented = false;
@@ -514,23 +517,31 @@ describe("infinite gallery controller without browser-only observers", () => {
       const loading = controller!.load("manual");
       expect(requested).toBe("https://example.test/page/2");
       expect(feed.attrs.get("aria-busy")).toBe("true");
+      const pendingTiles = grid.querySelectorAll('[data-gallery-loading-tile="true"]');
+      expect(pendingTiles).toHaveLength(24);
+      expect(grid.children.at(-24)).toBe(pendingTiles[0]);
+      expect(pendingTiles[0]!.className).toBe("photo-card gs2");
+      expect(pendingTiles[0]!.attrs.get("aria-hidden")).toBe("true");
       fakeDocument.dispatch({ type: "zfb:before-preparation" } as Event);
       expect(feed.attrs.has("aria-busy")).toBe(false);
       expect(status.textContent).toContain("Loading cancelled");
       expect(link.href).toBe("https://example.test/page/2");
       await expect(loading).resolves.toBe(false);
+      expect(grid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
       failWithResponse = true;
       const gridBefore = grid.innerHTML;
       await expect(controller!.load("manual")).resolves.toBe(false);
       expect(status.textContent).toContain("Could not load photos");
       expect(grid.innerHTML).toBe(gridBefore);
+      expect(grid.children.map((card) => card.dataset.photoId)).toEqual(["initial"]);
       expect(link.href).toBe("https://example.test/page/2");
 
       const incomingGrid = new FakeElement();
       for (let id = 1; id <= 24; id += 1) {
         const card = new FakeElement();
-        card.dataset.photoId = String(id);
-        card.outerHTML = `<li data-photo-id="${id}"><img loading="lazy"></li>`;
+        const photoId = id === 1 ? "initial" : String(id - 1);
+        card.dataset.photoId = photoId;
+        card.outerHTML = `<li data-photo-id="${photoId}"><img loading="lazy"></li>`;
         const image = new FakeElement();
         image.loading = "eager";
         card.queryLists.set("img", [image]);
@@ -560,7 +571,7 @@ describe("infinite gallery controller without browser-only observers", () => {
       succeed = true;
       await expect(controller!.load("manual")).resolves.toBe(true);
       expect(grid.children.map((card) => card.dataset.photoId)).toEqual([
-        "initial", ...Array.from({ length: 24 }, (_, index) => String(index + 1)),
+        "initial", ...Array.from({ length: 23 }, (_, index) => String(index + 1)),
       ]);
       expect(grid.children.every((card) => card.querySelectorAll("img").every((image) => image.loading === "lazy"))).toBe(true);
       expect(feed.dataset).toMatchObject({
@@ -568,18 +579,16 @@ describe("infinite gallery controller without browser-only observers", () => {
       });
       expect(link.textContent).toBe("Load next 2 photos");
       expect(link.href).toBe("/page/3");
-      expect(status.textContent).toBe("Loaded 24 photos.");
-      const rebuiltField = feed.querySelector('[data-gallery-loading-field="true"]');
-      expect(feed.children.at(-2)).toBe(rebuiltField);
-      expect(feed.children.at(-1)).toBe(initialSentinel);
-      expect(rebuiltField!.children[0]!.children).toHaveLength(2);
+      expect(status.textContent).toBe("Loaded 23 photos.");
+      expect(grid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
+      expect(feed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
       expect(grid.children.slice(1).every((card) => card.animations.length === 1)).toBe(true);
       expect(grid.children[1]!.animations[0]!.options).toMatchObject({ duration: 280, delay: 0, fill: "backwards" });
 
       const identity = identityFromState(syncedState, "global", "https://example.test/");
       expect(identity).not.toBeNull();
       expect(store.get(identity!.key, identity!.scope, identity!.url)?.page).toBe(2);
-      expect(store.get(identity!.key, identity!.scope, identity!.url)?.cardsHtml).not.toContain("gallery-loading-field");
+      expect(store.get(identity!.key, identity!.scope, identity!.url)?.cardsHtml).not.toContain("gallery-loading-tile");
       expect(store.get(identity!.key, identity!.scope, identity!.url)?.cardsHtml).not.toContain("animation");
 
       const terminalGrid = new FakeElement();
@@ -606,11 +615,11 @@ describe("infinite gallery controller without browser-only observers", () => {
       link.href = "https://example.test/page/3";
       reduceMotion = true;
       await expect(controller!.load("manual")).resolves.toBe(true);
-      expect(feed.querySelector('[data-gallery-loading-field="true"]')).toBeNull();
+      expect(feed.querySelector('[data-gallery-loading-tile="true"]')).toBeNull();
       expect(feed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
-      expect(link.textContent).toBe("All photos loaded");
+      expect(feed.children.includes(control)).toBe(false);
       expect(status.textContent).toBe("All photos loaded");
-      expect(grid.children.slice(25).every((card) => card.animations.length === 0)).toBe(true);
+      expect(grid.children.slice(24).every((card) => card.animations.length === 0)).toBe(true);
 
       // Island cleanup runs after zfb swaps the body. A same-scope destination
       // must not overwrite the outgoing history entry's persisted snapshot.
@@ -627,8 +636,111 @@ describe("infinite gallery controller without browser-only observers", () => {
       destinationFeed.queryLists.set('[data-gallery-grid="true"]', [destinationGrid]);
       activeFeed = destinationFeed;
       controller!.destroy();
-      expect(grid.children.slice(1, 25).every((card) => card.animations[0]!.cancelled)).toBe(true);
+      expect(grid.children.slice(1, 24).every((card) => card.animations[0]!.cancelled)).toBe(true);
       expect(store.get(identity!.key, identity!.scope, identity!.url)?.page).toBe(3);
+
+      const makeModeFeed = () => {
+        const modeGrid = new FakeElement();
+        const modeCard = new FakeElement();
+        modeCard.dataset.photoId = "initial";
+        modeCard.style.setProperty("--a", "1.5");
+        modeCard.outerHTML = '<li data-photo-id="initial"><img></li>';
+        modeGrid.append(modeCard);
+        const modeLink = new FakeElement();
+        modeLink.href = "https://example.test/page/2";
+        const modeControl = new FakeElement();
+        modeControl.outerHTML = '<nav data-gallery-feed-next><a data-gallery-next-link="true" data-gallery-next-url="/page/2" data-gallery-next-count="24" href="/page/2">Next</a></nav>';
+        const modeStatus = new FakeElement();
+        const modeFeed = new FakeElement();
+        modeFeed.dataset = {
+          galleryScope: "global", galleryPage: "1", galleryTotalPages: "3",
+          galleryTotalItems: "50", galleryPageSize: "24", galleryNextUrl: "/page/2",
+          galleryNextCount: "24", galleryTerminal: "false",
+        };
+        modeFeed.queryLists.set('[data-gallery-grid="true"]', [modeGrid]);
+        modeFeed.queries.set('[data-gallery-next-link="true"]', modeLink);
+        modeFeed.queries.set("[data-gallery-feed-next]", modeControl);
+        modeFeed.queries.set("[data-gallery-status]", modeStatus);
+        modeFeed.append(modeGrid, modeControl, modeStatus);
+        modeFeed.ownerDocument = fakeDocument as unknown as { createElement: (tagName: string) => FakeElement };
+        activeFeed = modeFeed;
+        return { modeFeed, modeGrid, modeLink, modeControl, modeStatus };
+      };
+      const modeStore = new GallerySnapshotStore(null);
+      let modeState: unknown = null;
+      const modeEnvironment = (
+        createObserver?: (callback: IntersectionObserverCallback, options: IntersectionObserverInit) => Pick<IntersectionObserver, "observe" | "disconnect">,
+      ) => ({
+        document: fakeDocument as unknown as Document,
+        location: { href: "https://example.test/", origin: "https://example.test" } as Location,
+        history: { state: modeState } as unknown as History,
+        fetch: (async () => new Response("error", { status: 503, headers: { "content-type": "text/html" } })) as typeof fetch,
+        parseHtml: () => parsedDocument as Document,
+        syncEntry: ((_url: string | URL, options?: { state?: unknown }) => {
+          modeState = options?.state ?? null;
+        }) as typeof import("@takazudo/zfb-runtime").syncHistoryEntry,
+        store: modeStore,
+        ...(createObserver ? { createObserver } : {}),
+      });
+
+      const baseline = makeModeFeed();
+      const baselineController = InfiniteGalleryController.mount(modeEnvironment());
+      expect(baselineController?.save()).toBe(true);
+      const modeIdentity = identityFromState(modeState, "global", "https://example.test/");
+      expect(modeStore.get(modeIdentity!.key, modeIdentity!.scope, modeIdentity!.url)?.nextControlHtml)
+        .toBe(baseline.modeControl.outerHTML);
+      baselineController?.destroy();
+
+      const absent = makeModeFeed();
+      const absentController = InfiniteGalleryController.mount(modeEnvironment());
+      expect(absent.modeFeed.attrs.has("data-gallery-auto-load-active")).toBe(false);
+      expect(absent.modeGrid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
+      absentController?.destroy();
+
+      const constructionFailure = makeModeFeed();
+      const constructionController = InfiniteGalleryController.mount(modeEnvironment(() => { throw new Error("construction failed"); }));
+      expect(constructionFailure.modeFeed.attrs.has("data-gallery-auto-load-active")).toBe(false);
+      expect(constructionFailure.modeGrid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
+      expect(constructionFailure.modeFeed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
+      constructionController?.destroy();
+
+      const observationFailure = makeModeFeed();
+      const observationController = InfiniteGalleryController.mount(modeEnvironment(() => ({
+        observe: () => { throw new Error("observation failed"); },
+        disconnect: () => undefined,
+      })));
+      expect(observationFailure.modeFeed.attrs.has("data-gallery-auto-load-active")).toBe(false);
+      expect(observationFailure.modeGrid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
+      expect(observationFailure.modeFeed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
+      observationController?.destroy();
+
+      const healthy = makeModeFeed();
+      let observed: FakeElement | null = null;
+      let disconnected = false;
+      const healthyController = InfiniteGalleryController.mount(modeEnvironment(() => ({
+        observe: (target) => { observed = target as unknown as FakeElement; },
+        disconnect: () => { disconnected = true; },
+      })));
+      const healthyTiles = healthy.modeGrid.querySelectorAll('[data-gallery-loading-tile="true"]');
+      expect(healthy.modeFeed.attrs.get("data-gallery-auto-load-active")).toBe("true");
+      expect(healthyTiles).toHaveLength(24);
+      expect(healthy.modeGrid.children[0]!.dataset.photoId).toBe("initial");
+      expect(healthy.modeGrid.children.at(-24)).toBe(healthyTiles[0]);
+      expect(healthy.modeFeed.children[1]).toBe(observed);
+      expect(healthyController?.save()).toBe(true);
+      const autoHiddenSnapshot = modeStore.get(modeIdentity!.key, modeIdentity!.scope, modeIdentity!.url);
+      expect(autoHiddenSnapshot?.nextControlHtml).toBe(healthy.modeControl.outerHTML);
+      expect(autoHiddenSnapshot?.nextControlHtml).not.toContain("hidden");
+      expect(autoHiddenSnapshot?.nextControlHtml).not.toContain("aria-hidden");
+      await expect(healthyController!.load("observer")).resolves.toBe(false);
+      expect(healthy.modeFeed.attrs.has("data-gallery-auto-load-active")).toBe(false);
+      expect(healthy.modeGrid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
+      expect(healthy.modeFeed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
+      expect(healthy.modeStatus.textContent).toContain("Activate “Load next 24 photos” to retry");
+      expect(healthy.modeFeed.children.includes(healthy.modeControl)).toBe(true);
+      healthyController!.destroy();
+      expect(disconnected).toBe(true);
+      expect(healthy.modeFeed.attrs.has("data-gallery-auto-load-active")).toBe(false);
     } finally {
       Object.defineProperty(globalThis, "HTMLElement", { configurable: true, value: OriginalHTMLElement });
     }
