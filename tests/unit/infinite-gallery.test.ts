@@ -14,7 +14,9 @@ import {
   GalleryAutoLoadGate,
   GallerySingleFlight,
   InfiniteGalleryController,
+  captureGallerySnapshot,
   identityFromState,
+  injectGallerySnapshot,
   isHtmlContentType,
   isSequentialFeed,
   parseFeedMetadata,
@@ -219,6 +221,89 @@ describe("infinite gallery response invariants", () => {
     })).resolves.toBe(true);
     expect(starts).toBe(2);
   });
+
+  it("serializes only photo cards and round-trips without non-element grid children", () => {
+    const OriginalHTMLElement = globalThis.HTMLElement;
+    class SnapshotElement {
+      dataset: Record<string, string> = {};
+      children: unknown[] = [];
+      outerHTML = "";
+      attributes: { name: string; value: string }[] = [];
+      tagName = "LI";
+      ownerDocument: unknown;
+      querySelector(selector: string): SnapshotElement | null {
+        return selector === "img" ? new SnapshotElement() : null;
+      }
+      querySelectorAll(): SnapshotElement[] { return []; }
+    }
+    Object.defineProperty(globalThis, "HTMLElement", { configurable: true, value: SnapshotElement });
+
+    try {
+      const makeCard = (id: string): SnapshotElement => {
+        const card = new SnapshotElement();
+        card.dataset.photoId = id;
+        card.outerHTML = `<li data-photo-id="${id}"><img></li>`;
+        return card;
+      };
+      const sourceGrid = { children: [makeCard("1"), new SnapshotElement(), makeCard("2")] };
+      const sourceFeed = {
+        dataset: {
+          galleryScope: "global", galleryPage: "1", galleryTotalPages: "1",
+          galleryTotalItems: "2", galleryPageSize: "24", galleryNextUrl: "",
+          galleryNextCount: "0", galleryTerminal: "true",
+        },
+        querySelectorAll: (selector: string) => selector === '[data-gallery-grid="true"]' ? [sourceGrid] : [],
+        querySelector: () => null,
+      };
+      const sourceRoot = {
+        querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [sourceFeed] : [],
+      };
+      const identity = {
+        version: GALLERY_SNAPSHOT_VERSION,
+        key: "gallery-12345678",
+        scope: "global",
+        url: "https://example.test/",
+      } as const;
+      const captured = captureGallerySnapshot(sourceRoot as unknown as ParentNode, identity, 123);
+      expect(captured?.cardsHtml).toBe('<li data-photo-id="1"><img></li><li data-photo-id="2"><img></li>');
+
+      const destinationGrid = {
+        children: [] as SnapshotElement[],
+        replaceChildren(fragment: { children: SnapshotElement[] }) { this.children = [...fragment.children]; },
+      };
+      let serializedTextNode = false;
+      const ownerDocument = {
+        createElement: () => {
+          const template = {
+            content: { children: [] as unknown[], firstElementChild: null },
+            set innerHTML(value: string) {
+              this.content.children = [...value.matchAll(/data-photo-id="([^"]+)"/g)].map((match) => makeCard(match[1]!));
+              if (serializedTextNode) this.content.children.push({});
+            },
+          };
+          return template;
+        },
+      };
+      const destinationFeed = {
+        dataset: { ...sourceFeed.dataset },
+        ownerDocument,
+        querySelectorAll: (selector: string) => selector === '[data-gallery-grid="true"]' ? [destinationGrid] : [],
+        querySelector: () => null,
+      };
+      const destinationRoot = {
+        querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [destinationFeed] : [],
+      };
+      expect(injectGallerySnapshot(destinationRoot as unknown as ParentNode, captured!)).toBe(true);
+      expect(destinationGrid.children.map((card) => card.dataset.photoId)).toEqual(["1", "2"]);
+
+      destinationGrid.children = [];
+      serializedTextNode = true;
+      expect(injectGallerySnapshot(destinationRoot as unknown as ParentNode, captured!)).toBe(false);
+      expect(destinationGrid.children).toEqual([]);
+    } finally {
+      Object.defineProperty(globalThis, "HTMLElement", { configurable: true, value: OriginalHTMLElement });
+    }
+  });
 });
 
 describe("infinite gallery controller without browser-only observers", () => {
@@ -227,6 +312,10 @@ describe("infinite gallery controller without browser-only observers", () => {
     class FakeElement {
       dataset: Record<string, string> = {};
       children: FakeElement[] = [];
+      parentNode: FakeElement | null = null;
+      ownerDocument: { createElement: (tagName: string) => FakeElement } | null = null;
+      tagName = "DIV";
+      className = "";
       innerHTML = "";
       outerHTML = "";
       textContent = "";
@@ -235,10 +324,35 @@ describe("infinite gallery controller without browser-only observers", () => {
       loading = "";
       readonly attrs = new Map<string, string>();
       readonly listeners = new Map<string, Set<(event: Event) => void>>();
+      readonly animations: { keyframes: Keyframe[]; options: KeyframeAnimationOptions; cancel: () => void; cancelled: boolean }[] = [];
+      readonly styleValues = new Map<string, string>();
+      readonly style = {
+        getPropertyValue: (name: string) => this.styleValues.get(name) ?? "",
+        setProperty: (name: string, value: string) => { this.styleValues.set(name, value); },
+      };
       queries = new Map<string, FakeElement | null>();
       queryLists = new Map<string, FakeElement[]>();
-      querySelector(selector: string): FakeElement | null { return this.queries.get(selector) ?? null; }
-      querySelectorAll(selector: string): FakeElement[] { return this.queryLists.get(selector) ?? []; }
+      querySelector(selector: string): FakeElement | null {
+        if (this.queries.has(selector)) return this.queries.get(selector) ?? null;
+        return this.querySelectorAll(selector)[0] ?? null;
+      }
+      querySelectorAll(selector: string): FakeElement[] {
+        if (this.queryLists.has(selector)) return this.queryLists.get(selector) ?? [];
+        const matches = (node: FakeElement): boolean => {
+          if (selector === '[data-gallery-loading-field="true"]') return node.dataset.galleryLoadingField === "true";
+          if (selector === "img") return node.tagName === "IMG";
+          return false;
+        };
+        const found: FakeElement[] = [];
+        const visit = (node: FakeElement): void => {
+          node.children.forEach((child) => {
+            if (matches(child)) found.push(child);
+            visit(child);
+          });
+        };
+        visit(this);
+        return found;
+      }
       addEventListener(type: string, listener: (event: Event) => void): void {
         const listeners = this.listeners.get(type) ?? new Set();
         listeners.add(listener);
@@ -246,20 +360,55 @@ describe("infinite gallery controller without browser-only observers", () => {
       }
       removeEventListener(type: string, listener: (event: Event) => void): void { this.listeners.get(type)?.delete(listener); }
       setAttribute(name: string, value: string): void { this.attrs.set(name, value); }
+      getAttribute(name: string): string | null { return this.attrs.get(name) ?? null; }
+      hasAttribute(name: string): boolean { return this.attrs.has(name); }
       removeAttribute(name: string): void {
         this.attrs.delete(name);
         if (name === "href") this.href = "";
       }
-      append(node: FakeElement): void { this.children.push(node); }
+      append(...nodes: FakeElement[]): void {
+        nodes.forEach((node) => {
+          node.parentNode = this;
+          this.children.push(node);
+        });
+      }
       appendChild(node: FakeElement): FakeElement {
-        this.children.push(...node.children);
+        if (node.tagName === "#FRAGMENT") {
+          node.children.forEach((child) => {
+            child.parentNode = this;
+            this.children.push(child);
+          });
+          node.children = [];
+        } else {
+          this.append(node);
+        }
         return node;
+      }
+      remove(): void {
+        if (!this.parentNode) return;
+        this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
+        this.parentNode = null;
+      }
+      animate(keyframes: Keyframe[], options: KeyframeAnimationOptions): Animation {
+        const record = {
+          keyframes,
+          options,
+          cancelled: false,
+          cancel() { this.cancelled = true; },
+        };
+        this.animations.push(record);
+        return record as unknown as Animation;
       }
     }
     Object.defineProperty(globalThis, "HTMLElement", { configurable: true, value: FakeElement });
 
     try {
       const grid = new FakeElement();
+      const initialCard = new FakeElement();
+      initialCard.dataset.photoId = "initial";
+      initialCard.style.setProperty("--a", "1.5");
+      initialCard.outerHTML = '<li data-photo-id="initial" style="--a:1.5"><img></li>';
+      grid.children.push(initialCard);
       const link = new FakeElement();
       link.href = "https://example.test/page/2";
       const status = new FakeElement();
@@ -267,16 +416,18 @@ describe("infinite gallery controller without browser-only observers", () => {
       control.outerHTML = '<nav data-gallery-feed-next><a data-gallery-next-link="true" href="/page/2">Next</a></nav>';
       const feed = new FakeElement();
       feed.dataset = {
-        galleryScope: "global", galleryPage: "1", galleryTotalPages: "2",
-        galleryTotalItems: "48", galleryPageSize: "24", galleryNextUrl: "/page/2",
+        galleryScope: "global", galleryPage: "1", galleryTotalPages: "3",
+        galleryTotalItems: "50", galleryPageSize: "24", galleryNextUrl: "/page/2",
         galleryNextCount: "24", galleryTerminal: "false",
       };
       feed.queryLists.set('[data-gallery-grid="true"]', [grid]);
       feed.queries.set('[data-gallery-next-link="true"]', link);
       feed.queries.set("[data-gallery-status]", status);
       feed.queries.set("[data-gallery-feed-next]", control);
+      feed.append(grid, control, status);
 
       const documentListeners = new Map<string, Set<(event: Event) => void>>();
+      let reduceMotion = false;
       let activeFeed = feed;
       const fakeDocument = {
         querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [activeFeed] : [],
@@ -287,7 +438,15 @@ describe("infinite gallery controller without browser-only observers", () => {
         },
         removeEventListener: (type: string, listener: (event: Event) => void) => documentListeners.get(type)?.delete(listener),
         dispatch: (event: Event) => documentListeners.get(event.type)?.forEach((listener) => listener(event)),
+        createElement: (tagName: string) => {
+          const element = new FakeElement();
+          element.tagName = tagName.toUpperCase();
+          element.ownerDocument = fakeDocument as unknown as { createElement: (tagName: string) => FakeElement };
+          return element;
+        },
+        defaultView: { matchMedia: () => ({ matches: reduceMotion }) },
       };
+      feed.ownerDocument = fakeDocument as unknown as { createElement: (tagName: string) => FakeElement };
       const history = { state: null };
       let requested = "";
       let failWithResponse = false;
@@ -320,6 +479,12 @@ describe("infinite gallery controller without browser-only observers", () => {
         store,
       });
       expect(controller).not.toBeNull();
+      const initialField = feed.querySelector('[data-gallery-loading-field="true"]');
+      expect(initialField).not.toBeNull();
+      expect(feed.children.at(-1)).toBe(initialField);
+      expect(initialField!.children[0]!.children).toHaveLength(24);
+      expect(initialField!.children[0]!.children[0]!.className).toBe("photo-card gs2");
+      expect(initialField!.children[0]!.children[0]!.dataset.photoId).toBeUndefined();
       const clickListener = [...(link.listeners.get("click") ?? [])][0]!;
       link.href = "https://example.test/wrong-page";
       let prevented = false;
@@ -349,6 +514,7 @@ describe("infinite gallery controller without browser-only observers", () => {
       for (let id = 1; id <= 24; id += 1) {
         const card = new FakeElement();
         card.dataset.photoId = String(id);
+        card.outerHTML = `<li data-photo-id="${id}"><img loading="lazy"></li>`;
         const image = new FakeElement();
         image.loading = "eager";
         card.queryLists.set("img", [image]);
@@ -357,31 +523,76 @@ describe("infinite gallery controller without browser-only observers", () => {
       }
       const incomingFeed = new FakeElement();
       incomingFeed.dataset = {
-        galleryScope: "global", galleryPage: "2", galleryTotalPages: "2",
-        galleryTotalItems: "48", galleryPageSize: "24", galleryNextUrl: "",
-        galleryNextCount: "0", galleryTerminal: "true",
+        galleryScope: "global", galleryPage: "2", galleryTotalPages: "3",
+        galleryTotalItems: "50", galleryPageSize: "24", galleryNextUrl: "/page/3",
+        galleryNextCount: "2", galleryTerminal: "false",
       };
       incomingFeed.queryLists.set('[data-gallery-grid="true"]', [incomingGrid]);
+      const incomingLink = new FakeElement();
+      incomingLink.attrs.set("href", "/page/3");
+      incomingFeed.queries.set('[data-gallery-next-link="true"]', incomingLink);
       parsedDocument = {
         querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [incomingFeed] : [],
       };
-      (fakeDocument as Record<string, unknown>).createDocumentFragment = () => new FakeElement();
+      (fakeDocument as Record<string, unknown>).createDocumentFragment = () => {
+        const fragment = new FakeElement();
+        fragment.tagName = "#FRAGMENT";
+        return fragment;
+      };
       (fakeDocument as Record<string, unknown>).importNode = (node: FakeElement) => node;
       failWithResponse = false;
       succeed = true;
       await expect(controller!.load("manual")).resolves.toBe(true);
-      expect(grid.children.map((card) => card.dataset.photoId)).toEqual(Array.from({ length: 24 }, (_, index) => String(index + 1)));
+      expect(grid.children.map((card) => card.dataset.photoId)).toEqual([
+        "initial", ...Array.from({ length: 24 }, (_, index) => String(index + 1)),
+      ]);
       expect(grid.children.every((card) => card.querySelectorAll("img").every((image) => image.loading === "lazy"))).toBe(true);
       expect(feed.dataset).toMatchObject({
-        galleryPage: "2", galleryNextUrl: "", galleryNextCount: "0", galleryTerminal: "true",
+        galleryPage: "2", galleryNextUrl: "/page/3", galleryNextCount: "2", galleryTerminal: "false",
       });
-      expect(link.textContent).toBe("All photos loaded");
-      expect(link.href).toBe("");
-      expect(status.textContent).toBe("All photos loaded");
+      expect(link.textContent).toBe("Load next 2 photos");
+      expect(link.href).toBe("/page/3");
+      expect(status.textContent).toBe("Loaded 24 photos.");
+      const rebuiltField = feed.querySelector('[data-gallery-loading-field="true"]');
+      expect(feed.children.at(-1)).toBe(rebuiltField);
+      expect(rebuiltField!.children[0]!.children).toHaveLength(2);
+      expect(grid.children.slice(1).every((card) => card.animations.length === 1)).toBe(true);
+      expect(grid.children[1]!.animations[0]!.options).toMatchObject({ duration: 280, delay: 0, fill: "backwards" });
 
       const identity = identityFromState(syncedState, "global", "https://example.test/");
       expect(identity).not.toBeNull();
       expect(store.get(identity!.key, identity!.scope, identity!.url)?.page).toBe(2);
+      expect(store.get(identity!.key, identity!.scope, identity!.url)?.cardsHtml).not.toContain("gallery-loading-field");
+      expect(store.get(identity!.key, identity!.scope, identity!.url)?.cardsHtml).not.toContain("animation");
+
+      const terminalGrid = new FakeElement();
+      for (let id = 25; id <= 26; id += 1) {
+        const card = new FakeElement();
+        card.dataset.photoId = String(id);
+        card.outerHTML = `<li data-photo-id="${id}"><img loading="lazy"></li>`;
+        const image = new FakeElement();
+        image.tagName = "IMG";
+        card.queryLists.set("img", [image]);
+        card.queries.set("img", image);
+        terminalGrid.children.push(card);
+      }
+      const terminalFeed = new FakeElement();
+      terminalFeed.dataset = {
+        galleryScope: "global", galleryPage: "3", galleryTotalPages: "3",
+        galleryTotalItems: "50", galleryPageSize: "24", galleryNextUrl: "",
+        galleryNextCount: "0", galleryTerminal: "true",
+      };
+      terminalFeed.queryLists.set('[data-gallery-grid="true"]', [terminalGrid]);
+      parsedDocument = {
+        querySelectorAll: (selector: string) => selector === '[data-gallery-feed="true"]' ? [terminalFeed] : [],
+      };
+      link.href = "https://example.test/page/3";
+      reduceMotion = true;
+      await expect(controller!.load("manual")).resolves.toBe(true);
+      expect(feed.querySelector('[data-gallery-loading-field="true"]')).toBeNull();
+      expect(link.textContent).toBe("All photos loaded");
+      expect(status.textContent).toBe("All photos loaded");
+      expect(grid.children.slice(25).every((card) => card.animations.length === 0)).toBe(true);
 
       // Island cleanup runs after zfb swaps the body. A same-scope destination
       // must not overwrite the outgoing history entry's persisted snapshot.
@@ -398,7 +609,8 @@ describe("infinite gallery controller without browser-only observers", () => {
       destinationFeed.queryLists.set('[data-gallery-grid="true"]', [destinationGrid]);
       activeFeed = destinationFeed;
       controller!.destroy();
-      expect(store.get(identity!.key, identity!.scope, identity!.url)?.page).toBe(2);
+      expect(grid.children.slice(1, 25).every((card) => card.animations[0]!.cancelled)).toBe(true);
+      expect(store.get(identity!.key, identity!.scope, identity!.url)?.page).toBe(3);
     } finally {
       Object.defineProperty(globalThis, "HTMLElement", { configurable: true, value: OriginalHTMLElement });
     }
