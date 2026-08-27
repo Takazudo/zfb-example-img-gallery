@@ -190,11 +190,14 @@ describe("infinite gallery response invariants", () => {
     expect(unseenPhotoIds(["1", "2"], ["2", "3", "3", "4"])).toEqual(["3", "4"]);
   });
 
-  it("requires an observer leave/re-enter after automatic success while manual loading stays independent", () => {
+  it("re-arms after observer exit or explicit continuation input without automatic cascading", () => {
     const gate = new GalleryAutoLoadGate();
     expect(gate.observe(true)).toBe(true);
     gate.automaticSuccess();
     expect(gate.observe(true)).toBe(false);
+    gate.continueAfterInput();
+    expect(gate.observe(true)).toBe(true);
+    gate.automaticSuccess();
     expect(gate.observe(false)).toBe(false);
     expect(gate.observe(true)).toBe(true);
   });

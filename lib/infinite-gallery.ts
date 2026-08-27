@@ -24,6 +24,7 @@ const CONTROL_SELECTOR = "[data-gallery-feed-next]";
 const STATUS_SELECTOR = "[data-gallery-status]";
 const LOADING_FIELD_SELECTOR = '[data-gallery-loading-field="true"]';
 const AUTO_LOAD_SENTINEL_SELECTOR = '[data-gallery-auto-load-sentinel="true"]';
+const AUTO_LOAD_ROOT_MARGIN_PX = 240;
 export const MAX_BATCH_SIZE = 24;
 
 export type FeedMetadata = {
@@ -96,7 +97,8 @@ export function unseenPhotoIds(existing: readonly string[], incoming: readonly s
   return result;
 }
 
-/** Pure observer state: an automatic success disarms until a non-intersecting sample. */
+/** Pure observer state: an automatic success disarms until the user continues
+ * downward or the observer receives a non-intersecting sample. */
 export class GalleryAutoLoadGate {
   #armed = true;
 
@@ -114,6 +116,10 @@ export class GalleryAutoLoadGate {
 
   automaticSuccess(): void {
     this.#armed = false;
+  }
+
+  continueAfterInput(): void {
+    this.#armed = true;
   }
 }
 
@@ -414,6 +420,7 @@ export class InfiniteGalleryController {
   #abortController: AbortController | null = null;
   #loadingField: HTMLElement | null = null;
   #autoLoadSentinel: HTMLElement | null = null;
+  #queuedAutoContinuation = false;
   readonly #revealAnimations = new Set<Animation>();
   #generation = 0;
   #destroyed = false;
@@ -466,8 +473,11 @@ export class InfiniteGalleryController {
     this.#link?.addEventListener("click", this.#onClick);
     environment.document.addEventListener("zfb:before-preparation", this.#onBeforePreparation);
     if (this.#link && this.#autoLoadSentinel && environment.createObserver) {
-      this.#observer = environment.createObserver(this.#onIntersection, { rootMargin: "0px 0px 240px" });
+      this.#observer = environment.createObserver(this.#onIntersection, {
+        rootMargin: `0px 0px ${AUTO_LOAD_ROOT_MARGIN_PX}px`,
+      });
       this.#observer.observe(this.#autoLoadSentinel);
+      environment.document.addEventListener("wheel", this.#onWheel, { passive: true });
     }
   }
 
@@ -482,7 +492,7 @@ export class InfiniteGalleryController {
     this.#abortController = abortController;
     this.#setStatus(`Loading ${metadata.nextCount} photos…`, true);
 
-    return this.#flight.run(() => this.#performLoad(requestedUrl, metadata, abortController.signal, generation)
+    const pending = this.#flight.run(() => this.#performLoad(requestedUrl, metadata, abortController.signal, generation)
       .then((success) => {
         if (success && source === "observer") this.#autoGate.automaticSuccess();
         return success;
@@ -497,6 +507,8 @@ export class InfiniteGalleryController {
         if (this.#abortController === abortController) this.#abortController = null;
         if (generation === this.#generation) this.#feed.removeAttribute("aria-busy");
       }));
+    void pending.then((success) => this.#continueAutomaticLoad(success));
+    return pending;
   }
 
   save(): boolean {
@@ -527,6 +539,7 @@ export class InfiniteGalleryController {
     this.#removeAutoLoadSentinel();
     this.#observer?.disconnect();
     this.#link?.removeEventListener("click", this.#onClick);
+    this.#env.document.removeEventListener("wheel", this.#onWheel);
     this.#env.document.removeEventListener("zfb:before-preparation", this.#onBeforePreparation);
   }
 
@@ -541,7 +554,23 @@ export class InfiniteGalleryController {
   readonly #onIntersection: IntersectionObserverCallback = (entries): void => {
     const entry = entries.find((candidate) => candidate.target === this.#autoLoadSentinel);
     if (!entry) return;
+    if (!entry.isIntersecting) this.#queuedAutoContinuation = false;
     if (this.#autoGate.observe(entry.isIntersecting)) void this.load("observer");
+  };
+
+  readonly #onWheel = (event: WheelEvent): void => {
+    if (event.defaultPrevented || event.ctrlKey) return;
+    if (event.deltaY < 0) {
+      this.#queuedAutoContinuation = false;
+      return;
+    }
+    if (event.deltaY === 0 || !this.#autoLoadSentinelIsInRange()) return;
+    if (this.#flight.pending) {
+      this.#queuedAutoContinuation = true;
+      return;
+    }
+    this.#autoGate.continueAfterInput();
+    void this.load("observer");
   };
 
   readonly #onBeforePreparation = (event: Event): void => {
@@ -708,9 +737,29 @@ export class InfiniteGalleryController {
 
   #removeAutoLoadSentinel(): void {
     this.#observer?.disconnect();
+    this.#queuedAutoContinuation = false;
     this.#autoLoadSentinel?.remove();
     this.#autoLoadSentinel = null;
     this.#feed.querySelectorAll(AUTO_LOAD_SENTINEL_SELECTOR).forEach((sentinel) => sentinel.remove());
+  }
+
+  #autoLoadSentinelIsInRange(): boolean {
+    const view = this.#env.document.defaultView;
+    const sentinel = this.#autoLoadSentinel;
+    if (!view || !sentinel?.isConnected) return false;
+    const rect = sentinel.getBoundingClientRect();
+    return rect.bottom >= 0
+      && rect.top <= view.innerHeight + AUTO_LOAD_ROOT_MARGIN_PX
+      && rect.right >= 0
+      && rect.left <= view.innerWidth;
+  }
+
+  #continueAutomaticLoad(success: boolean): void {
+    if (!this.#queuedAutoContinuation) return;
+    this.#queuedAutoContinuation = false;
+    if (!success || this.#destroyed || !this.#autoLoadSentinelIsInRange()) return;
+    this.#autoGate.continueAfterInput();
+    void this.load("observer");
   }
 
   #reveal(cards: readonly HTMLElement[]): void {
