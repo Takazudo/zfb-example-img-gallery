@@ -32,8 +32,9 @@ async function openHealthyGallery(page: Page, identity: string): Promise<void> {
   await expect(page.locator(`[data-gallery-feed="true"] > ${FEED_NEXT_SELECTOR}`)).toHaveCount(1);
   await expect(page.locator(`[data-gallery-feed="true"] > ${FEED_NEXT_SELECTOR}`)).toBeHidden();
   // Wait for the display-settings island to finish its default preference
-  // setup before tests override root layout or width attributes directly.
-  await expect(page.getByRole("button", { name: "Display settings", exact: true })).toBeVisible();
+  // setup before tests override root layout or width attributes directly. At
+  // mobile widths the hydrated trigger is attached inside the closed menu.
+  await expect(page.locator('button[aria-label="Display settings"]')).toHaveCount(1);
 }
 
 async function setLayout(page: Page, layout: Layout): Promise<void> {

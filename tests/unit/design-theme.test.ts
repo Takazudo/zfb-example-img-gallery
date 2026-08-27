@@ -123,7 +123,7 @@ describe("semantic theme architecture", () => {
   });
 
   it("keeps loading tiles in the canonical grid without field spacing compensation", () => {
-    expect(globalCss).toContain('[data-gallery-auto-load-active="true"] [data-gallery-feed-next] { display: none; }');
+    expect(globalCss).toMatch(/@layer utilities\s*{[\s\S]*?\[data-gallery-auto-load-active="true"\] \[data-gallery-feed-next\] \{ display: none; \}[\s\S]*?}/);
     expect(globalCss).toContain("[data-gallery-loading-tile]");
     expect(globalCss).not.toContain("[data-gallery-loading-field]");
   });

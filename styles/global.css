@@ -254,9 +254,14 @@ html[data-theme="dark"] {
   }
 }
 
+@layer utilities {
+  /* This state must share the utilities layer with the nav's `flex` class so
+     its higher specificity can hide the progressive-enhancement fallback. */
+  [data-gallery-auto-load-active="true"] [data-gallery-feed-next] { display: none; }
+}
+
 @layer components {
   [data-gallery-feed="true"] { container-type: inline-size; }
-  [data-gallery-auto-load-active="true"] [data-gallery-feed-next] { display: none; }
   .photo-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--gallery-thumbnail-width)), 1fr));
