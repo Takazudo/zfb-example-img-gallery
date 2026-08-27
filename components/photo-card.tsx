@@ -1,5 +1,9 @@
 import { PlaceholderImage } from "./placeholder-image";
 import { FavoriteControl } from "./favorite-control";
+import {
+  encodeGalleryLayoutClass,
+  getGalleryLayoutRoles,
+} from "../lib/gallery-layout-roles";
 
 export type PhotoCardPhoto = {
   id: number | string;
@@ -14,6 +18,7 @@ export type PhotoCardPhoto = {
 
 type Props = {
   photo: PhotoCardPhoto;
+  absoluteIndex?: number;
   priority?: boolean;
   srcSet?: string;
   sizes?: string;
@@ -26,17 +31,22 @@ function DeleteIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true" class="size-6"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" /></svg>;
 }
 
-export function PhotoCard({ photo, priority = false, srcSet, sizes, viewerId = null, returnTo, selectable = false }: Props) {
+export function PhotoCard({ photo, absoluteIndex = 0, priority = false, srcSet, sizes, viewerId = null, returnTo, selectable = false }: Props) {
   const responsive = srcSet ? { srcSet, sizes: sizes ?? "(min-width: 48rem) 200px, 100vw" } : {};
   const owned = viewerId !== null && photo.ownerId === viewerId;
   const safeReturnTo = returnTo ?? `/photos/${photo.id}`;
+  const roles = getGalleryLayoutRoles(absoluteIndex, photo.width, photo.height);
   return (
-    <li data-photo-id={String(photo.id)} class="photo-card">
+    <li
+      data-photo-id={String(photo.id)}
+      class={`photo-card ${encodeGalleryLayoutClass(absoluteIndex)}`}
+      style={`--a:${roles.intrinsicAspectRatio}`}
+    >
       <div data-photo-card-media-wrapper class="photo-card-media-wrapper">
         <a href={`/photos/${photo.id}`} class="photo-card-link">
           <div data-photo-card-media class="photo-card-media">
             <PlaceholderImage src={photo.src} alt={photo.title} width={photo.width} height={photo.height}
-              blurhash={photo.blurhash} fit="cover" wrapperClass="w-full"
+              blurhash={photo.blurhash} fit="cover"
               loading={priority ? "eager" : "lazy"} decoding="async"
               class="photo-card-image" {...responsive} />
           </div>

@@ -101,11 +101,25 @@ describe("semantic theme architecture", () => {
     expect(globalCss).toContain('html[data-thumb-ratio="original"]');
     expect(globalCss).toContain("--gallery-thumbnail-aspect-ratio: auto;");
     expect(globalCss).toContain("--gallery-thumbnail-object-fit: contain;");
-    expect(readFileSync("components/photo-grid.tsx", "utf8")).toContain(
-      "minmax(min(100%,var(--gallery-thumbnail-width)),1fr)",
-    );
+    expect(readFileSync("components/photo-grid.tsx", "utf8")).toContain('class="photo-grid"');
+    expect(globalCss).toMatch(/\.photo-grid\s*{[^}]*grid-template-columns:\s*repeat\(auto-fill, minmax\(min\(100%, var\(--gallery-thumbnail-width\)\), 1fr\)\)/s);
     expect(readFileSync("components/photo-card.tsx", "utf8")).toContain('class="photo-card-image"');
     expect(globalCss).toContain("aspect-ratio: var(--gallery-thumbnail-aspect-ratio);");
+  });
+
+  it("provides deterministic responsive layout selectors and a masonry fallback", () => {
+    for (const layout of ["spotlight", "editorial", "justified", "masonry"]) {
+      expect(globalCss).toContain(`data-gallery-layout="${layout}"`);
+    }
+    expect(globalCss).toContain("grid-auto-flow: row;");
+    expect(globalCss).not.toContain("grid-auto-flow: dense");
+    expect(globalCss).toContain("grid-template-columns: repeat(12, minmax(0, 1fr));");
+    expect(globalCss).toContain("column-width: var(--gallery-thumbnail-width);");
+    expect(globalCss).toContain("column-gap: var(--spacing-hsp-sm);");
+    expect(globalCss).toContain("break-inside: avoid;");
+    expect(globalCss).toContain("aspect-ratio: var(--a);");
+    expect(globalCss).toMatch(/@container \(max-width: 42rem\)[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+    expect(globalCss).toMatch(/@container \(max-width: 26rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
   });
 
   it("keeps card actions in distinct 44px-class corners and the modal viewport-bound", () => {
