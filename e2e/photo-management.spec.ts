@@ -206,7 +206,9 @@ async function assertLayoutCardOverlays(
         })),
       };
     }, { cardIndex, layout });
-    expect(metrics.cardClass).toMatch(/\bg[fs][0-9a]\b/);
+    expect(metrics.cardClass).toMatch(
+      layout === "spotlight" ? /\bgf0\b/ : /\bgs4\b/,
+    );
     expect(metrics.cardStyle?.rowEnd).toBe(width === 375 ? "span 1" : "span 2");
     expect(metrics.cardStyle?.columnEnd).toBe(
       width === 375 ? "span 1" : layout === "spotlight" ? "span 2" : "span 1",

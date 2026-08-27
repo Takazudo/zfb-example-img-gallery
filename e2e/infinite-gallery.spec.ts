@@ -244,7 +244,9 @@ test("matches direct-page and appended absolute metadata in every non-Uniform la
   const appended = new Map<string, Awaited<ReturnType<typeof layoutMetadata>>>();
   for (const layout of NON_UNIFORM_LAYOUTS) {
     await setRootLayout(page, layout);
-    appended.set(layout, await layoutMetadata(page, 24, 24));
+    const metadata = await layoutMetadata(page, 24, 24);
+    expect(metadata.every(({ role, aspect }) => /^g[fs][0-9a]$/.test(role) && Number(aspect) > 0)).toBe(true);
+    appended.set(layout, metadata);
   }
 
   await page.goto(PAGE_TWO_PATH);

@@ -71,8 +71,12 @@ async function assertLayoutSignature(
     expect(signature.cards[0]!.rect.width).toBeGreaterThan(signature.cards[2]!.rect.width * 1.5);
     expect(signature.cards[4]!.rect.height).toBeGreaterThan(signature.cards[5]!.rect.height * 1.5);
   } else if (mode === "justified") {
-    expect(signature.cards.slice(0, 3).map(({ columnStart, columnEnd }) => [columnStart, columnEnd]))
-      .toEqual([["1", "span 5"], ["6", "span 3"], ["9", "span 4"]]);
+    expect(signature.cards.map(({ columnStart, columnEnd }) => [columnStart, columnEnd])).toEqual([
+      ["1", "span 5"], ["6", "span 3"], ["9", "span 4"],
+      ["1", "span 3"], ["4", "span 6"], ["10", "span 3"],
+      ["1", "span 4"], ["5", "span 4"], ["9", "span 4"],
+      ["1", "span 7"], ["8", "span 5"],
+    ]);
     expect(signature.cards[0]!.rect.width).toBeGreaterThan(signature.cards[1]!.rect.width);
     expect(signature.cards[1]!.rect.width).toBeLessThan(signature.cards[2]!.rect.width);
     expect(signature.cards[0]!.rect.top).toBeCloseTo(signature.cards[2]!.rect.top, 0);
@@ -80,6 +84,8 @@ async function assertLayoutSignature(
     expect(signature.display).toBe("block");
     expect(signature.cards.every(({ breakInside }) => breakInside === "avoid")).toBe(true);
     expect(signature.cards[0]!.imageRect?.height).not.toBeCloseTo(signature.cards[1]!.imageRect?.height ?? 0, 0);
+    expect(signature.cards[0]!.rect.left).toBeCloseTo(signature.cards[1]!.rect.left, 0);
+    expect(signature.cards[0]!.rect.top).toBeLessThan(signature.cards[1]!.rect.top);
   }
 }
 
@@ -261,6 +267,7 @@ test("defaults invalid/deleted storage, migrates v1, and persists every layout t
     await expect(page.locator("html")).toHaveAttribute("data-gallery-layout", value);
     expect(new URL((await softClick(page, FIXTURE_PATH)).finalUrl).pathname).toBe(FIXTURE_PATH);
     await expect(page.locator("html")).toHaveAttribute("data-gallery-layout", value);
+    await expect(layoutInput(page, value)).toBeChecked();
   }
   await expect(ratioInput(page, "portrait")).toBeChecked();
   await expect(widthInput(page, "large")).toBeChecked();
@@ -300,6 +307,8 @@ test("defaults invalid/deleted storage, migrates v1, and persists every layout t
     await layoutInput(page, value).click();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(layoutInput(secondTab, value)).toBeChecked();
+    await expect(ratioInput(secondTab, "landscape")).toBeChecked();
+    await expect(widthInput(secondTab, "small")).toBeChecked();
     await expect(secondTab.locator("html")).toHaveAttribute("data-gallery-layout", value);
   }
 
@@ -322,6 +331,7 @@ test("keeps every mode in bounds at 375, 800, and 1200px with accessible control
     for (const mode of LAYOUTS) {
       await openSettings(page);
       await layoutInput(page, mode).click();
+      await expect(page.locator("html")).toHaveAttribute("data-gallery-layout", mode);
       const targets = await dialog.locator("label, button").evaluateAll((elements) => elements.map((element) => {
         const rect = element.getBoundingClientRect();
         return { width: rect.width, height: rect.height };
@@ -394,6 +404,8 @@ test("keeps the settings dialog internally scrollable and Close reachable in a s
   expect(geometry.scrollerScrollHeight).toBeGreaterThan(geometry.scrollerClientHeight);
   expect(geometry.close?.top ?? -1).toBeGreaterThanOrEqual(geometry.dialog.top);
   expect(geometry.close?.bottom ?? geometry.viewportHeight + 1).toBeLessThanOrEqual(geometry.dialog.bottom);
+  expect(geometry.close?.width ?? 0).toBeGreaterThanOrEqual(44);
+  expect(geometry.close?.height ?? 0).toBeGreaterThanOrEqual(44);
   await scrollArea.evaluate((element) => { element.scrollTop = element.scrollHeight; });
   await expect(close).toBeVisible();
   expect(await page.evaluate(() => window.scrollY)).toBe(before);
