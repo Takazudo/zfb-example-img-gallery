@@ -11,13 +11,19 @@ import {
   type GalleryEntryIdentity,
   type GallerySnapshot,
 } from "./gallery-snapshots";
+import {
+  loadingFieldTiles,
+  medianAspectRatio,
+  revealSchedule,
+} from "./gallery-loading-field";
 
 const FEED_SELECTOR = '[data-gallery-feed="true"]';
 const GRID_SELECTOR = '[data-gallery-grid="true"]';
 const LINK_SELECTOR = '[data-gallery-next-link="true"]';
 const CONTROL_SELECTOR = "[data-gallery-feed-next]";
 const STATUS_SELECTOR = "[data-gallery-status]";
-const MAX_BATCH_SIZE = 24;
+const LOADING_FIELD_SELECTOR = '[data-gallery-loading-field="true"]';
+export const MAX_BATCH_SIZE = 24;
 
 export type FeedMetadata = {
   scope: string;
@@ -246,7 +252,7 @@ export function captureGallerySnapshot(
     entryUrl: identity.url,
     ...metadata,
     photoIds,
-    cardsHtml: elements.grid.innerHTML,
+    cardsHtml: cards.map((card) => card.outerHTML).join(""),
     nextControlHtml: elements.feed.querySelector(CONTROL_SELECTOR)?.outerHTML ?? "",
     savedAt: now,
   };
@@ -405,6 +411,8 @@ export class InfiniteGalleryController {
   readonly #autoGate = new GalleryAutoLoadGate();
   readonly #flight = new GallerySingleFlight();
   #abortController: AbortController | null = null;
+  #loadingField: HTMLElement | null = null;
+  readonly #revealAnimations = new Set<Animation>();
   #generation = 0;
   #destroyed = false;
 
@@ -452,6 +460,7 @@ export class InfiniteGalleryController {
     this.#identity = identity;
     this.#status = feed.querySelector<HTMLElement>(STATUS_SELECTOR);
     this.#link = feed.querySelector<HTMLAnchorElement>(LINK_SELECTOR);
+    this.#rebuildLoadingField(feedMetadata(feed));
     this.#link?.addEventListener("click", this.#onClick);
     environment.document.addEventListener("zfb:before-preparation", this.#onBeforePreparation);
     if (this.#link && environment.createObserver) {
@@ -495,7 +504,11 @@ export class InfiniteGalleryController {
 
   restore(): boolean {
     const snapshot = this.#env.store.get(this.#identity.key, this.#identity.scope, this.#identity.url);
-    return snapshot ? injectGallerySnapshot(this.#env.document, snapshot) : false;
+    if (!snapshot) return false;
+    this.#cancelRevealAnimations();
+    const restored = injectGallerySnapshot(this.#env.document, snapshot);
+    if (restored) this.#rebuildLoadingField(feedMetadata(this.#feed));
+    return restored;
   }
 
   destroy(): void {
@@ -507,6 +520,8 @@ export class InfiniteGalleryController {
     // earlier before-preparation hook already persist every useful snapshot.
     this.#generation += 1;
     this.#abortController?.abort();
+    this.#cancelRevealAnimations();
+    this.#removeLoadingField();
     this.#observer?.disconnect();
     this.#link?.removeEventListener("click", this.#onClick);
     this.#env.document.removeEventListener("zfb:before-preparation", this.#onBeforePreparation);
@@ -528,6 +543,7 @@ export class InfiniteGalleryController {
 
   readonly #onBeforePreparation = (event: Event): void => {
     if (!isTransitionBeforePreparationEvent(event)) return;
+    this.#cancelRevealAnimations();
     // This identity was captured at mount; history.state may already become the
     // destination entry before old-island cleanup on a traversal.
     this.save();
@@ -582,12 +598,14 @@ export class InfiniteGalleryController {
     const existingIds = photoCards(this.#grid).map((card) => card.dataset.photoId ?? "");
     const appendIds = new Set(unseenPhotoIds(existingIds, incomingIds));
     const fragment = this.#env.document.createDocumentFragment();
+    const appendedCards: HTMLElement[] = [];
     for (const card of incomingCards) {
       const id = card.dataset.photoId ?? "";
       if (!appendIds.has(id)) continue;
       const clone = this.#env.document.importNode(card, true) as HTMLElement;
       clone.querySelectorAll("img").forEach((image) => image.loading = "lazy");
       fragment.append(clone);
+      appendedCards.push(clone);
       appendIds.delete(id);
     }
 
@@ -595,9 +613,11 @@ export class InfiniteGalleryController {
     const liveLink = this.#link;
     if (!liveLink) return false;
     this.#grid.appendChild(fragment);
+    this.#reveal(appendedCards);
     setFeedMetadata(this.#feed, incoming);
     updateLink(liveLink, incoming);
     this.#setStatus(incoming.terminal ? "All photos loaded" : `Loaded ${incomingCards.length} photos.`, false);
+    this.#rebuildLoadingField(incoming);
     this.save();
     return true;
   }
@@ -609,6 +629,84 @@ export class InfiniteGalleryController {
       this.#status.textContent = message;
       this.#status.hidden = message === "";
     }
+  }
+
+  #rebuildLoadingField(metadata: FeedMetadata | null): void {
+    this.#removeLoadingField();
+    if (!metadata || metadata.terminal) return;
+
+    const ratios = photoCards(this.#grid).map((card) => Number.parseFloat(
+      card.style.getPropertyValue("--a"),
+    ));
+    const tiles = loadingFieldTiles(metadata, medianAspectRatio(ratios));
+    if (tiles.length === 0) return;
+
+    const field = this.#env.document.createElement("div");
+    field.dataset.galleryLoadingField = "true";
+    field.setAttribute("aria-hidden", "true");
+    const grid = this.#env.document.createElement("ul");
+    grid.className = "photo-grid";
+    for (const tile of tiles) {
+      const card = this.#env.document.createElement("li");
+      card.className = `photo-card ${tile.className}`;
+      card.style.setProperty("--a", String(tile.aspectRatio));
+      const mediaWrapper = this.#env.document.createElement("div");
+      mediaWrapper.className = "photo-card-media-wrapper";
+      const link = this.#env.document.createElement("div");
+      link.className = "photo-card-link";
+      const media = this.#env.document.createElement("div");
+      media.className = "photo-card-media";
+      const fill = this.#env.document.createElement("div");
+      fill.className = "photo-card-image photo-card-skeleton-fill";
+      media.appendChild(fill);
+      link.appendChild(media);
+      mediaWrapper.appendChild(link);
+      const title = this.#env.document.createElement("div");
+      title.className = "photo-card-title";
+      title.textContent = "\u00a0";
+      card.appendChild(mediaWrapper);
+      card.appendChild(title);
+      grid.appendChild(card);
+    }
+    field.appendChild(grid);
+    this.#feed.appendChild(field);
+    this.#loadingField = field;
+  }
+
+  #removeLoadingField(): void {
+    this.#loadingField?.remove();
+    this.#loadingField = null;
+    this.#feed.querySelectorAll(LOADING_FIELD_SELECTOR).forEach((field) => field.remove());
+  }
+
+  #reveal(cards: readonly HTMLElement[]): void {
+    let reduceMotion = false;
+    try {
+      reduceMotion = this.#env.document.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches ?? false;
+    } catch {
+      // A missing or restricted media-query API should not suppress enhancement.
+    }
+    if (reduceMotion) return;
+
+    const delays = revealSchedule(cards.length);
+    cards.forEach((card, index) => {
+      if (typeof card.animate !== "function") return;
+      const animation = card.animate([
+        { opacity: 0, transform: "translateY(4px)" },
+        { opacity: 1, transform: "translateY(0)" },
+      ], {
+        duration: 280,
+        delay: delays[index] ?? 0,
+        easing: "ease-out",
+        fill: "backwards",
+      });
+      this.#revealAnimations.add(animation);
+    });
+  }
+
+  #cancelRevealAnimations(): void {
+    this.#revealAnimations.forEach((animation) => animation.cancel());
+    this.#revealAnimations.clear();
   }
 
   #nextRequest(): { link: HTMLAnchorElement; metadata: FeedMetadata; requestedUrl: string } | null {

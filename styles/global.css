@@ -400,6 +400,28 @@ html[data-theme="dark"] {
     .photo-card-image { transform: none; }
   }
 
+  [data-gallery-loading-field] {
+    margin-block-start: var(--spacing-hsp-sm);
+    pointer-events: none;
+    user-select: none;
+  }
+  .photo-card-skeleton-fill {
+    background: color-mix(in oklch, var(--theme-surface-sunken) 94%, var(--theme-line));
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--theme-line) 45%, transparent);
+    animation: photo-card-skeleton-pulse 1.8s ease-in-out infinite;
+  }
+  html[data-thumb-ratio="original"] .photo-card-skeleton-fill {
+    aspect-ratio: var(--a);
+  }
+  @keyframes photo-card-skeleton-pulse {
+    0%,
+    100% { opacity: 0.72; }
+    50% { opacity: 0.9; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .photo-card-skeleton-fill { animation: none; }
+  }
+
   /* Shared native favorite actions stay compact in serialized gallery
      snapshots while preserving one semantic form/link implementation. */
   .favorite-action {
