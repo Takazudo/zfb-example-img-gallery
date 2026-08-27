@@ -779,6 +779,19 @@ describe("gallery entry identity and bounded snapshots", () => {
     expect(isGallerySnapshot(snapshot("gallery-12345678", { terminal: true }))).toBe(false);
   });
 
+  it("rejects legacy disabled controls from terminal snapshots before injection", () => {
+    const terminal = snapshot("gallery-12345678", {
+      page: 3,
+      nextUrl: "",
+      nextCount: 0,
+      terminal: true,
+      nextControlHtml: '<nav data-gallery-feed-next><a data-gallery-next-link="true" aria-disabled="true">All photos loaded</a></nav>',
+    });
+    expect(isGallerySnapshot(terminal)).toBe(false);
+    expect(injectGallerySnapshot({} as ParentNode, terminal)).toBe(false);
+    expect(isGallerySnapshot({ ...terminal, nextControlHtml: "" })).toBe(true);
+  });
+
   it("uses memory as an LRU and evicts the oldest entry at the explicit count cap", () => {
     const store = new GallerySnapshotStore(null, { maxEntries: 2 });
     store.set(snapshot("gallery-00000001"));

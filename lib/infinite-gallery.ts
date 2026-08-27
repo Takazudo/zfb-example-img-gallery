@@ -264,6 +264,9 @@ export function captureGallerySnapshot(
 
 /** Patch a detached incoming document (or a reload DOM) only after full validation. */
 export function injectGallerySnapshot(root: ParentNode, snapshot: GallerySnapshot): boolean {
+  // Keep direct callers subject to the same terminal contract as the guarded
+  // snapshot store: a terminal feed has no legacy disabled next control.
+  if (snapshot.terminal && snapshot.nextControlHtml !== "") return false;
   const elements = feedElements(root);
   if (!elements) return false;
   const incoming = feedMetadata(elements.feed);
