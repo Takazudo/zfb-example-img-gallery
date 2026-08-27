@@ -695,6 +695,8 @@ export class InfiniteGalleryController {
     }
 
     const sentinel = this.#env.document.createElement("div");
+    // The link sits above the tall reserved field and can be skipped between
+    // observer samples. This stable target stays after that entire field.
     sentinel.dataset.galleryAutoLoadSentinel = "true";
     sentinel.setAttribute("aria-hidden", "true");
     sentinel.style.setProperty("block-size", "1px");
