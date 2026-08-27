@@ -345,7 +345,6 @@ describe("infinite gallery controller without browser-only observers", () => {
         if (this.queryLists.has(selector)) return this.queryLists.get(selector) ?? [];
         const matches = (node: FakeElement): boolean => {
           if (selector === '[data-gallery-loading-tile="true"]') return node.dataset.galleryLoadingTile === "true";
-          if (selector === '[data-gallery-auto-load-sentinel="true"]') return node.dataset.galleryAutoLoadSentinel === "true";
           if (selector === "img") return node.tagName === "IMG";
           return false;
         };
@@ -502,7 +501,6 @@ describe("infinite gallery controller without browser-only observers", () => {
       });
       expect(controller).not.toBeNull();
       expect(grid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
-      expect(feed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
       expect(feed.attrs.has("data-gallery-auto-load-active")).toBe(false);
       const clickListener = [...(link.listeners.get("click") ?? [])][0]!;
       link.href = "https://example.test/wrong-page";
@@ -517,11 +515,7 @@ describe("infinite gallery controller without browser-only observers", () => {
       const loading = controller!.load("manual");
       expect(requested).toBe("https://example.test/page/2");
       expect(feed.attrs.get("aria-busy")).toBe("true");
-      const pendingTiles = grid.querySelectorAll('[data-gallery-loading-tile="true"]');
-      expect(pendingTiles).toHaveLength(24);
-      expect(grid.children.at(-24)).toBe(pendingTiles[0]);
-      expect(pendingTiles[0]!.className).toBe("photo-card gs2");
-      expect(pendingTiles[0]!.attrs.get("aria-hidden")).toBe("true");
+      expect(grid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
       fakeDocument.dispatch({ type: "zfb:before-preparation" } as Event);
       expect(feed.attrs.has("aria-busy")).toBe(false);
       expect(status.textContent).toContain("Loading cancelled");
@@ -581,7 +575,6 @@ describe("infinite gallery controller without browser-only observers", () => {
       expect(link.href).toBe("/page/3");
       expect(status.textContent).toBe("Loaded 23 photos.");
       expect(grid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
-      expect(feed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
       expect(grid.children.slice(1).every((card) => card.animations.length === 1)).toBe(true);
       expect(grid.children[1]!.animations[0]!.options).toMatchObject({ duration: 280, delay: 0, fill: "backwards" });
 
@@ -616,7 +609,6 @@ describe("infinite gallery controller without browser-only observers", () => {
       reduceMotion = true;
       await expect(controller!.load("manual")).resolves.toBe(true);
       expect(feed.querySelector('[data-gallery-loading-tile="true"]')).toBeNull();
-      expect(feed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
       expect(feed.children.includes(control)).toBe(false);
       expect(status.textContent).toBe("All photos loaded");
       expect(grid.children.slice(24).every((card) => card.animations.length === 0)).toBe(true);
@@ -701,7 +693,6 @@ describe("infinite gallery controller without browser-only observers", () => {
       const constructionController = InfiniteGalleryController.mount(modeEnvironment(() => { throw new Error("construction failed"); }));
       expect(constructionFailure.modeFeed.attrs.has("data-gallery-auto-load-active")).toBe(false);
       expect(constructionFailure.modeGrid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
-      expect(constructionFailure.modeFeed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
       constructionController?.destroy();
 
       const observationFailure = makeModeFeed();
@@ -711,7 +702,6 @@ describe("infinite gallery controller without browser-only observers", () => {
       })));
       expect(observationFailure.modeFeed.attrs.has("data-gallery-auto-load-active")).toBe(false);
       expect(observationFailure.modeGrid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
-      expect(observationFailure.modeFeed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
       observationController?.destroy();
 
       const healthy = makeModeFeed();
@@ -723,10 +713,12 @@ describe("infinite gallery controller without browser-only observers", () => {
       })));
       const healthyTiles = healthy.modeGrid.querySelectorAll('[data-gallery-loading-tile="true"]');
       expect(healthy.modeFeed.attrs.get("data-gallery-auto-load-active")).toBe("true");
-      expect(healthyTiles).toHaveLength(24);
+      expect(healthyTiles).toHaveLength(1);
       expect(healthy.modeGrid.children[0]!.dataset.photoId).toBe("initial");
-      expect(healthy.modeGrid.children.at(-24)).toBe(healthyTiles[0]);
-      expect(healthy.modeFeed.children[1]).toBe(observed);
+      expect(healthy.modeGrid.children.at(-1)).toBe(healthyTiles[0]);
+      expect(healthyTiles[0]!.className).toBe("photo-card gs2");
+      expect(healthyTiles[0]!.attrs.get("aria-hidden")).toBe("true");
+      expect(observed).toBe(healthyTiles[0]);
       expect(healthyController?.save()).toBe(true);
       const autoHiddenSnapshot = modeStore.get(modeIdentity!.key, modeIdentity!.scope, modeIdentity!.url);
       expect(autoHiddenSnapshot?.nextControlHtml).toBe(healthy.modeControl.outerHTML);
@@ -735,7 +727,6 @@ describe("infinite gallery controller without browser-only observers", () => {
       await expect(healthyController!.load("observer")).resolves.toBe(false);
       expect(healthy.modeFeed.attrs.has("data-gallery-auto-load-active")).toBe(false);
       expect(healthy.modeGrid.querySelectorAll('[data-gallery-loading-tile="true"]')).toHaveLength(0);
-      expect(healthy.modeFeed.querySelector('[data-gallery-auto-load-sentinel="true"]')).toBeNull();
       expect(healthy.modeStatus.textContent).toContain("Activate “Load next 24 photos” to retry");
       expect(healthy.modeFeed.children.includes(healthy.modeControl)).toBe(true);
       healthyController!.destroy();

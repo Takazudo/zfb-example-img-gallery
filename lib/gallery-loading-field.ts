@@ -1,4 +1,3 @@
-import { MAX_BATCH_SIZE } from "./infinite-gallery";
 import { encodeGalleryLayoutClass } from "./gallery-layout-roles";
 import type { FeedMetadata } from "./infinite-gallery";
 
@@ -8,7 +7,7 @@ export const REVEAL_TOTAL_WINDOW_MS = 420;
 /** The metadata required to describe the next loading-field batch. */
 export type LoadingFieldMetadata = Pick<
   FeedMetadata,
-  "page" | "pageSize" | "nextCount" | "terminal"
+  "page" | "pageSize" | "terminal"
 >;
 
 export type LoadingFieldTile = {
@@ -18,38 +17,30 @@ export type LoadingFieldTile = {
   aspectRatio: number;
 };
 
-function tileCount(value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0) return 0;
-  return Math.min(value, MAX_BATCH_SIZE);
-}
-
 function safeAspectRatio(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
 /**
- * Return descriptors for the decorative cards reserved for the next batch.
+ * Return the single decorative card that triggers and represents the next load.
  *
  * `page` is one-based, so the first card after page N starts at N * pageSize.
  * Keeping this offset metadata-derived is important for direct paginated URLs,
  * whose rendered-card count does not describe the absolute layout position.
  */
-export function loadingFieldTiles(
+export function loadingFieldTile(
   metadata: LoadingFieldMetadata,
   aspectRatio: number,
-): LoadingFieldTile[] {
-  if (metadata.terminal) return [];
-
-  const count = tileCount(metadata.nextCount);
-  if (count === 0) return [];
+): LoadingFieldTile | null {
+  if (metadata.terminal) return null;
 
   const start = metadata.page * metadata.pageSize;
   const absoluteStart = Number.isSafeInteger(start) && start >= 0 ? start : 0;
   const ratio = safeAspectRatio(aspectRatio);
-  return Array.from({ length: count }, (_, index) => ({
-    className: encodeGalleryLayoutClass(absoluteStart + index),
+  return {
+    className: encodeGalleryLayoutClass(absoluteStart),
     aspectRatio: ratio,
-  }));
+  };
 }
 
 /**

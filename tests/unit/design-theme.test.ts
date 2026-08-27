@@ -122,9 +122,11 @@ describe("semantic theme architecture", () => {
     expect(globalCss).toMatch(/@container \(max-width: 26rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
   });
 
-  it("keeps loading tiles in the canonical grid without field spacing compensation", () => {
+  it("keeps the one loading tile and its dormant spinner in the canonical grid", () => {
     expect(globalCss).toMatch(/@layer utilities\s*{[\s\S]*?\[data-gallery-auto-load-active="true"\] \[data-gallery-feed-next\] \{ display: none; \}[\s\S]*?}/);
     expect(globalCss).toContain("[data-gallery-loading-tile]");
+    expect(globalCss).toContain('[data-gallery-loading-active="true"] .gallery-loading-spinner');
+    expect(globalCss).not.toContain("photo-card-skeleton");
     expect(globalCss).not.toContain("[data-gallery-loading-field]");
   });
 
