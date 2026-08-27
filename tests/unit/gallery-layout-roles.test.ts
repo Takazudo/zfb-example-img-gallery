@@ -61,6 +61,7 @@ describe("deterministic gallery layout roles", () => {
 
   it("normalizes unsafe source dimensions and emits stable combined metadata", () => {
     expect(getSafeIntrinsicAspectRatio(1200, 800)).toBe(1.5);
+    expect(getSafeIntrinsicAspectRatio(1, 1_000_000_000)).toBe(1e-9);
     for (const dimensions of [[0, 20], [-1, 20], [20, 0], [Infinity, 20], [20, NaN]]) {
       expect(getSafeIntrinsicAspectRatio(dimensions[0]!, dimensions[1]!)).toBe(1);
     }

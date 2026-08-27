@@ -81,7 +81,8 @@ export function getSafeIntrinsicAspectRatio(width: number, height: number): numb
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return 1;
   const ratio = width / height;
   if (!Number.isFinite(ratio) || ratio <= 0) return 1;
-  return Number(ratio.toFixed(6));
+  const compactRatio = Number(ratio.toPrecision(6));
+  return Number.isFinite(compactRatio) && compactRatio > 0 ? compactRatio : 1;
 }
 
 export function getGalleryLayoutRoles(
