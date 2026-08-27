@@ -197,6 +197,7 @@ async function assertLayoutCardOverlays(
         cardClass: card?.className ?? "",
         cardStyle: card ? {
           columnEnd: getComputedStyle(card).gridColumnEnd,
+          rowStart: getComputedStyle(card).gridRowStart,
           rowEnd: getComputedStyle(card).gridRowEnd,
         } : null,
         wrapper: wrapper?.getBoundingClientRect().toJSON() ?? null,
@@ -209,7 +210,9 @@ async function assertLayoutCardOverlays(
     expect(metrics.cardClass).toMatch(
       layout === "spotlight" ? /\bgf0\b/ : /\bgs4\b/,
     );
-    expect(metrics.cardStyle?.rowEnd).toBe(width === 375 ? "span 1" : "span 2");
+    expect(metrics.cardStyle).toMatchObject(width === 375
+      ? { rowStart: "auto", rowEnd: "span 1" }
+      : { rowStart: "span 2", rowEnd: "auto" });
     expect(metrics.cardStyle?.columnEnd).toBe(
       width === 375 ? "span 1" : layout === "spotlight" ? "span 2" : "span 1",
     );

@@ -258,8 +258,12 @@ test("matches direct-page and appended absolute metadata in every non-Uniform la
 });
 
 test("keeps ordered unique cards and safe short endings in every non-Uniform mode @smoke", async ({ page }) => {
+  await page.addInitScript(() => Reflect.deleteProperty(window, "IntersectionObserver"));
   for (const layout of NON_UNIFORM_LAYOUTS) {
-    await page.goto(FIXTURE_PATH);
+    // Give each loop its own history/snapshot identity. Revisiting the exact
+    // same entry URL correctly restores the previous iteration's 50 cards.
+    await page.goto(`${FIXTURE_PATH}?layout-case=${layout}`);
+    await expect(grid(page)).toHaveCount(24);
     await setRootLayout(page, layout);
     const initial = await orderedIds(page);
     await nextLink(page).click();

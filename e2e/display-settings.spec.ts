@@ -45,6 +45,7 @@ async function assertLayoutSignature(
           token: [...card.classList].find((name) => /^g[fs][0-9a]$/.test(name)) ?? "",
           columnStart: style.gridColumnStart,
           columnEnd: style.gridColumnEnd,
+          rowStart: style.gridRowStart,
           rowEnd: style.gridRowEnd,
           breakInside: style.breakInside,
           rect: card.getBoundingClientRect().toJSON(),
@@ -60,14 +61,20 @@ async function assertLayoutSignature(
     expect(signature.cards[0]!.rect.width).toBeCloseTo(signature.cards[1]!.rect.width, 0);
     expect(signature.cards[1]!.rect.width).toBeCloseTo(signature.cards[2]!.rect.width, 0);
   } else if (mode === "spotlight") {
-    expect(signature.cards[0]).toMatchObject({ token: "gf0", columnStart: "1", columnEnd: "span 2", rowEnd: "span 2" });
+    expect(signature.cards[0]).toMatchObject({
+      token: "gf0",
+      columnStart: "1",
+      columnEnd: "span 2",
+      rowStart: "span 2",
+      rowEnd: "auto",
+    });
     expect(signature.cards[0]!.rect.width).toBeGreaterThan(signature.cards[1]!.rect.width * 1.5);
     expect(signature.cards[0]!.rect.height).toBeGreaterThan(signature.cards[1]!.rect.height * 1.5);
   } else if (mode === "editorial") {
-    expect(signature.cards[0]).toMatchObject({ columnStart: "1", columnEnd: "span 2", rowEnd: "span 2" });
-    expect(signature.cards[1]).toMatchObject({ columnStart: "3", columnEnd: "span 2", rowEnd: "span 1" });
-    expect(signature.cards[4]).toMatchObject({ columnStart: "1", columnEnd: "span 1", rowEnd: "span 2" });
-    expect(signature.cards[5]).toMatchObject({ columnStart: "2", columnEnd: "span 1", rowEnd: "span 1" });
+    expect(signature.cards[0]).toMatchObject({ columnStart: "1", columnEnd: "span 2", rowStart: "span 2", rowEnd: "auto" });
+    expect(signature.cards[1]).toMatchObject({ columnStart: "3", columnEnd: "span 2", rowStart: "span 1", rowEnd: "auto" });
+    expect(signature.cards[4]).toMatchObject({ columnStart: "1", columnEnd: "span 1", rowStart: "span 2", rowEnd: "auto" });
+    expect(signature.cards[5]).toMatchObject({ columnStart: "2", columnEnd: "span 1", rowStart: "span 1", rowEnd: "auto" });
     expect(signature.cards[0]!.rect.width).toBeGreaterThan(signature.cards[2]!.rect.width * 1.5);
     expect(signature.cards[4]!.rect.height).toBeGreaterThan(signature.cards[5]!.rect.height * 1.5);
   } else if (mode === "justified") {
@@ -331,7 +338,9 @@ test("keeps every mode in bounds at 375, 800, and 1200px with accessible control
     for (const mode of LAYOUTS) {
       await openSettings(page);
       await layoutInput(page, mode).click();
-      await expect(page.locator("html")).toHaveAttribute("data-gallery-layout", mode);
+      await expect.poll(() => page.locator("html").evaluate(
+        (root) => root.getAttribute("data-gallery-layout") ?? "uniform",
+      )).toBe(mode);
       const targets = await dialog.locator("label, button").evaluateAll((elements) => elements.map((element) => {
         const rect = element.getBoundingClientRect();
         return { width: rect.width, height: rect.height };
