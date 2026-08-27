@@ -19,6 +19,27 @@ import { SlidersHorizontalIcon } from "./icons";
 const triggerClass = "group relative flex w-full min-h-12 cursor-pointer items-center gap-hsp-sm rounded-md px-hsp-sm text-small text-ink transition-colors hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand md:min-h-[2.75rem] md:w-[2.75rem] md:min-w-[2.75rem] md:justify-center md:px-0 md:text-ink-soft md:hover:text-ink";
 const optionClass = "flex min-h-[2.75rem] cursor-pointer items-center gap-hsp-xs rounded-md px-hsp-xs text-small text-ink transition-colors hover:bg-surface-sunken";
 
+const layoutControlVisibility = {
+  uniform: { ratio: true, width: true },
+  spotlight: { ratio: false, width: false },
+  editorial: { ratio: false, width: false },
+  justified: { ratio: false, width: false },
+  masonry: { ratio: false, width: true },
+} as const satisfies Record<GalleryLayoutMode, {
+  ratio: boolean;
+  width: boolean;
+}>;
+
+function getLayoutDescription(layout: GalleryLayoutMode): string {
+  if (layout === "uniform") {
+    return "Adjust thumbnail ratio and width below.";
+  }
+  if (layout === "masonry") {
+    return "Masonry keeps each photo's original ratio. Adjust thumbnail width below; your saved ratio stays unchanged.";
+  }
+  return "This layout manages thumbnail geometry automatically. Your saved ratio and width stay unchanged.";
+}
+
 export function DisplaySettings() {
   const [hydrated, setHydrated] = useState(false);
   const [preferences, setPreferences] = useState<GalleryPreferences>({
@@ -92,6 +113,8 @@ export function DisplaySettings() {
     });
   };
 
+  const visibleControls = layoutControlVisibility[preferences.galleryLayout];
+
   return (
     <>
       {hydrated ? (
@@ -133,8 +156,12 @@ export function DisplaySettings() {
 
             <fieldset aria-describedby="gallery-layout-description" class="flex flex-col gap-vsp-2xs">
               <legend class="mb-vsp-xs font-semibold">Gallery layout</legend>
-              <p id="gallery-layout-description" class="mb-vsp-xs text-small text-ink-soft">
-                Uniform uses your stored thumbnail ratio and width. Other layouts may supersede that geometry while active without erasing those choices.
+              <p
+                id="gallery-layout-description"
+                aria-live="polite"
+                class="mb-vsp-xs text-small text-ink-soft"
+              >
+                {getLayoutDescription(preferences.galleryLayout)}
               </p>
               {GALLERY_LAYOUT_OPTIONS.map((option) => (
                 <label class={optionClass} key={option.value}>
@@ -151,39 +178,43 @@ export function DisplaySettings() {
               ))}
             </fieldset>
 
-            <fieldset class="flex flex-col gap-vsp-2xs">
-              <legend class="mb-vsp-xs font-semibold">Thumbnail ratio</legend>
-              {THUMBNAIL_RATIO_OPTIONS.map((option) => (
-                <label class={optionClass} key={option.value}>
-                  <input
-                    type="radio"
-                    name="thumbnail-ratio"
-                    value={option.value}
-                    checked={preferences.thumbRatio === option.value}
-                    class="size-5 cursor-pointer accent-brand"
-                    onChange={() => selectRatio(option.value)}
-                  />
-                  <span>{option.label}</span>
-                </label>
-              ))}
-            </fieldset>
+            {visibleControls.ratio ? (
+              <fieldset class="flex flex-col gap-vsp-2xs">
+                <legend class="mb-vsp-xs font-semibold">Thumbnail ratio</legend>
+                {THUMBNAIL_RATIO_OPTIONS.map((option) => (
+                  <label class={optionClass} key={option.value}>
+                    <input
+                      type="radio"
+                      name="thumbnail-ratio"
+                      value={option.value}
+                      checked={preferences.thumbRatio === option.value}
+                      class="size-5 cursor-pointer accent-brand"
+                      onChange={() => selectRatio(option.value)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
 
-            <fieldset class="flex flex-col gap-vsp-2xs">
-              <legend class="mb-vsp-xs font-semibold">Thumbnail width</legend>
-              {THUMBNAIL_WIDTH_OPTIONS.map((option) => (
-                <label class={optionClass} key={option.value}>
-                  <input
-                    type="radio"
-                    name="thumbnail-width"
-                    value={option.value}
-                    checked={preferences.thumbWidth === option.value}
-                    class="size-5 cursor-pointer accent-brand"
-                    onChange={() => selectWidth(option.value)}
-                  />
-                  <span>{option.label} <span class="text-ink-soft">({option.size})</span></span>
-                </label>
-              ))}
-            </fieldset>
+            {visibleControls.width ? (
+              <fieldset class="flex flex-col gap-vsp-2xs">
+                <legend class="mb-vsp-xs font-semibold">Thumbnail width</legend>
+                {THUMBNAIL_WIDTH_OPTIONS.map((option) => (
+                  <label class={optionClass} key={option.value}>
+                    <input
+                      type="radio"
+                      name="thumbnail-width"
+                      value={option.value}
+                      checked={preferences.thumbWidth === option.value}
+                      class="size-5 cursor-pointer accent-brand"
+                      onChange={() => selectWidth(option.value)}
+                    />
+                    <span>{option.label} <span class="text-ink-soft">({option.size})</span></span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
           </div>
 
           <div class="flex shrink-0 justify-end border-t border-line bg-surface px-hsp-md py-vsp-sm">

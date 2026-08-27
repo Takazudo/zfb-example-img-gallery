@@ -30,6 +30,31 @@ async function openSettings(page: import("@playwright/test").Page): Promise<void
   await trigger.click();
 }
 
+async function assertSettingsAvailability(
+  page: import("@playwright/test").Page,
+  mode: LayoutMode,
+): Promise<void> {
+  const dialog = page.locator('dialog[aria-labelledby="display-settings-title"]');
+  const ratioGroup = dialog.getByRole("group", { name: "Thumbnail ratio", exact: true });
+  const widthGroup = dialog.getByRole("group", { name: "Thumbnail width", exact: true });
+  const expectsRatio = mode === "uniform";
+  const expectsWidth = mode === "uniform" || mode === "masonry";
+
+  if (expectsRatio) await expect(ratioGroup).toBeVisible();
+  else await expect(ratioGroup).toHaveCount(0);
+  if (expectsWidth) await expect(widthGroup).toBeVisible();
+  else await expect(widthGroup).toHaveCount(0);
+
+  const description = dialog.locator("#gallery-layout-description");
+  if (mode === "uniform") {
+    await expect(description).toHaveText("Adjust thumbnail ratio and width below.");
+  } else if (mode === "masonry") {
+    await expect(description).toContainText("Masonry keeps each photo's original ratio.");
+  } else {
+    await expect(description).toContainText("manages thumbnail geometry automatically");
+  }
+}
+
 async function assertLayoutSignature(
   page: import("@playwright/test").Page,
   mode: LayoutMode,
@@ -164,6 +189,7 @@ test("supports dialog control, all five immediate layout signatures, Original ge
     await layoutInput(page, value).click();
     await expect(layoutInput(page, value)).toBeChecked();
     await expect(page.locator("html")).toHaveAttribute("data-gallery-layout", value);
+    await assertSettingsAvailability(page, value);
     await assertLayoutSignature(page, value);
     expect(await page.locator('[data-gallery-grid="true"] > li[data-photo-id]').evaluateAll(
       (cards) => cards.map((card) => card.getAttribute("data-photo-id")),
@@ -173,6 +199,8 @@ test("supports dialog control, all five immediate layout signatures, Original ge
   // Original uses each image's intrinsic mixed ratio rather than forcing one
   // crop ratio. The fixture's first two cards intentionally differ.
   await layoutInput(page, "uniform").click();
+  await expect(ratioInput(page, "original")).toBeChecked();
+  await expect(widthInput(page, "large")).toBeChecked();
   await ratioInput(page, "original").click();
   await widthInput(page, "medium").click();
   const geometry = await page.locator('[data-gallery-grid="true"] img').evaluateAll((images) => images.slice(0, 2).map((image) => {
@@ -276,10 +304,16 @@ test("defaults invalid/deleted storage, migrates v1, and persists every layout t
     await expect(page.locator("html")).toHaveAttribute("data-gallery-layout", value);
     await expect(layoutInput(page, value)).toBeChecked();
   }
-  await expect(ratioInput(page, "portrait")).toBeChecked();
-  await expect(widthInput(page, "large")).toBeChecked();
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), PREFERENCES_KEY))
     .toMatchObject({ version: 2, thumbRatio: "portrait", thumbWidth: "large", galleryLayout: "masonry" });
+  await trigger.click();
+  await assertSettingsAvailability(page, "masonry");
+  await expect(widthInput(page, "large")).toBeChecked();
+  await layoutInput(page, "uniform").click();
+  await expect(ratioInput(page, "portrait")).toBeChecked();
+  await expect(widthInput(page, "large")).toBeChecked();
+  await layoutInput(page, "masonry").click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
 
   await page.evaluate((key) => localStorage.removeItem(key), PREFERENCES_KEY);
   await page.reload();
@@ -307,17 +341,31 @@ test("defaults invalid/deleted storage, migrates v1, and persists every layout t
   await expect(ratioInput(secondTab, "portrait")).toBeChecked();
   await expect(widthInput(secondTab, "large")).toBeChecked();
   await expect(layoutInput(secondTab, "uniform")).toBeChecked();
+
+  await trigger.click();
+  await ratioInput(page, "landscape").click();
+  await widthInput(page, "small").click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(ratioInput(secondTab, "landscape")).toBeChecked();
+  await expect(widthInput(secondTab, "small")).toBeChecked();
+
   for (const value of LAYOUTS) {
     await trigger.click();
-    await ratioInput(page, "landscape").click();
-    await widthInput(page, "small").click();
     await layoutInput(page, value).click();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(layoutInput(secondTab, value)).toBeChecked();
-    await expect(ratioInput(secondTab, "landscape")).toBeChecked();
-    await expect(widthInput(secondTab, "small")).toBeChecked();
     await expect(secondTab.locator("html")).toHaveAttribute("data-gallery-layout", value);
+    await openSettings(secondTab);
+    await assertSettingsAvailability(secondTab, value);
+    await secondTab.getByRole("button", { name: "Close", exact: true }).click();
   }
+
+  await openSettings(secondTab);
+  await layoutInput(secondTab, "uniform").click();
+  await expect(ratioInput(secondTab, "landscape")).toBeChecked();
+  await expect(widthInput(secondTab, "small")).toBeChecked();
+  await layoutInput(secondTab, "masonry").click();
+  await secondTab.getByRole("button", { name: "Close", exact: true }).click();
 
   const soft = await softClick(page, "/tags");
   expect(new URL(soft.finalUrl).pathname).toBe("/tags");
@@ -341,6 +389,7 @@ test("keeps every mode in bounds at 375, 800, and 1200px with accessible control
       await expect.poll(() => page.locator("html").evaluate(
         (root) => root.getAttribute("data-gallery-layout") ?? "uniform",
       )).toBe(mode);
+      await assertSettingsAvailability(page, mode);
       const targets = await dialog.locator("label, button").evaluateAll((elements) => elements.map((element) => {
         const rect = element.getBoundingClientRect();
         return { width: rect.width, height: rect.height };
