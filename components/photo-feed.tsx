@@ -92,6 +92,7 @@ export function PhotoFeed({ scope, page, nextHref, photos, empty, header, viewer
             <PhotoCard
               key={photo.id}
               photo={toPhotoCardPhoto(photo)}
+              absoluteIndex={page.offset + index}
               priority={page.page === 1 && index === 0}
               viewerId={viewerId}
               returnTo={returnTo}

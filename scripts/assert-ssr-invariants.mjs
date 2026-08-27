@@ -312,7 +312,7 @@ function scanSsg404(html, generatedEntry) {
   for (const marker of [
     'name="zfb-view-transitions-enabled" content="true"',
     'name="zfb-view-transitions-fallback" content="animate"',
-    'name="zfb-preserve-html-attrs" content="data-theme data-thumb-ratio data-thumb-width"',
+    'name="zfb-preserve-html-attrs" content="data-theme data-thumb-ratio data-thumb-width data-gallery-layout"',
     'name="zfb-traverse-refetch" content="true"',
     ".zfb-route-announcer",
     'data-zfb-island="ThemeToggle" data-when="load"',
@@ -330,6 +330,15 @@ function scanSsg404(html, generatedEntry) {
   }
   if (html.match(/name=["']thumbnail-width["']/g)?.length !== 3) {
     problems.push("404.html must contain three thumbnail-width radios");
+  }
+  if (html.match(/name=["']gallery-layout["']/g)?.length !== 5) {
+    problems.push("404.html must contain five gallery-layout radios");
+  }
+  if (html.match(/<fieldset\b/gi)?.length !== 3 || html.match(/<legend\b/gi)?.length !== 3) {
+    problems.push("404.html must contain three labelled display-settings fieldsets");
+  }
+  if (html.match(/<input\b[^>]*type=["']radio["']/gi)?.length !== 12) {
+    problems.push("404.html must contain twelve display-settings radios");
   }
   return problems;
 }

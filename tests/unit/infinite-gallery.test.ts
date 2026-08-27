@@ -425,7 +425,7 @@ describe("gallery entry identity and bounded snapshots", () => {
 
   it("validates schema version, collection, terminal fields, and unique IDs", () => {
     expect(isGallerySnapshot(snapshot("gallery-12345678"), { scope: "global" })).toBe(true);
-    expect(isGallerySnapshot(snapshot("gallery-12345678", { version: 2 as 1 }))).toBe(false);
+    expect(isGallerySnapshot(snapshot("gallery-12345678", { version: 1 as 2 }))).toBe(false);
     expect(isGallerySnapshot(snapshot("gallery-12345678"), { scope: "tag:1" })).toBe(false);
     expect(isGallerySnapshot(snapshot("gallery-12345678"), { entryUrl: "https://example.test/other" })).toBe(false);
     expect(isGallerySnapshot(snapshot("gallery-12345678", { photoIds: ["1", "1"] }))).toBe(false);

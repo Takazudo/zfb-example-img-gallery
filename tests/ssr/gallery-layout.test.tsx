@@ -37,7 +37,7 @@ describe("GalleryLayout", () => {
     expect(html).toContain('name="zfb-view-transitions-enabled" content="true"');
     expect(html).toContain('name="zfb-view-transitions-fallback" content="animate"');
     expect(html).toContain(
-      'name="zfb-preserve-html-attrs" content="data-theme data-thumb-ratio data-thumb-width"',
+      'name="zfb-preserve-html-attrs" content="data-theme data-thumb-ratio data-thumb-width data-gallery-layout"',
     );
     expect(html).toContain('name="zfb-traverse-refetch" content="true"');
     expect(html).toContain(".zfb-route-announcer");

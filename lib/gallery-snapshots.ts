@@ -1,4 +1,4 @@
-export const GALLERY_SNAPSHOT_VERSION = 1 as const;
+export const GALLERY_SNAPSHOT_VERSION = 2 as const;
 export const GALLERY_HISTORY_STATE_KEY = "zfbGallerySnapshot";
 export const GALLERY_SNAPSHOT_STORAGE_PREFIX = "zfb-gallery-snapshot:";
 export const GALLERY_SNAPSHOT_INDEX_KEY = `${GALLERY_SNAPSHOT_STORAGE_PREFIX}index`;

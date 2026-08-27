@@ -35,11 +35,11 @@ function valid404(entryName: string) {
 <style>.zfb-route-announcer{position:absolute}</style>
 <meta name="zfb-view-transitions-enabled" content="true">
 <meta name="zfb-view-transitions-fallback" content="animate">
-<meta name="zfb-preserve-html-attrs" content="data-theme data-thumb-ratio data-thumb-width">
+<meta name="zfb-preserve-html-attrs" content="data-theme data-thumb-ratio data-thumb-width data-gallery-layout">
 <meta name="zfb-traverse-refetch" content="true">
 <link rel="stylesheet" href="/assets/app.css">
 <script type="module" src="/assets/${entryName}"></script>
-</head><body><div data-zfb-island="ThemeToggle" data-when="load"></div><div data-zfb-island="DisplaySettings" data-when="load"><dialog aria-labelledby="display-settings-title"><h2 id="display-settings-title">Display settings</h2><fieldset><legend>Thumbnail ratio</legend><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"></fieldset><fieldset><legend>Thumbnail width</legend><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"></fieldset></dialog></div></body></html>`;
+</head><body><div data-zfb-island="ThemeToggle" data-when="load"></div><div data-zfb-island="DisplaySettings" data-when="load"><dialog aria-labelledby="display-settings-title"><h2 id="display-settings-title">Display settings</h2><fieldset><legend>Gallery layout</legend><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"></fieldset><fieldset><legend>Thumbnail ratio</legend><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"></fieldset><fieldset><legend>Thumbnail width</legend><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"></fieldset></dialog></div></body></html>`;
 }
 
 type FixtureOptions = {
@@ -113,13 +113,16 @@ describe("SSR invariants", () => {
     try {
       const broken = valid404(data.generatedName)
         .replace("<dialog", '<button aria-haspopup="dialog">Display settings</button><dialog')
-        .replace('<input type="radio" name="thumbnail-width">', "");
+        .replace('<input type="radio" name="thumbnail-width">', "")
+        .replace('<input type="radio" name="gallery-layout">', "");
       writeFileSync(join(data.root, "404.html"), broken);
       const problems = scanBuildOutput(data.root);
       expect(problems).toContain(
         "404.html must withhold the display-settings trigger until hydration",
       );
       expect(problems).toContain("404.html must contain three thumbnail-width radios");
+      expect(problems).toContain("404.html must contain five gallery-layout radios");
+      expect(problems).toContain("404.html must contain twelve display-settings radios");
     } finally {
       rmSync(data.root, { recursive: true });
     }
