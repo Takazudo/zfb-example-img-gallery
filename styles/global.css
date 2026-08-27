@@ -419,10 +419,10 @@ html[data-theme="dark"] {
     aspect-ratio: var(--a);
   }
   .gallery-loading-spinner {
-    width: 1.75rem;
+    width: 2rem;
     aspect-ratio: 1;
-    border: 2px solid color-mix(in oklch, var(--theme-line-strong) 70%, transparent);
-    border-top-color: var(--theme-ink-soft);
+    border: 3px solid color-mix(in oklch, var(--theme-ink-soft) 35%, transparent);
+    border-top-color: var(--theme-brand);
     border-radius: 50%;
     opacity: 0;
     transition: opacity 160ms ease-out;

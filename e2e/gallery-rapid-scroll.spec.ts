@@ -66,7 +66,7 @@ async function observerGeometry(page: Page) {
   }, { linkSelector: LINK_SELECTOR, tileSelector: LOADING_TILE_SELECTOR });
 }
 
-test("loads every batch after rapid scrolling passes the short pagination link @smoke", async ({ page }) => {
+test("loads each batch only when its moved tail tile enters view @smoke", async ({ page }) => {
   const pageTwo = delayedResponse();
   const pageThree = delayedResponse();
   let pageThreeRequests = 0;
@@ -94,11 +94,23 @@ test("loads every batch after rapid scrolling passes the short pagination link @
       loaderActive: true,
       loadingTileCount: 1,
     });
-    // Continued downward input can arrive while the request is in flight and
-    // the browser keeps the bottom loader intersecting. It must queue one
-    // subsequent batch without requiring a synthetic leave/re-enter cycle.
+    // Input against the consumed tile must not start the next batch after its
+    // replacement moves below the viewport.
     await page.mouse.wheel(0, 2_000);
     pageTwo.release();
+    await expect(page.locator(CARD_SELECTOR)).toHaveCount(48);
+    await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loaded 24 photos.");
+    expect(pageThreeRequests).toBe(0);
+    await expect(observerGeometry(page)).resolves.toEqual({
+      linkHidden: true,
+      loaderInsideObserverRange: false,
+      loaderIsGridTail: true,
+      loaderActive: false,
+      loadingTileCount: 1,
+    });
+
+    // Reaching the moved tile produces the next leave/re-enter observer cycle.
+    await jumpPastCurrentLink(page);
     await expect.poll(() => pageThreeRequests).toBe(1);
     await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loading 2 photos…");
     await expect(observerGeometry(page)).resolves.toEqual({

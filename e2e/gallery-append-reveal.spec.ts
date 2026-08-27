@@ -120,7 +120,7 @@ test("shows one observed spinner tile, keeps existing boxes stable, and moves th
     await route.continue();
   });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  await page.emulateMedia({ reducedMotion: "no-preference", colorScheme: "dark" });
   await openHealthyGallery(page, "delayed");
   await setLayout(page, "uniform");
   await page.evaluate(() => document.documentElement.setAttribute("data-thumb-width", "large"));
@@ -148,7 +148,7 @@ test("shows one observed spinner tile, keeps existing boxes stable, and moves th
   await triggerIntersection(page, true);
   await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loading 24 photos…");
   await expect(page.locator(TILE_SELECTOR)).toHaveAttribute("data-gallery-loading-active", "true");
-  await expect.poll(async () => (await gridState(page)).tileAnimationNames).toEqual(["gallery-loading-pulse"]);
+  await expect.poll(async () => (await gridState(page)).tileAnimationNames).toEqual(["gallery-loading-spin"]);
   pageTwo.release();
   await expect(cards(page)).toHaveCount(48);
   await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loaded 24 photos.");
