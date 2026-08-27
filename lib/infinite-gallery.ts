@@ -554,11 +554,17 @@ export class InfiniteGalleryController {
   readonly #onIntersection: IntersectionObserverCallback = (entries): void => {
     const entry = entries.find((candidate) => candidate.target === this.#autoLoadSentinel);
     if (!entry) return;
+    if (!entry.isIntersecting) this.#queuedAutoContinuation = false;
     if (this.#autoGate.observe(entry.isIntersecting)) void this.load("observer");
   };
 
   readonly #onWheel = (event: WheelEvent): void => {
-    if (event.defaultPrevented || event.ctrlKey || event.deltaY <= 0 || !this.#autoLoadSentinelIsInRange()) return;
+    if (event.defaultPrevented || event.ctrlKey) return;
+    if (event.deltaY < 0) {
+      this.#queuedAutoContinuation = false;
+      return;
+    }
+    if (event.deltaY === 0 || !this.#autoLoadSentinelIsInRange()) return;
     if (this.#flight.pending) {
       this.#queuedAutoContinuation = true;
       return;

@@ -30,6 +30,25 @@ async function jumpPastCurrentLink(page: Page): Promise<void> {
   });
 }
 
+async function startBottomPin(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const state = window as typeof window & { __e2ePinGalleryBottom?: boolean };
+    state.__e2ePinGalleryBottom = true;
+    const pin = (): void => {
+      if (!state.__e2ePinGalleryBottom) return;
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      requestAnimationFrame(pin);
+    };
+    pin();
+  });
+}
+
+async function stopBottomPin(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as typeof window & { __e2ePinGalleryBottom?: boolean }).__e2ePinGalleryBottom = false;
+  });
+}
+
 async function observerGeometry(page: Page) {
   return page.evaluate(({ linkSelector, sentinelSelector }) => {
     const link = document.querySelector(linkSelector);
@@ -89,4 +108,45 @@ test("loads every batch after rapid scrolling passes the short pagination link @
   await expect(page.locator(CARD_SELECTOR)).toHaveCount(50);
   await expect(page.locator(STATUS_SELECTOR)).toHaveText("All photos loaded");
   await expect(page.locator(AUTO_LOAD_SENTINEL_SELECTOR)).toHaveCount(0);
+});
+
+test("restarts a disarmed loader when the sentinel stayed visible across append @smoke", async ({ page }) => {
+  const pageTwo = delayedResponse();
+  const pageThree = delayedResponse();
+  let pageThreeRequests = 0;
+  await page.route(`**${PAGE_TWO_PATH}`, async (route) => {
+    await pageTwo.released;
+    await route.continue();
+  });
+  await page.route(`**${PAGE_THREE_PATH}`, async (route) => {
+    pageThreeRequests += 1;
+    await pageThree.released;
+    await route.continue();
+  });
+
+  await page.goto(`${FIXTURE_PATH}?gallery-bottom-pin=1`);
+  await expect(page.locator(CARD_SELECTOR)).toHaveCount(24);
+
+  try {
+    await jumpPastCurrentLink(page);
+    await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loading 24 photos…");
+    await startBottomPin(page);
+    pageTwo.release();
+    await expect(page.locator(CARD_SELECTOR)).toHaveCount(48);
+    await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loaded 24 photos.");
+    await expect(observerGeometry(page)).resolves.toMatchObject({ sentinelInsideObserverRange: true });
+    expect(pageThreeRequests).toBe(0);
+
+    await stopBottomPin(page);
+    await page.mouse.wheel(0, 2_000);
+    await expect.poll(() => pageThreeRequests).toBe(1);
+    await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loading 2 photos…");
+  } finally {
+    await stopBottomPin(page);
+    pageTwo.release();
+    pageThree.release();
+  }
+
+  await expect(page.locator(CARD_SELECTOR)).toHaveCount(50);
+  await expect(page.locator(STATUS_SELECTOR)).toHaveText("All photos loaded");
 });
