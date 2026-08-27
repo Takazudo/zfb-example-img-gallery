@@ -22,8 +22,9 @@ const GRID_SELECTOR = '[data-gallery-grid="true"]';
 const LINK_SELECTOR = '[data-gallery-next-link="true"]';
 const CONTROL_SELECTOR = "[data-gallery-feed-next]";
 const STATUS_SELECTOR = "[data-gallery-status]";
-const LOADING_FIELD_SELECTOR = '[data-gallery-loading-field="true"]';
+const LOADING_TILE_SELECTOR = '[data-gallery-loading-tile="true"]';
 const AUTO_LOAD_SENTINEL_SELECTOR = '[data-gallery-auto-load-sentinel="true"]';
+const AUTO_LOAD_ACTIVE_ATTRIBUTE = "data-gallery-auto-load-active";
 const AUTO_LOAD_ROOT_MARGIN_PX = 240;
 export const MAX_BATCH_SIZE = 24;
 
@@ -213,14 +214,8 @@ function updateLink(link: HTMLAnchorElement, metadata: FeedMetadata): void {
   link.dataset.galleryNextUrl = metadata.nextUrl;
   link.dataset.galleryNextCount = String(metadata.nextCount);
   link.removeAttribute("aria-disabled");
-  if (metadata.terminal) {
-    link.removeAttribute("href");
-    link.setAttribute("aria-disabled", "true");
-    link.textContent = "All photos loaded";
-  } else {
-    link.href = metadata.nextUrl;
-    link.textContent = `Load next ${metadata.nextCount} photos`;
-  }
+  link.href = metadata.nextUrl;
+  link.textContent = `Load next ${metadata.nextCount} photos`;
 }
 
 function hasUnsafeSnapshotMarkup(element: Element, entryUrl: string): boolean {
@@ -253,6 +248,7 @@ export function captureGallerySnapshot(
   const cards = photoCards(elements.grid);
   const photoIds = cards.map((card) => card.dataset.photoId ?? "");
   if (photoIds.some((id) => id === "") || new Set(photoIds).size !== photoIds.length) return null;
+  const control = elements.feed.querySelector<HTMLElement>(CONTROL_SELECTOR);
   return {
     version: GALLERY_SNAPSHOT_VERSION,
     key: identity.key,
@@ -260,13 +256,17 @@ export function captureGallerySnapshot(
     ...metadata,
     photoIds,
     cardsHtml: cards.map((card) => card.outerHTML).join(""),
-    nextControlHtml: elements.feed.querySelector(CONTROL_SELECTOR)?.outerHTML ?? "",
+    // Automatic visibility is feed state, never canonical control markup.
+    nextControlHtml: metadata.terminal ? "" : control?.outerHTML ?? "",
     savedAt: now,
   };
 }
 
 /** Patch a detached incoming document (or a reload DOM) only after full validation. */
 export function injectGallerySnapshot(root: ParentNode, snapshot: GallerySnapshot): boolean {
+  // Keep direct callers subject to the same terminal contract as the guarded
+  // snapshot store: a terminal feed has no legacy disabled next control.
+  if (snapshot.terminal && snapshot.nextControlHtml !== "") return false;
   const elements = feedElements(root);
   if (!elements) return false;
   const incoming = feedMetadata(elements.feed);
@@ -284,7 +284,12 @@ export function injectGallerySnapshot(root: ParentNode, snapshot: GallerySnapsho
     && incoming.terminal === snapshot.terminal;
   // A bfcache restore retains the controller, its bound anchor, and the live
   // expanded DOM. Do not replace those nodes when the snapshot is already live.
-  if (alreadyRestored) return true;
+  if (alreadyRestored) {
+    elements.feed.removeAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE);
+    elements.grid.querySelectorAll(LOADING_TILE_SELECTOR).forEach((tile) => tile.remove());
+    elements.feed.querySelectorAll(AUTO_LOAD_SENTINEL_SELECTOR).forEach((sentinel) => sentinel.remove());
+    return true;
+  }
 
   const template = elements.feed.ownerDocument.createElement("template");
   template.innerHTML = snapshot.cardsHtml;
@@ -319,6 +324,9 @@ export function injectGallerySnapshot(root: ParentNode, snapshot: GallerySnapsho
     ) return false;
   }
 
+  elements.feed.removeAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE);
+  elements.grid.querySelectorAll(LOADING_TILE_SELECTOR).forEach((tile) => tile.remove());
+  elements.feed.querySelectorAll(AUTO_LOAD_SENTINEL_SELECTOR).forEach((sentinel) => sentinel.remove());
   elements.grid.replaceChildren(template.content);
   setFeedMetadata(elements.feed, snapshot);
   const currentControl = elements.feed.querySelector(CONTROL_SELECTOR);
@@ -418,7 +426,6 @@ export class InfiniteGalleryController {
   readonly #autoGate = new GalleryAutoLoadGate();
   readonly #flight = new GallerySingleFlight();
   #abortController: AbortController | null = null;
-  #loadingField: HTMLElement | null = null;
   #autoLoadSentinel: HTMLElement | null = null;
   #queuedAutoContinuation = false;
   readonly #revealAnimations = new Set<Animation>();
@@ -469,16 +476,9 @@ export class InfiniteGalleryController {
     this.#identity = identity;
     this.#status = feed.querySelector<HTMLElement>(STATUS_SELECTOR);
     this.#link = feed.querySelector<HTMLAnchorElement>(LINK_SELECTOR);
-    this.#rebuildLoadingField(feedMetadata(feed));
     this.#link?.addEventListener("click", this.#onClick);
     environment.document.addEventListener("zfb:before-preparation", this.#onBeforePreparation);
-    if (this.#link && this.#autoLoadSentinel && environment.createObserver) {
-      this.#observer = environment.createObserver(this.#onIntersection, {
-        rootMargin: `0px 0px ${AUTO_LOAD_ROOT_MARGIN_PX}px`,
-      });
-      this.#observer.observe(this.#autoLoadSentinel);
-      environment.document.addEventListener("wheel", this.#onWheel, { passive: true });
-    }
+    this.#initializeAutomaticMode(feedMetadata(feed));
   }
 
   load(source: "manual" | "observer"): Promise<boolean> {
@@ -490,6 +490,7 @@ export class InfiniteGalleryController {
     const generation = ++this.#generation;
     const abortController = new AbortController();
     this.#abortController = abortController;
+    this.#buildLoadingTail(metadata);
     this.#setStatus(`Loading ${metadata.nextCount} photos…`, true);
 
     const pending = this.#flight.run(() => this.#performLoad(requestedUrl, metadata, abortController.signal, generation)
@@ -499,6 +500,7 @@ export class InfiniteGalleryController {
       })
       .catch((error: unknown) => {
         if (!abortController.signal.aborted && generation === this.#generation && !this.#destroyed) {
+          this.#disableAutomaticMode();
           this.#setStatus(`Could not load photos. Activate “Load next ${metadata.nextCount} photos” to retry.`, false);
         }
         return false;
@@ -520,8 +522,16 @@ export class InfiniteGalleryController {
     const snapshot = this.#env.store.get(this.#identity.key, this.#identity.scope, this.#identity.url);
     if (!snapshot) return false;
     this.#cancelRevealAnimations();
+    this.#disableAutomaticMode();
+    this.#observer?.disconnect();
+    this.#observer = null;
     const restored = injectGallerySnapshot(this.#env.document, snapshot);
-    if (restored) this.#rebuildLoadingField(feedMetadata(this.#feed));
+    if (restored) {
+      this.#link?.removeEventListener("click", this.#onClick);
+      this.#link = this.#feed.querySelector<HTMLAnchorElement>(LINK_SELECTOR);
+      this.#link?.addEventListener("click", this.#onClick);
+      this.#initializeAutomaticMode(feedMetadata(this.#feed));
+    }
     return restored;
   }
 
@@ -535,8 +545,7 @@ export class InfiniteGalleryController {
     this.#generation += 1;
     this.#abortController?.abort();
     this.#cancelRevealAnimations();
-    this.#removeLoadingField();
-    this.#removeAutoLoadSentinel();
+    this.#disableAutomaticMode();
     this.#observer?.disconnect();
     this.#link?.removeEventListener("click", this.#onClick);
     this.#env.document.removeEventListener("wheel", this.#onWheel);
@@ -583,6 +592,7 @@ export class InfiniteGalleryController {
     this.#abortController?.abort();
     const metadata = feedMetadata(this.#feed);
     if (metadata && this.#abortController) {
+      this.#disableAutomaticMode();
       this.#setStatus(`Loading cancelled. Activate “Load next ${metadata.nextCount} photos” to retry.`, false);
     }
   };
@@ -644,12 +654,30 @@ export class InfiniteGalleryController {
     if (signal.aborted || generation !== this.#generation || this.#destroyed) return false;
     const liveLink = this.#link;
     if (!liveLink) return false;
-    this.#grid.appendChild(fragment);
+    const tailBoundary = this.#grid.querySelector<HTMLElement>(LOADING_TILE_SELECTOR);
+    this.#grid.insertBefore(fragment, tailBoundary);
+    this.#removeLoadingTail();
     this.#reveal(appendedCards);
     setFeedMetadata(this.#feed, incoming);
-    updateLink(liveLink, incoming);
-    this.#setStatus(incoming.terminal ? "All photos loaded" : `Loaded ${incomingCards.length} photos.`, false);
-    this.#rebuildLoadingField(incoming);
+    if (incoming.terminal) {
+      liveLink.removeEventListener("click", this.#onClick);
+      this.#feed.querySelector(CONTROL_SELECTOR)?.remove();
+      this.#link = null;
+      this.#disableAutomaticMode();
+    } else {
+      updateLink(liveLink, incoming);
+      if (this.#observer) {
+        // Keep the successfully observed target stable across appends. In
+        // particular, do not clear a wheel-queued continuation while replacing
+        // the consumed grid tail.
+        if (this.#feed.hasAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE) && this.#autoLoadSentinel?.isConnected) {
+          this.#buildLoadingTail(incoming);
+        } else {
+          this.#enableAutomaticMode(incoming);
+        }
+      }
+    }
+    this.#setStatus(incoming.terminal ? "All photos loaded" : `Loaded ${appendedCards.length} photos.`, false);
     this.save();
     return true;
   }
@@ -663,12 +691,9 @@ export class InfiniteGalleryController {
     }
   }
 
-  #rebuildLoadingField(metadata: FeedMetadata | null): void {
-    this.#removeLoadingField();
-    if (!metadata || metadata.terminal) {
-      this.#removeAutoLoadSentinel();
-      return;
-    }
+  #buildLoadingTail(metadata: FeedMetadata | null): void {
+    this.#removeLoadingTail();
+    if (!metadata || metadata.terminal) return;
 
     const ratios = photoCards(this.#grid).map((card) => Number.parseFloat(
       card.style.getPropertyValue("--a"),
@@ -676,14 +701,11 @@ export class InfiniteGalleryController {
     const tiles = loadingFieldTiles(metadata, medianAspectRatio(ratios));
     if (tiles.length === 0) return;
 
-    const field = this.#env.document.createElement("div");
-    field.dataset.galleryLoadingField = "true";
-    field.setAttribute("aria-hidden", "true");
-    const grid = this.#env.document.createElement("ul");
-    grid.className = "photo-grid";
     for (const tile of tiles) {
       const card = this.#env.document.createElement("li");
       card.className = `photo-card ${tile.className}`;
+      card.dataset.galleryLoadingTile = "true";
+      card.setAttribute("aria-hidden", "true");
       card.style.setProperty("--a", String(tile.aspectRatio));
       const mediaWrapper = this.#env.document.createElement("div");
       mediaWrapper.className = "photo-card-media-wrapper";
@@ -701,38 +723,64 @@ export class InfiniteGalleryController {
       title.textContent = "\u00a0";
       card.appendChild(mediaWrapper);
       card.appendChild(title);
-      grid.appendChild(card);
+      this.#grid.appendChild(card);
     }
-    field.appendChild(grid);
-    const sentinel = this.#ensureAutoLoadSentinel();
-    this.#feed.insertBefore(field, sentinel);
-    this.#loadingField = field;
   }
 
-  #removeLoadingField(): void {
-    this.#loadingField?.remove();
-    this.#loadingField = null;
-    this.#feed.querySelectorAll(LOADING_FIELD_SELECTOR).forEach((field) => field.remove());
+  #removeLoadingTail(): void {
+    this.#grid.querySelectorAll(LOADING_TILE_SELECTOR).forEach((tile) => tile.remove());
   }
 
-  #ensureAutoLoadSentinel(): HTMLElement {
-    const existing = this.#autoLoadSentinel
-      ?? this.#feed.querySelector<HTMLElement>(AUTO_LOAD_SENTINEL_SELECTOR);
-    if (existing) {
-      this.#autoLoadSentinel = existing;
-      return existing;
-    }
-
+  #createAutoLoadSentinel(): HTMLElement {
     const sentinel = this.#env.document.createElement("div");
-    // The link sits above the tall reserved field and can be skipped between
-    // observer samples. This stable target stays after that entire field.
     sentinel.dataset.galleryAutoLoadSentinel = "true";
     sentinel.setAttribute("aria-hidden", "true");
     sentinel.style.setProperty("block-size", "1px");
-    this.#feed.appendChild(sentinel);
+    const parent = this.#grid.parentNode;
+    if (!parent) throw new Error("Gallery grid is detached");
+    const siblings = [...parent.children];
+    parent.insertBefore(sentinel, siblings[siblings.indexOf(this.#grid) + 1] ?? null);
     this.#autoLoadSentinel = sentinel;
-    this.#observer?.observe(sentinel);
     return sentinel;
+  }
+
+  #initializeAutomaticMode(metadata: FeedMetadata | null): void {
+    if (!metadata || metadata.terminal || !this.#link || !this.#env.createObserver) return;
+    try {
+      this.#observer = this.#env.createObserver(this.#onIntersection, {
+        rootMargin: `0px 0px ${AUTO_LOAD_ROOT_MARGIN_PX}px`,
+      });
+      this.#enableAutomaticMode(metadata);
+      if (this.#feed.hasAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE)) {
+        this.#env.document.addEventListener("wheel", this.#onWheel, { passive: true });
+      }
+    } catch {
+      this.#observer = null;
+      this.#disableAutomaticMode();
+    }
+  }
+
+  #enableAutomaticMode(metadata: FeedMetadata): void {
+    if (!this.#observer || metadata.terminal || !this.#link) return;
+    this.#removeAutoLoadSentinel();
+    const sentinel = this.#createAutoLoadSentinel();
+    try {
+      this.#observer.observe(sentinel);
+    } catch {
+      sentinel.remove();
+      this.#autoLoadSentinel = null;
+      this.#observer = null;
+      this.#disableAutomaticMode();
+      return;
+    }
+    this.#feed.setAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE, "true");
+    this.#buildLoadingTail(metadata);
+  }
+
+  #disableAutomaticMode(): void {
+    this.#feed.removeAttribute(AUTO_LOAD_ACTIVE_ATTRIBUTE);
+    this.#removeLoadingTail();
+    this.#removeAutoLoadSentinel();
   }
 
   #removeAutoLoadSentinel(): void {

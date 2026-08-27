@@ -254,6 +254,12 @@ html[data-theme="dark"] {
   }
 }
 
+@layer utilities {
+  /* This state must share the utilities layer with the nav's `flex` class so
+     its higher specificity can hide the progressive-enhancement fallback. */
+  [data-gallery-auto-load-active="true"] [data-gallery-feed-next] { display: none; }
+}
+
 @layer components {
   [data-gallery-feed="true"] { container-type: inline-size; }
   .photo-grid {
@@ -400,8 +406,7 @@ html[data-theme="dark"] {
     .photo-card-image { transform: none; }
   }
 
-  [data-gallery-loading-field] {
-    margin-block-start: var(--spacing-hsp-sm);
+  [data-gallery-loading-tile] {
     pointer-events: none;
     user-select: none;
   }

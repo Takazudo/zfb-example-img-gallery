@@ -120,6 +120,10 @@ export function isGallerySnapshot(
   if (renderedCount === 0 || renderedCount > maximumRenderedCount) return false;
   if (snapshot.terminal !== (snapshot.nextUrl === "")) return false;
   if (snapshot.terminal && snapshot.nextCount !== 0) return false;
+  // Terminal entries have no next control in the canonical feed. Reject the
+  // pre-tail v2 shape that serialized a disabled "All photos loaded" link so
+  // old session records cannot reintroduce navigation after a terminal load.
+  if (snapshot.terminal && snapshot.nextControlHtml !== "") return false;
   if (!snapshot.terminal && snapshot.nextCount === 0) return false;
   if (!snapshot.terminal && snapshot.nextControlHtml === "") return false;
   try {

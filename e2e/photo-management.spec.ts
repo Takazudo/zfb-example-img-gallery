@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { installIntersectionObserverStub, stubImageRequests, uploadPng } from "./fixtures";
+import {
+  installIntersectionObserverStub,
+  stubImageRequests,
+  triggerIntersection,
+  uploadPng,
+} from "./fixtures";
 import { ensureAccountMenuOpen, softClick, softSubmit } from "./navigation";
 
 test.describe.configure({ mode: "serial" });
@@ -509,7 +514,7 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
   await page.goto("/tags/e2e-fixture");
   await waitForRuntime(page);
   await expect(page.locator('[data-gallery-grid="true"] > li[data-photo-id]')).toHaveCount(24);
-  await page.locator('[data-gallery-next-link="true"]').click();
+  await triggerIntersection(page, true);
   await expect(page.locator('[data-gallery-grid="true"] > li[data-photo-id]')).toHaveCount(48);
   const appendedFavorite = page
     .locator('[data-gallery-grid="true"] > li[data-photo-id]')

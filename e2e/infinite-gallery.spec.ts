@@ -82,6 +82,8 @@ test("loads delayed batches, disarms the observer, reaches the remainder, and re
 
   await page.goto(FIXTURE_PATH);
   await expect(grid(page)).toHaveCount(24);
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(24);
+  await expect(page.locator('[data-gallery-feed-next]')).toBeHidden();
   const initialIds = await orderedIds(page);
   await expect(nextLink(page)).toHaveText("Load next 24 photos");
 
@@ -100,9 +102,10 @@ test("loads delayed batches, disarms the observer, reaches the remainder, and re
   await expect.poll(() => pageTwoRequests).toBe(1);
   await expect(status(page)).toHaveText("Loaded 24 photos.");
 
-  // Manual activation is still independent of the observer gate and exposes
-  // the final smaller remainder before the terminal state.
-  await nextLink(page).click();
+  // The gate requires a leave/re-enter sample before the next observer load.
+  // The fallback link is intentionally hidden while automatic mode is active.
+  await triggerIntersection(page, false);
+  await triggerIntersection(page, true);
   await expect(status(page)).toHaveText("Loading 2 photos…");
   expect(pageThreeRequests).toBe(1);
   pageThree.release();
@@ -111,8 +114,10 @@ test("loads delayed batches, disarms the observer, reaches the remainder, and re
   expect(finalIds.slice(0, initialIds.length)).toEqual(initialIds);
   expect(new Set(finalIds).size).toBe(finalIds.length);
   await expect(status(page)).toHaveText("All photos loaded");
-  await expect(nextLink(page)).toHaveAttribute("aria-disabled", "true");
-  await expect(nextLink(page)).not.toHaveAttribute("href");
+  await expect(page.locator('[data-gallery-feed-next]')).toHaveCount(0);
+  await expect(nextLink(page)).toHaveCount(0);
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-gallery-auto-load-sentinel="true"]')).toHaveCount(0);
 });
 
 test("keeps the existing grid and canonical retry link after one non-success response @smoke", async ({ page }) => {
@@ -132,6 +137,8 @@ test("keeps the existing grid and canonical retry link after one non-success res
 
   await page.goto(FIXTURE_PATH);
   await expect(grid(page)).toHaveCount(24);
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(24);
+  await expect(page.locator('[data-gallery-feed-next]')).toBeHidden();
   const firstIds = await grid(page).evaluateAll((cards) => cards.map((card) => card.getAttribute("data-photo-id")));
   const firstHref = await nextLink(page).getAttribute("href");
 
@@ -141,6 +148,8 @@ test("keeps the existing grid and canonical retry link after one non-success res
   expect(await grid(page).evaluateAll((cards) => cards.map((card) => card.getAttribute("data-photo-id")))).toEqual(firstIds);
   expect(await nextLink(page).getAttribute("href")).toBe(firstHref);
   await expect(nextLink(page)).toContainText("Load next 24 photos");
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-gallery-auto-load-sentinel="true"]')).toHaveCount(0);
 
   await nextLink(page).click();
   await expect(grid(page)).toHaveCount(48);
@@ -154,8 +163,10 @@ test("keeps the existing grid and canonical retry link after one non-success res
 test("restores two loaded batches through a router photo click and Back without a reload @smoke", async ({ page }) => {
   await page.goto(FIXTURE_PATH);
   await expect(grid(page)).toHaveCount(24);
-  await nextLink(page).click();
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(24);
+  await triggerIntersection(page, true);
   await expect(grid(page)).toHaveCount(48);
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(2);
   const beforeIds = await orderedIds(page);
   const beforeMetadata = await layoutMetadata(page, 0, 48);
 
@@ -181,6 +192,9 @@ test("restores two loaded batches through a router photo click and Back without 
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`${FIXTURE_PATH.replaceAll("/", "\\/")}$`));
   await expect(grid(page)).toHaveCount(48);
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(2);
+  await expect(page.locator('[data-gallery-feed-next]')).toBeHidden();
+  await expect(page.locator('[data-gallery-grid="true"] > *')).toHaveCount(50);
   expect(await orderedIds(page)).toEqual(beforeIds);
   expect(await layoutMetadata(page, 0, 48)).toEqual(beforeMetadata);
   await expect.poll(() => page.evaluate(() => (
@@ -230,15 +244,61 @@ test("keeps manual loading available when IntersectionObserver is absent @smoke"
   await page.goto(FIXTURE_PATH);
   await expect(grid(page)).toHaveCount(24);
   await expect(nextLink(page)).toBeVisible();
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-gallery-auto-load-sentinel="true"]')).toHaveCount(0);
   await nextLink(page).click();
   await expect(grid(page)).toHaveCount(48);
+  expect(await page.locator('[data-gallery-grid="true"] > *').count()).toBe(48);
   await expect(page).toHaveURL(new RegExp(`${FIXTURE_PATH.replaceAll("/", "\\/")}$`));
   await expect(status(page)).toHaveText("Loaded 24 photos.");
 });
 
+test("keeps the manual link visible when observer construction or observation fails @smoke", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "IntersectionObserver", {
+      configurable: true,
+      writable: true,
+      value: class {
+        constructor(_callback: IntersectionObserverCallback) {
+          throw new Error("observer construction failed");
+        }
+      },
+    });
+  });
+  await page.goto(`${FIXTURE_PATH}?observer-failure=construction`);
+  await expect(grid(page)).toHaveCount(24);
+  await expect(nextLink(page)).toBeVisible();
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-gallery-auto-load-sentinel="true"]')).toHaveCount(0);
+  await nextLink(page).click();
+  await expect(grid(page)).toHaveCount(48);
+
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "IntersectionObserver", {
+      configurable: true,
+      writable: true,
+      value: class {
+        constructor(_callback: IntersectionObserverCallback) { /* no-op */ }
+        observe(_target: Element): void {
+          throw new Error("observer observation failed");
+        }
+        disconnect(): void { /* no-op */ }
+      },
+    });
+  });
+  await page.goto(`${FIXTURE_PATH}?observer-failure=observe`);
+  await expect(grid(page)).toHaveCount(24);
+  await expect(nextLink(page)).toBeVisible();
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-gallery-auto-load-sentinel="true"]')).toHaveCount(0);
+  await nextLink(page).click();
+  await expect(grid(page)).toHaveCount(48);
+});
+
 test("matches direct-page and appended absolute metadata in every non-Uniform layout @smoke", async ({ page }) => {
   await page.goto(FIXTURE_PATH);
-  await nextLink(page).click();
+  await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(24);
+  await triggerIntersection(page, true);
   await expect(grid(page)).toHaveCount(48);
 
   const appended = new Map<string, Awaited<ReturnType<typeof layoutMetadata>>>();
@@ -258,20 +318,46 @@ test("matches direct-page and appended absolute metadata in every non-Uniform la
 });
 
 test("keeps ordered unique cards and safe short endings in every non-Uniform mode @smoke", async ({ page }) => {
-  await page.addInitScript(() => Reflect.deleteProperty(window, "IntersectionObserver"));
+  let initialIds: string[] = [];
+  let incomingIds: string[] = [];
+  await page.route(`**${PAGE_TWO_PATH}`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    incomingIds = [...body.matchAll(/<li[^>]*data-photo-id="([^"]+)"/g)].map((match) => match[1] ?? "");
+    if (initialIds.length === 0 || incomingIds.length === 0) {
+      await route.fulfill({ response, body });
+      return;
+    }
+    // The first incoming card duplicates an existing id while the rest retain
+    // response order. The controller must consume the entire old tail and
+    // append only the 23 unseen cards before building the next tail.
+    const duplicateBody = body.replace(
+      /(<li[^>]*data-photo-id=")[^"]+("[\s>])/,
+      `$1${initialIds[0]}$2`,
+    );
+    incomingIds[0] = initialIds[0]!;
+    await route.fulfill({ response, body: duplicateBody });
+  });
   for (const layout of NON_UNIFORM_LAYOUTS) {
     // Give each loop its own history/snapshot identity. Revisiting the exact
     // same entry URL correctly restores the previous iteration's 50 cards.
     await page.goto(`${FIXTURE_PATH}?layout-case=${layout}`);
     await expect(grid(page)).toHaveCount(24);
     await setRootLayout(page, layout);
-    const initial = await orderedIds(page);
-    await nextLink(page).click();
-    await expect(grid(page)).toHaveCount(48);
-    await nextLink(page).click();
-    await expect(grid(page)).toHaveCount(50);
+    initialIds = await orderedIds(page);
+    await triggerIntersection(page, true);
+    await expect(grid(page)).toHaveCount(47);
+    await expect(page.locator('[data-gallery-loading-tile="true"]')).toHaveCount(2);
+    const deduplicated = await orderedIds(page);
+    expect(deduplicated.slice(0, initialIds.length)).toEqual(initialIds);
+    expect(deduplicated.slice(initialIds.length)).toEqual(incomingIds.slice(1));
+    expect(new Set(deduplicated).size).toBe(deduplicated.length);
+    expect(await page.locator('[data-gallery-grid="true"] > *').count()).toBe(49);
+    await triggerIntersection(page, false);
+    await triggerIntersection(page, true);
+    await expect(grid(page)).toHaveCount(49);
     const ids = await orderedIds(page);
-    expect(ids.slice(0, initial.length)).toEqual(initial);
+    expect(ids.slice(0, initialIds.length)).toEqual(initialIds);
     expect(new Set(ids).size).toBe(ids.length);
     const geometry = await page.evaluate(() => ({
       documentWidth: document.documentElement.scrollWidth,
@@ -287,6 +373,9 @@ test("keeps ordered unique cards and safe short endings in every non-Uniform mod
     expect(geometry.directChildren).toBe(geometry.allChildren);
     expect(geometry).toMatchObject({ hiddenCopies: 0, positiveTabindex: 0 });
     expect(geometry.finalCards.every((rect) => rect.width > 0 && rect.height > 0)).toBe(true);
+    expect(await page.locator('[data-gallery-loading-tile="true"]').count()).toBe(0);
+    expect(await page.locator('[data-gallery-auto-load-sentinel="true"]').count()).toBe(0);
+    expect(await page.locator('[data-gallery-feed-next]').count()).toBe(0);
   }
 });
 
