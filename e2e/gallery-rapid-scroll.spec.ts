@@ -47,11 +47,13 @@ async function observerGeometry(page: Page) {
 test("loads every batch after rapid scrolling passes the short pagination link @smoke", async ({ page }) => {
   const pageTwo = delayedResponse();
   const pageThree = delayedResponse();
+  let pageThreeRequests = 0;
   await page.route(`**${PAGE_TWO_PATH}`, async (route) => {
     await pageTwo.released;
     await route.continue();
   });
   await page.route(`**${PAGE_THREE_PATH}`, async (route) => {
+    pageThreeRequests += 1;
     await pageThree.released;
     await route.continue();
   });
@@ -68,23 +70,19 @@ test("loads every batch after rapid scrolling passes the short pagination link @
       linkPassedAboveViewport: true,
       sentinelInsideObserverRange: true,
     });
-  } finally {
+    // Continued downward input can arrive while the request is in flight and
+    // the browser keeps the bottom sentinel intersecting. It must queue one
+    // subsequent batch without requiring a synthetic leave/re-enter cycle.
+    await page.mouse.wheel(0, 2_000);
     pageTwo.release();
-  }
-
-  await expect(page.locator(CARD_SELECTOR)).toHaveCount(48);
-  await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loaded 24 photos.");
-
-  try {
-    await jumpPastCurrentLink(page);
+    await expect.poll(() => pageThreeRequests).toBe(1);
     await expect(page.locator(STATUS_SELECTOR)).toHaveText("Loading 2 photos…");
-    // The two-card remainder is shorter than the viewport, so its link remains
-    // visible; this second pass proves the stable sentinel re-armed and cleans up.
     await expect(observerGeometry(page)).resolves.toEqual({
       linkPassedAboveViewport: false,
       sentinelInsideObserverRange: true,
     });
   } finally {
+    pageTwo.release();
     pageThree.release();
   }
 
