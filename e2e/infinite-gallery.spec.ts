@@ -9,6 +9,7 @@ import { softClick } from "./navigation";
 const FIXTURE_PATH = "/tags/e2e-fixture";
 const PAGE_TWO_PATH = `${FIXTURE_PATH}/page/2`;
 const PAGE_THREE_PATH = `${FIXTURE_PATH}/page/3`;
+const NON_UNIFORM_LAYOUTS = ["spotlight", "editorial", "justified", "masonry"] as const;
 
 function grid(page: import("@playwright/test").Page) {
   return page.locator('[data-gallery-grid="true"] > li[data-photo-id]');
@@ -20,6 +21,33 @@ function nextLink(page: import("@playwright/test").Page) {
 
 function status(page: import("@playwright/test").Page) {
   return page.locator('[data-gallery-status="true"]');
+}
+
+async function orderedIds(page: import("@playwright/test").Page): Promise<string[]> {
+  return grid(page).evaluateAll((cards) => cards.map((card) => card.getAttribute("data-photo-id") ?? ""));
+}
+
+async function setRootLayout(
+  page: import("@playwright/test").Page,
+  layout: typeof NON_UNIFORM_LAYOUTS[number],
+): Promise<void> {
+  await page.evaluate((value) => document.documentElement.setAttribute("data-gallery-layout", value), layout);
+  await expect(page.locator("html")).toHaveAttribute("data-gallery-layout", layout);
+}
+
+async function layoutMetadata(page: import("@playwright/test").Page, start: number, count: number) {
+  return grid(page).evaluateAll((cards, range) => cards.slice(range.start, range.start + range.count).map((card) => {
+    const style = getComputedStyle(card);
+    return {
+      id: card.getAttribute("data-photo-id"),
+      role: [...card.classList].find((name) => /^g[fs][0-9a]$/.test(name)) ?? "",
+      aspect: card.style.getPropertyValue("--a"),
+      columnStart: style.gridColumnStart,
+      columnEnd: style.gridColumnEnd,
+      rowStart: style.gridRowStart,
+      rowEnd: style.gridRowEnd,
+    };
+  }), { start, count });
 }
 
 function delayedResponse() {
@@ -54,6 +82,7 @@ test("loads delayed batches, disarms the observer, reaches the remainder, and re
 
   await page.goto(FIXTURE_PATH);
   await expect(grid(page)).toHaveCount(24);
+  const initialIds = await orderedIds(page);
   await expect(nextLink(page)).toHaveText("Load next 24 photos");
 
   await triggerIntersection(page, true);
@@ -78,6 +107,9 @@ test("loads delayed batches, disarms the observer, reaches the remainder, and re
   expect(pageThreeRequests).toBe(1);
   pageThree.release();
   await expect(grid(page)).toHaveCount(50);
+  const finalIds = await orderedIds(page);
+  expect(finalIds.slice(0, initialIds.length)).toEqual(initialIds);
+  expect(new Set(finalIds).size).toBe(finalIds.length);
   await expect(status(page)).toHaveText("All photos loaded");
   await expect(nextLink(page)).toHaveAttribute("aria-disabled", "true");
   await expect(nextLink(page)).not.toHaveAttribute("href");
@@ -112,6 +144,9 @@ test("keeps the existing grid and canonical retry link after one non-success res
 
   await nextLink(page).click();
   await expect(grid(page)).toHaveCount(48);
+  const retriedIds = await orderedIds(page);
+  expect(retriedIds.slice(0, firstIds.length)).toEqual(firstIds);
+  expect(new Set(retriedIds).size).toBe(retriedIds.length);
   expect(requests).toBe(2);
   await expect(status(page)).toHaveText("Loaded 24 photos.");
 });
@@ -121,6 +156,8 @@ test("restores two loaded batches through a router photo click and Back without 
   await expect(grid(page)).toHaveCount(24);
   await nextLink(page).click();
   await expect(grid(page)).toHaveCount(48);
+  const beforeIds = await orderedIds(page);
+  const beforeMetadata = await layoutMetadata(page, 0, 48);
 
   const target = grid(page).nth(35).locator('[data-photo-card-media-wrapper] > a.photo-card-link');
   const targetHref = await target.getAttribute("href");
@@ -144,6 +181,8 @@ test("restores two loaded batches through a router photo click and Back without 
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`${FIXTURE_PATH.replaceAll("/", "\\/")}$`));
   await expect(grid(page)).toHaveCount(48);
+  expect(await orderedIds(page)).toEqual(beforeIds);
+  expect(await layoutMetadata(page, 0, 48)).toEqual(beforeMetadata);
   await expect.poll(() => page.evaluate(() => (
     window as typeof window & { __e2eNoReload?: string }
   ).__e2eNoReload ?? null)).toBe("alive");
@@ -195,4 +234,86 @@ test("keeps manual loading available when IntersectionObserver is absent @smoke"
   await expect(grid(page)).toHaveCount(48);
   await expect(page).toHaveURL(new RegExp(`${FIXTURE_PATH.replaceAll("/", "\\/")}$`));
   await expect(status(page)).toHaveText("Loaded 24 photos.");
+});
+
+test("matches direct-page and appended absolute metadata in every non-Uniform layout @smoke", async ({ page }) => {
+  await page.goto(FIXTURE_PATH);
+  await nextLink(page).click();
+  await expect(grid(page)).toHaveCount(48);
+
+  const appended = new Map<string, Awaited<ReturnType<typeof layoutMetadata>>>();
+  for (const layout of NON_UNIFORM_LAYOUTS) {
+    await setRootLayout(page, layout);
+    appended.set(layout, await layoutMetadata(page, 24, 24));
+  }
+
+  await page.goto(PAGE_TWO_PATH);
+  await expect(grid(page)).toHaveCount(24);
+  for (const layout of NON_UNIFORM_LAYOUTS) {
+    await setRootLayout(page, layout);
+    expect(await layoutMetadata(page, 0, 24)).toEqual(appended.get(layout));
+  }
+});
+
+test("keeps ordered unique cards and safe short endings in every non-Uniform mode @smoke", async ({ page }) => {
+  for (const layout of NON_UNIFORM_LAYOUTS) {
+    await page.goto(FIXTURE_PATH);
+    await setRootLayout(page, layout);
+    const initial = await orderedIds(page);
+    await nextLink(page).click();
+    await expect(grid(page)).toHaveCount(48);
+    await nextLink(page).click();
+    await expect(grid(page)).toHaveCount(50);
+    const ids = await orderedIds(page);
+    expect(ids.slice(0, initial.length)).toEqual(initial);
+    expect(new Set(ids).size).toBe(ids.length);
+    const geometry = await page.evaluate(() => ({
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      directChildren: [...document.querySelectorAll('[data-gallery-grid="true"] > li[data-photo-id]')].length,
+      allChildren: document.querySelector('[data-gallery-grid="true"]')?.children.length ?? -1,
+      hiddenCopies: document.querySelectorAll('[data-gallery-grid="true"] [aria-hidden="true"][data-photo-id]').length,
+      positiveTabindex: document.querySelectorAll('[data-gallery-grid="true"] [tabindex]:not([tabindex="0"]):not([tabindex="-1"])').length,
+      finalCards: [...document.querySelectorAll<HTMLElement>('[data-gallery-grid="true"] > li[data-photo-id]')]
+        .slice(-2).map((card) => card.getBoundingClientRect().toJSON()),
+    }));
+    expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+    expect(geometry.directChildren).toBe(geometry.allChildren);
+    expect(geometry).toMatchObject({ hiddenCopies: 0, positiveTabindex: 0 });
+    expect(geometry.finalCards.every((rect) => rect.width > 0 && rect.height > 0)).toBe(true);
+  }
+});
+
+test("rejects old history and session snapshot versions instead of restoring their cards @smoke", async ({ page }) => {
+  await page.goto(FIXTURE_PATH);
+  await page.evaluate(() => {
+    const feed = document.querySelector<HTMLElement>('[data-gallery-feed="true"]');
+    if (!feed) throw new Error("gallery feed missing");
+    const key = "gallery-old-version";
+    const identity = { version: 1, key, scope: feed.dataset.galleryScope, url: location.href };
+    history.replaceState({ ...(history.state ?? {}), zfbGallerySnapshot: identity }, "");
+    const snapshot = {
+      version: 1,
+      key,
+      scope: feed.dataset.galleryScope,
+      entryUrl: location.href,
+      page: 2,
+      totalPages: 3,
+      totalItems: 50,
+      pageSize: 24,
+      nextUrl: "/tags/e2e-fixture/page/3",
+      nextCount: 2,
+      terminal: false,
+      photoIds: ["old-version-card"],
+      cardsHtml: '<li data-photo-id="old-version-card" class="photo-card gf0" style="--a:1"><img src="/img/old.png"></li>',
+      nextControlHtml: '<nav data-gallery-feed-next><a data-gallery-next-link="true" data-gallery-next-url="/tags/e2e-fixture/page/3" data-gallery-next-count="2" href="/tags/e2e-fixture/page/3">Load next 2 photos</a></nav>',
+      savedAt: Date.now(),
+    };
+    sessionStorage.setItem(`zfb-gallery-snapshot:${key}`, JSON.stringify(snapshot));
+    sessionStorage.setItem("zfb-gallery-snapshot:index", JSON.stringify([{ key, bytes: JSON.stringify(snapshot).length }]));
+  });
+  await page.reload();
+  await expect(grid(page)).toHaveCount(24);
+  await expect(page.locator('[data-photo-id="old-version-card"]')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => history.state?.zfbGallerySnapshot?.version)).toBe(2);
 });

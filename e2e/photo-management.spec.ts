@@ -179,6 +179,59 @@ async function assertResponsiveCardSurface(page: Page): Promise<void> {
   }
 }
 
+async function assertLayoutCardOverlays(
+  page: Page,
+  layout: "spotlight" | "editorial",
+  cardIndex: number,
+): Promise<void> {
+  for (const width of [375, 1_200]) {
+    await page.setViewportSize({ width, height: 900 });
+    const metrics = await page.evaluate(({ cardIndex, layout }) => {
+      document.documentElement.setAttribute("data-gallery-layout", layout);
+      const card = document.querySelectorAll<HTMLElement>('[data-gallery-grid="true"] > li[data-photo-id]')[cardIndex];
+      const wrapper = card?.querySelector<HTMLElement>("[data-photo-card-media-wrapper]");
+      const targets = card ? [...card.querySelectorAll<HTMLElement>(
+        ".favorite-action, .photo-delete-action, .photo-select-action",
+      )] : [];
+      return {
+        cardClass: card?.className ?? "",
+        cardStyle: card ? {
+          columnEnd: getComputedStyle(card).gridColumnEnd,
+          rowEnd: getComputedStyle(card).gridRowEnd,
+        } : null,
+        wrapper: wrapper?.getBoundingClientRect().toJSON() ?? null,
+        targets: targets.map((target) => ({
+          rect: target.getBoundingClientRect().toJSON(),
+          visibility: getComputedStyle(target).visibility,
+        })),
+      };
+    }, { cardIndex, layout });
+    expect(metrics.cardClass).toMatch(/\bg[fs][0-9a]\b/);
+    expect(metrics.cardStyle?.rowEnd).toBe(width === 375 ? "span 1" : "span 2");
+    expect(metrics.cardStyle?.columnEnd).toBe(
+      width === 375 ? "span 1" : layout === "spotlight" ? "span 2" : "span 1",
+    );
+    expect(metrics.targets).toHaveLength(3);
+    for (const target of metrics.targets) {
+      expect(target.visibility).toBe("visible");
+      expect(target.rect.width).toBeGreaterThanOrEqual(44);
+      expect(target.rect.height).toBeGreaterThanOrEqual(44);
+      expect(target.rect.left).toBeGreaterThanOrEqual(metrics.wrapper?.left ?? -1);
+      expect(target.rect.right).toBeLessThanOrEqual(metrics.wrapper?.right ?? width + 1);
+      expect(target.rect.top).toBeGreaterThanOrEqual(metrics.wrapper?.top ?? -1);
+      expect(target.rect.bottom).toBeLessThanOrEqual(metrics.wrapper?.bottom ?? 901);
+    }
+    for (let left = 0; left < metrics.targets.length; left += 1) {
+      for (let right = left + 1; right < metrics.targets.length; right += 1) {
+        const a = metrics.targets[left]!.rect;
+        const b = metrics.targets[right]!.rect;
+        const overlaps = a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+        expect(overlaps).toBe(false);
+      }
+    }
+  }
+}
+
 async function assertResponsiveDetailActions(page: Page): Promise<void> {
   for (const width of [375, 800, 1_200]) {
     await page.setViewportSize({ width, height: 900 });
@@ -234,7 +287,7 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
   const journeyId = `${runId}r${testInfo.retry}`;
   const owner = credentials("owner", journeyId);
   const viewer = credentials("viewer", journeyId);
-  const titles = [1, 2, 3, 4].map((number) => `Photo management ${journeyId} ${number}`);
+  const titles = [1, 2, 3, 4, 5].map((number) => `Photo management ${journeyId} ${number}`);
 
   await register(page, owner);
   const photoPaths = [
@@ -242,6 +295,7 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
     await upload(page, titles[1]!),
     await upload(page, titles[2]!),
     await upload(page, titles[3]!),
+    await upload(page, titles[4]!),
   ];
 
   // A protected child route carries a safe requested destination through the
@@ -475,8 +529,10 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
 
   await page.goto("/my-photos");
   await waitForRuntime(page);
-  await expect(page.locator('[data-photo-delete-form="true"]')).toHaveCount(4);
-  await expect(page.locator('[data-photo-select="true"]')).toHaveCount(4);
+  await expect(page.locator('[data-photo-delete-form="true"]')).toHaveCount(5);
+  await expect(page.locator('[data-photo-select="true"]')).toHaveCount(5);
+  await assertLayoutCardOverlays(page, "spotlight", 0);
+  await assertLayoutCardOverlays(page, "editorial", 4);
   await assertResponsiveCardSurface(page);
   await page.goto(photoPaths[1]!);
   await waitForRuntime(page);
@@ -543,7 +599,7 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
   await signIn(page, owner);
   await page.goto("/my-photos");
   await waitForRuntime(page);
-  await expect(page.locator('[data-photo-delete-form="true"]')).toHaveCount(3);
+  await expect(page.locator('[data-photo-delete-form="true"]')).toHaveCount(4);
 
   // The same owner action remains usable without JavaScript: the first POST
   // returns a confirmation document, and only the explicit second POST
@@ -567,7 +623,7 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
   }
   await page.goto("/my-photos");
   await waitForRuntime(page);
-  await expect(page.locator('[data-photo-delete-form="true"]')).toHaveCount(2);
+  await expect(page.locator('[data-photo-delete-form="true"]')).toHaveCount(3);
 
   // Bulk deletion: select several personal cards, cancel once with Escape,
   // then confirm exactly one bounded mutation and an empty refreshed feed.
@@ -575,10 +631,11 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
   const remainingInputs = remainingCards.locator('[data-photo-select="true"]');
   await remainingInputs.nth(0).check();
   await remainingInputs.nth(1).check();
+  await remainingInputs.nth(2).check();
   const selectedCount = page.locator('[data-photo-selected-count="true"]');
   await expect(selectedCount).toHaveAttribute("aria-live", "polite");
   await expect(selectedCount).toHaveAttribute("aria-atomic", "true");
-  await expect(selectedCount).toHaveText("2 photos selected");
+  await expect(selectedCount).toHaveText("3 photos selected");
   const bulkDeletePosts = mutationPosts(page, "/my-photos");
   await resetSwapProbe(page);
   const bulkDeleteButton = page.locator('[data-photo-bulk-delete="true"]');
@@ -586,7 +643,7 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
-  await expect(selectedCount).toHaveText("2 photos selected");
+  await expect(selectedCount).toHaveText("3 photos selected");
   expect(bulkDeletePosts.count).toBe(0);
 
   await bulkDeleteButton.click();
@@ -594,7 +651,7 @@ test("confirms two-user favorites, progressive cards, accessible deletion, and r
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).not.toBeVisible();
   await expect(bulkDeleteButton).toBeFocused();
-  await expect(selectedCount).toHaveText("2 photos selected");
+  await expect(selectedCount).toHaveText("3 photos selected");
   expect(bulkDeletePosts.count).toBe(0);
 
   await bulkDeleteButton.click();
