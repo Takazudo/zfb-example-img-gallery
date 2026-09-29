@@ -16,7 +16,7 @@ import {
 } from "../lib/gallery-preferences";
 import { SlidersHorizontalIcon } from "./icons";
 
-const triggerClass = "group relative flex w-full min-h-12 cursor-pointer items-center gap-hsp-sm rounded-md px-hsp-sm text-small text-ink transition-colors hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand md:min-h-[2.75rem] md:w-[2.75rem] md:min-w-[2.75rem] md:justify-center md:px-0 md:text-ink-soft md:hover:text-ink";
+const triggerClass = "group relative flex w-full min-h-12 cursor-pointer items-center gap-hsp-sm rounded-md px-hsp-sm text-small text-ink transition-colors hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand md:min-h-[2.75rem] md:w-[2.75rem] md:min-w-[2.75rem] md:justify-center md:px-0 md:text-ink-soft md:hover:text-ink";
 const optionClass = "flex min-h-[2.75rem] cursor-pointer items-center gap-hsp-xs rounded-md px-hsp-xs text-small text-ink transition-colors hover:bg-surface-sunken";
 
 const layoutControlVisibility = {
@@ -126,11 +126,11 @@ export function DisplaySettings() {
           class={triggerClass}
           onClick={openDialog}
         >
-          <SlidersHorizontalIcon class="size-5 text-ink-soft md:text-inherit" />
+          <SlidersHorizontalIcon class="display-settings-icon size-5" />
           <span class="md:sr-only">Display settings</span>
           <span
             aria-hidden="true"
-            class="pointer-events-none absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-hsp-xs py-hsp-2xs text-micro font-medium text-paper opacity-0 transition-opacity delay-200 [.group:hover_&]:opacity-100 group-focus-visible:opacity-100 group-active:opacity-100 hidden md:block"
+            class="tooltip pointer-events-none absolute left-[50%] top-full z-30 mt-1 -translate-x-[50%] whitespace-nowrap rounded-sm bg-ink px-hsp-xs py-hsp-2xs text-micro font-medium text-paper group-focus-visible:opacity-100 group-active:opacity-100 hidden md:block"
           >
             Display settings
           </span>
@@ -140,10 +140,10 @@ export function DisplaySettings() {
         ref={dialog}
         aria-labelledby="display-settings-title"
         aria-describedby="display-settings-description"
-        class="m-auto max-h-[calc(100dvh-2rem)] w-[min(30rem,calc(100%-2rem))] overflow-hidden rounded-lg border border-line bg-surface p-0 text-ink shadow-raised backdrop:bg-ink/40"
+        class="m-auto max-h-[calc(100dvh_-_2rem)] w-[min(30rem,calc(100%_-_2rem))] overflow-hidden rounded-lg border border-line bg-surface p-0 text-ink shadow-raised backdrop:bg-ink/40"
         onClose={restoreFocus}
       >
-        <form method="dialog" class="flex max-h-[calc(100dvh-2rem)] flex-col">
+        <form method="dialog" class="flex max-h-[calc(100dvh_-_2rem)] flex-col">
           <div class="flex min-h-0 flex-1 flex-col gap-vsp-md overflow-y-auto overscroll-contain p-vsp-md">
             <div>
               <h2 id="display-settings-title" class="text-heading font-semibold">

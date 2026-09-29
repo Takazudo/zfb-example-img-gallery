@@ -44,11 +44,11 @@ type Props = {
 
 const TAGLINE = "A zfb image gallery on Cloudflare.";
 const DOCUMENT_BOOTSTRAP_SCRIPT = `${THEME_BOOTSTRAP_SCRIPT}${GALLERY_PREFERENCES_BOOTSTRAP_SCRIPT}`;
-const focusClass = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
-const navLinkClass = `inline-flex min-h-[2.75rem] items-center gap-[0.45rem] rounded-md px-hsp-sm text-small font-medium text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink aria-[current=page]:bg-surface-sunken aria-[current=page]:text-ink ${focusClass}`;
+const focusClass = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+const navLinkClass = `nav-link inline-flex min-h-[2.75rem] items-center gap-[0.45rem] rounded-md px-hsp-sm text-small font-medium transition-colors hover:bg-surface-sunken hover:text-ink ${focusClass}`;
 const iconButtonClass = `group relative inline-flex min-h-[2.75rem] min-w-[2.75rem] items-center justify-center rounded-md text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink ${focusClass}`;
-const tooltipClass = "pointer-events-none absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-hsp-xs py-hsp-2xs text-micro font-medium text-paper opacity-0 transition-opacity delay-200 [.group:hover_&]:opacity-100 group-focus-visible:opacity-100 group-active:opacity-100";
-const menuRowClass = `flex w-full min-h-[2.75rem] items-center gap-hsp-sm rounded-md px-hsp-sm text-left text-small text-ink transition-colors hover:bg-surface-sunken aria-[current=page]:bg-surface-sunken aria-[current=page]:font-semibold ${focusClass}`;
+const tooltipClass = "tooltip pointer-events-none absolute left-[50%] top-full z-30 mt-1 -translate-x-[50%] whitespace-nowrap rounded-sm bg-ink px-hsp-xs py-hsp-2xs text-micro font-medium text-paper group-focus-visible:opacity-100 group-active:opacity-100";
+const menuRowClass = `menu-row flex w-full min-h-[2.75rem] items-center gap-hsp-sm rounded-md px-hsp-sm text-left text-small text-ink transition-colors hover:bg-surface-sunken ${focusClass}`;
 
 type NavLinkProps = {
   href: string;
@@ -254,7 +254,7 @@ export default function GalleryLayout({
                     <a
                       href="/register"
                       aria-current={activePath === "/register" ? "page" : undefined}
-                      class={`group relative inline-flex min-h-[2.75rem] items-center gap-[0.45rem] rounded-md border border-line-strong px-hsp-sm text-small font-semibold text-ink transition-colors hover:bg-surface-sunken max-md:min-w-[2.75rem] max-md:justify-center max-md:px-0 aria-[current=page]:bg-surface-sunken ${focusClass}`}
+                      class={`register-link group relative inline-flex min-h-[2.75rem] items-center gap-[0.45rem] rounded-md border border-line-strong px-hsp-sm text-small font-semibold text-ink transition-colors hover:bg-surface-sunken max-md:min-w-[2.75rem] max-md:justify-center max-md:px-0 ${focusClass}`}
                     >
                       <UserPlusIcon class="size-5" />
                       <span class="sr-only md:not-sr-only">Register</span>

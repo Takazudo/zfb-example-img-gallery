@@ -68,6 +68,20 @@ describe("semantic theme architecture", () => {
     expect(globalCss).toContain("::view-transition-new(root)");
   });
 
+  it("keeps header state and toast motion in authored rules instead of v3-rejected variants", () => {
+    expect(globalCss).toMatch(/\.nav-link\[aria-current="page"\]\s*{[^}]*color:\s*var\(--theme-ink\)/s);
+    expect(globalCss).toMatch(/\.menu-row\[aria-current="page"\]\s*{[^}]*font-weight:\s*600/s);
+    expect(globalCss).toMatch(/\.group:hover \.tooltip\s*{\s*opacity:\s*1/);
+    expect(globalCss).toMatch(/\.tooltip\s*{[^}]*transition-delay:\s*200ms/s);
+    expect(globalCss).toMatch(/\.favorite-toast\[data-visible="true"\]\s*{[^}]*opacity:\s*1/s);
+    expect(globalCss).toMatch(/@media \(prefers-reduced-motion:\s*reduce\)\s*{\s*\.favorite-toast\s*{[^}]*translate:\s*-50% 0;[^}]*transition-property:\s*opacity;/s);
+    const source = ["components", "layouts", "pages"]
+      .flatMap((directory) => sourceFiles(directory))
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+    expect(source).not.toMatch(/(?:aria|data)-\[|motion-(?:reduce|safe):|\[\.group:|\b-?(?:left|translate-x)-1\/2\b/);
+  });
+
   it("rejects default palettes, raw colors, and palette references in Preact markup", () => {
     const source = ["components", "islands", "layouts", "pages"]
       .filter((directory) => existsSync(directory))

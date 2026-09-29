@@ -363,7 +363,7 @@ function ConfirmationPage({
           <input type="hidden" name="confirmed" value="1" />
           <button
             type="submit"
-            class="inline-flex min-h-[2.75rem] items-center rounded-md bg-danger px-hsp-sm text-small font-semibold text-on-danger transition-colors hover:bg-danger-strong"
+            class="inline-flex min-h-[2.75rem] items-center rounded-md bg-danger px-hsp-sm text-small font-semibold text-on-danger transition-colors"
           >
             Delete permanently
           </button>
