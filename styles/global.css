@@ -551,6 +551,51 @@ html[data-theme="dark"] {
   @media (prefers-reduced-motion: reduce) {
     .favorite-action { transform: none; }
   }
+
+  /* Header state and motion rules below are authored rather than attribute,
+     arbitrary-selector or motion variants so one spelling works in both CSS
+     engines. Each class owns the resting value of every property its states
+     change; utilities outrank this layer, so none may set those resting values. */
+  .nav-link { color: var(--theme-ink-soft); }
+  :is(.nav-link, .menu-row, .register-link)[aria-current="page"] {
+    background-color: var(--theme-surface-sunken);
+  }
+  .nav-link[aria-current="page"] { color: var(--theme-ink); }
+  .menu-row[aria-current="page"] { font-weight: 600; }
+
+  .display-settings-icon { color: var(--theme-ink-soft); }
+  @media (width >= 48rem) {
+    .display-settings-icon { color: inherit; }
+  }
+
+  /* Deliberately not gated on (hover: hover): a tap reveals it too. Focus and
+     active reveals stay on the group-focus-visible/group-active utilities. */
+  .tooltip {
+    opacity: 0;
+    transition-property: opacity;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+    transition-delay: 200ms;
+  }
+  .group:hover .tooltip { opacity: 1; }
+
+  .favorite-toast {
+    opacity: 0;
+    translate: -50% -0.5rem;
+    transition-property: opacity, translate;
+    transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    transition-duration: 200ms;
+  }
+  .favorite-toast[data-visible="true"] {
+    opacity: 1;
+    translate: -50% 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .favorite-toast {
+      translate: -50% 0;
+      transition-property: opacity;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

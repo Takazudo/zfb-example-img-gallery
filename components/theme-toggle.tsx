@@ -34,13 +34,13 @@ export function ThemeToggle() {
     <button
       type="button"
       aria-label={getThemeToggleLabel(theme)}
-      class="inline-flex min-h-[2.75rem] min-w-[2.75rem] cursor-pointer items-center justify-center rounded-md group relative text-ink-soft hover:text-ink transition-colors hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      class="inline-flex min-h-[2.75rem] min-w-[2.75rem] cursor-pointer items-center justify-center rounded-md group relative text-ink-soft hover:text-ink transition-colors hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
       onClick={() => controller.current?.toggle()}
     >
       {theme === "light" ? <SunIcon class="size-5" /> : <MoonIcon class="size-5" />}
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-hsp-xs py-hsp-2xs text-micro font-medium text-paper opacity-0 transition-opacity delay-200 [.group:hover_&]:opacity-100 group-focus-visible:opacity-100 group-active:opacity-100"
+        class="tooltip pointer-events-none absolute left-[50%] top-full z-30 mt-1 -translate-x-[50%] whitespace-nowrap rounded-sm bg-ink px-hsp-xs py-hsp-2xs text-micro font-medium text-paper group-focus-visible:opacity-100 group-active:opacity-100"
       >
         {getThemeToggleLabel(theme)}
       </span>

@@ -58,7 +58,7 @@ describe("DisplaySettings", () => {
     expect(html).toContain('aria-describedby="gallery-layout-description"');
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain("Adjust thumbnail ratio and width below.");
-    expect(html).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(html).toContain("max-h-[calc(100dvh_-_2rem)]");
     expect(html).toContain("overflow-hidden");
     expect(html).toContain("overflow-y-auto");
     expect(html).toContain("overscroll-contain");
