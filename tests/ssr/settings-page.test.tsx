@@ -1,10 +1,10 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import { SettingsView } from "../../pages/settings";
 
 describe("settings page SSR contract", () => {
   it("renders three POST settings forms, multipart fallback, and intentional runtime scripts", () => {
-    const html = render(
+    const html = renderToString(
       <SettingsView
         account={{
           id: 7,

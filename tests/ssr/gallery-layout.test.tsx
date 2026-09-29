@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import { Button } from "../../components/button";
 import { EmptyState } from "../../components/empty-state";
@@ -17,7 +17,7 @@ const VALID_BLURHASH = "Ub86Xpt:fQt:t:o#fQo#fQfQfQfQt:o#fQo#";
 
 describe("GalleryLayout", () => {
   it("renders the dynamic document head with one stable stylesheet and module entry", () => {
-    const html = render(<GalleryLayout title="Gallery">content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout title="Gallery">content</GalleryLayout>);
     expect(html).toContain('<html lang="en"');
     expect(html).toMatch(/<meta char(?:s|S)et="utf-8"/);
     expect(html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1"');
@@ -26,14 +26,14 @@ describe("GalleryLayout", () => {
     expect(html.match(/<script type="module" src="\/assets\/islands\.js"><\/script>/g)).toHaveLength(1);
   });
   it("emits the marked pre-paint bootstrap before stylesheet work", () => {
-    const html = render(<GalleryLayout>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout>content</GalleryLayout>);
     expect(html).toContain(
       `<script data-theme-bootstrap="true">${THEME_BOOTSTRAP_SCRIPT}${GALLERY_PREFERENCES_BOOTSTRAP_SCRIPT}</script>`,
     );
     expect(html.indexOf("data-theme-bootstrap")).toBeLessThan(html.indexOf('href="/assets/app.css"'));
   });
   it("mounts the uniform SPA router policy and preserves its announcer styles", () => {
-    const html = render(<GalleryLayout>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout>content</GalleryLayout>);
     expect(html).toContain('name="zfb-view-transitions-enabled" content="true"');
     expect(html).toContain('name="zfb-view-transitions-fallback" content="animate"');
     expect(html).toContain(
@@ -43,18 +43,19 @@ describe("GalleryLayout", () => {
     expect(html).toContain(".zfb-route-announcer");
   });
   it("mounts the stable accessible theme island in the wrapping header nav", () => {
-    const html = render(<GalleryLayout>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout>content</GalleryLayout>);
     expect(html).toContain('data-zfb-island="ThemeToggle"');
     expect(html).toContain('data-when="load"');
     expect(html).toContain('aria-label="Switch to dark mode"');
     expect(html).toMatch(/<nav[^>]*>[\s\S]*data-zfb-island="ThemeToggle"[\s\S]*<\/nav>/);
     expect(html).toContain("flex w-full flex-wrap items-center");
+    // The zudo-react/1 transport always carries props; an empty object means none.
     const props = html.match(/data-zfb-island="ThemeToggle"[^>]*data-props="([^"]*)"/)?.[1];
-    expect(props).toBeUndefined();
+    expect(props).toBe("{}");
   });
   it("mounts one stable display-settings island for anonymous and signed-in headers", () => {
     for (const user of [null, { username: "takazudo" }]) {
-      const html = render(<GalleryLayout user={user}>content</GalleryLayout>);
+      const html = renderToString(<GalleryLayout user={user}>content</GalleryLayout>);
       expect(html.match(/data-zfb-island="DisplaySettings"/g)).toHaveLength(1);
       expect(html.match(/data-zfb-island="ThemeToggle"/g)).toHaveLength(1);
       expect(html).toMatch(
@@ -67,7 +68,7 @@ describe("GalleryLayout", () => {
     }
   });
   it("renders one responsive primary popover with its three explicit controls", () => {
-    const html = render(<GalleryLayout>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout>content</GalleryLayout>);
     expect(html.match(/id="primary-menu" popover/g)).toHaveLength(1);
     expect(html.match(/popovertarget="primary-menu"/g)).toHaveLength(3);
     expect(html).toContain('aria-label="Menu"');
@@ -78,8 +79,8 @@ describe("GalleryLayout", () => {
     expect(html.match(/href="\/tags"/g)).toHaveLength(1);
   });
   it("renders the account popover only for a signed-in user", () => {
-    const signedOut = render(<GalleryLayout user={null}>content</GalleryLayout>);
-    const signedIn = render(<GalleryLayout user={{ username: "takazudo" }}>content</GalleryLayout>);
+    const signedOut = renderToString(<GalleryLayout user={null}>content</GalleryLayout>);
+    const signedIn = renderToString(<GalleryLayout user={{ username: "takazudo" }}>content</GalleryLayout>);
     expect(signedOut).not.toContain('id="account-menu"');
     expect(signedOut).not.toContain('popovertarget="account-menu"');
     expect(signedOut).not.toContain('aria-label="Account menu"');
@@ -90,7 +91,7 @@ describe("GalleryLayout", () => {
   });
   it("uses accessible tooltip markup without native title attributes", () => {
     for (const user of [null, { username: "takazudo" }]) {
-      const html = render(<GalleryLayout user={user}>content</GalleryLayout>);
+      const html = renderToString(<GalleryLayout user={user}>content</GalleryLayout>);
       const header = html.match(/<header\b[\s\S]*?<\/header>/)?.[0];
       expect(header).toBeDefined();
       expect(header).not.toContain('title="');
@@ -101,20 +102,20 @@ describe("GalleryLayout", () => {
     }
   });
   it("mounts the single layout controller island in the existing runtime", () => {
-    const html = render(<GalleryLayout>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout>content</GalleryLayout>);
     expect(html.match(/data-zfb-island="InfiniteGalleryControllerIsland"/g)).toHaveLength(1);
     expect(html).toContain('data-zfb-island="InfiniteGalleryControllerIsland" data-when="load"');
     expect(html.match(/src="\/assets\/islands\.js"/g)).toHaveLength(1);
   });
   it("suppresses only the manual stable module for the SSG document mode", () => {
-    const html = render(<GalleryLayout includeStableClientEntry={false}>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout includeStableClientEntry={false}>content</GalleryLayout>);
     expect(html).not.toContain('src="/assets/islands.js"');
     expect(html).toContain('data-zfb-island="ThemeToggle"');
     expect(html).toContain('data-zfb-island="DisplaySettings"');
     expect(html).toContain('name="zfb-view-transitions-enabled"');
   });
   it("renders signed-out controls only", () => {
-    const html = render(<GalleryLayout user={null}>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout user={null}>content</GalleryLayout>);
     expect(html).toContain('href="/login"'); expect(html).toContain('href="/register"');
     expect(html).not.toContain('href="/upload"'); expect(html).not.toContain('href="/settings"');
     expect(html).not.toContain('action="/logout"');
@@ -122,24 +123,24 @@ describe("GalleryLayout", () => {
     expect(html).not.toContain('href="/favorites"');
   });
   it("renders signed-in controls and a POST logout form", () => {
-    const html = render(<GalleryLayout user={{ username: "takazudo" }}>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout user={{ username: "takazudo" }}>content</GalleryLayout>);
     expect(html).toContain("@takazudo"); expect(html).toContain('href="/authors/takazudo"');
     expect(html).toContain('href="/upload"'); expect(html).toContain('href="/settings"');
     expect(html).toContain('href="/my-photos"'); expect(html).toContain('href="/favorites"');
     expect(html).toContain('<form method="post" action="/logout">');
   });
   it("marks only the matching navigation link as current", () => {
-    const html = render(<GalleryLayout activePath="/tags">content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout activePath="/tags">content</GalleryLayout>);
     expect(html.match(/aria-current="page"/g)).toHaveLength(1);
     expect(html).toMatch(/href="\/tags" aria-current="page"/);
   });
   it("marks My Photos as current without changing Favorites", () => {
-    const html = render(<GalleryLayout user={{ username: "takazudo" }} activePath="/my-photos">content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout user={{ username: "takazudo" }} activePath="/my-photos">content</GalleryLayout>);
     expect(html).toMatch(/href="\/my-photos" aria-current="page"/);
     expect(html).toMatch(/href="\/favorites"(?! aria-current)/);
   });
   it("contains only the intentional bootstrap and module scripts with no inline event handler", () => {
-    const html = render(<GalleryLayout>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout>content</GalleryLayout>);
     expect(html.match(/<script\b/g)).toHaveLength(2);
     expect(html).not.toMatch(/\son[a-z]+=/i);
     expect(html).not.toContain("data-zfb-reload");
@@ -148,10 +149,10 @@ describe("GalleryLayout", () => {
 
 describe("shared presentational components", () => {
   it("renders PhotoGrid with its stable verification selector", () => {
-    expect(render(<PhotoGrid><li>Photo</li></PhotoGrid>)).toMatch(/<ul[^>]*data-testid="photo-grid"/);
+    expect(renderToString(<PhotoGrid><li>Photo</li></PhotoGrid>)).toMatch(/<ul[^>]*data-testid="photo-grid"/);
   });
   it("provides one stable polite feed status node without replacing the real anchor", () => {
-    const html = render(<PhotoFeed
+    const html = renderToString(<PhotoFeed
       scope="global"
       page={{ page: 1, pageSize: 24, totalItems: 25, totalPages: 2, offset: 0, hasPrev: false, hasNext: true }}
       nextHref="/page/2"
@@ -161,7 +162,7 @@ describe("shared presentational components", () => {
     expect(html).toContain('data-gallery-status="true" aria-live="polite" aria-atomic="true" hidden');
   });
   it("renders the PhotoCard structural and metadata contract", () => {
-    const html = render(<PhotoCard photo={{ id: 7, title: "Acrylic macro", src: "/img/photo.webp", width: 2000, height: 1500, blurhash: null }} />);
+    const html = renderToString(<PhotoCard photo={{ id: 7, title: "Acrylic macro", src: "/img/photo.webp", width: 2000, height: 1500, blurhash: null }} />);
     expect(html).toMatch(/^<li data-photo-id="7"/); expect(html).toContain('<a href="/photos/7"');
     expect(html).toContain('width="2000"'); expect(html).toContain('height="1500"');
     expect(html).toContain('alt="Acrylic macro"');
@@ -169,31 +170,31 @@ describe("shared presentational components", () => {
   });
   it("renders a bounded cover placeholder only for a valid hash while keeping the image visible by default", () => {
     const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 2400, height: 1600, blurhash: VALID_BLURHASH };
-    const html = render(<PhotoCard photo={photo} />);
+    const html = renderToString(<PhotoCard photo={photo} />);
     expect(html).toContain('data-image-placeholder="true"');
     expect(html).toContain('data-placeholder-fit="cover"');
     expect(html).toContain('data-placeholder-image="true"');
     expect(html).toContain("data:image/png;base64,");
     expect(html).not.toContain("data-placeholder-pending");
-    expect(render(<PhotoCard photo={{ ...photo, blurhash: "not-a-hash" }} />)).not.toContain("data-image-placeholder");
-    expect(render(<PhotoCard photo={{ ...photo, blurhash: "x".repeat(100_000) }} />)).not.toContain("data-image-placeholder");
-    expect(render(<PhotoCard photo={{ ...photo, blurhash: null }} />)).not.toContain("data-image-placeholder");
+    expect(renderToString(<PhotoCard photo={{ ...photo, blurhash: "not-a-hash" }} />)).not.toContain("data-image-placeholder");
+    expect(renderToString(<PhotoCard photo={{ ...photo, blurhash: "x".repeat(100_000) }} />)).not.toContain("data-image-placeholder");
+    expect(renderToString(<PhotoCard photo={{ ...photo, blurhash: null }} />)).not.toContain("data-image-placeholder");
   });
   it("uses lazy loading by default and eager loading for priority photos", () => {
     const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 20, height: 20, blurhash: null };
-    expect(render(<PhotoCard photo={photo} />)).toContain('loading="lazy"');
-    const priority = render(<PhotoCard photo={photo} priority />);
+    expect(renderToString(<PhotoCard photo={photo} />)).toContain('loading="lazy"');
+    const priority = renderToString(<PhotoCard photo={photo} priority />);
     expect(priority).toContain('loading="eager"'); expect(priority).not.toContain('loading="lazy"');
   });
   it("emits responsive image attributes only with a srcSet", () => {
     const photo = { id: 1, title: "Photo", src: "/img/photo.webp", width: 20, height: 20, blurhash: null };
-    const plain = render(<PhotoCard photo={photo} sizes="20px" />);
+    const plain = renderToString(<PhotoCard photo={photo} sizes="20px" />);
     expect(plain).not.toMatch(/srcset=/i); expect(plain).not.toContain("sizes=");
-    const responsive = render(<PhotoCard photo={photo} srcSet="/img/photo.webp 20w" />);
+    const responsive = renderToString(<PhotoCard photo={photo} srcSet="/img/photo.webp 20w" />);
     expect(responsive).toMatch(/srcset=/i); expect(responsive).toContain('sizes="(min-width: 48rem) 200px, 100vw"');
   });
   it("renders a marked one-page feed without a misleading next action", () => {
-    const html = render(<PhotoFeed
+    const html = renderToString(<PhotoFeed
       scope="global"
       page={{ page: 1, pageSize: 24, totalItems: 1, totalPages: 1, offset: 0, hasPrev: false, hasNext: false }}
       nextHref="/page/2"
@@ -212,7 +213,7 @@ describe("shared presentational components", () => {
     expect(html).not.toContain('data-gallery-next-link');
   });
   it("renders an exact next-X link for a partial remainder", () => {
-    const html = render(<PhotoFeed
+    const html = renderToString(<PhotoFeed
       scope="tag:3"
       page={{ page: 1, pageSize: 24, totalItems: 25, totalPages: 2, offset: 0, hasPrev: false, hasNext: true }}
       nextHref="/tags/foo/page/2"
@@ -226,7 +227,7 @@ describe("shared presentational components", () => {
     expect(html).toContain(">Load next 1 photos</a>");
   });
   it("includes the trusted viewer identity in personalized collection scopes", () => {
-    const html = render(<PhotoFeed
+    const html = renderToString(<PhotoFeed
       scope="global"
       viewerId={7}
       page={{ page: 1, pageSize: 24, totalItems: 0, totalPages: 1, offset: 0, hasPrev: false, hasNext: false }}
@@ -237,7 +238,7 @@ describe("shared presentational components", () => {
   });
   it("keeps an expanded placeholder-bearing cardsHtml payload below the 512 KiB entry cap", () => {
     for (const viewerId of [null, 7]) {
-      const cardsHtml = render(<PhotoGrid>{Array.from({ length: 240 }, (_, id) => (
+      const cardsHtml = renderToString(<PhotoGrid>{Array.from({ length: 240 }, (_, id) => (
         <PhotoCard key={id} viewerId={viewerId} returnTo="/" photo={{
           id, title: `Photo ${id}`, src: `/img/${id}.webp`, width: 2400, height: 1600, blurhash: VALID_BLURHASH,
         }} />
@@ -247,8 +248,8 @@ describe("shared presentational components", () => {
     }
   });
   it("renders shared outline/filled star geometry with valid sibling card controls", () => {
-    const anonymous = render(<PhotoCard photo={{ id: 7, title: "Photo", src: "/img/7", width: 20, height: 20, blurhash: null }} returnTo="/tags/art" />);
-    const signedIn = render(<PhotoCard photo={{ id: 7, title: "Photo", src: "/img/7", width: 20, height: 20, blurhash: null, isFavorited: true }} viewerId={3} returnTo="/tags/art" />);
+    const anonymous = renderToString(<PhotoCard photo={{ id: 7, title: "Photo", src: "/img/7", width: 20, height: 20, blurhash: null }} returnTo="/tags/art" />);
+    const signedIn = renderToString(<PhotoCard photo={{ id: 7, title: "Photo", src: "/img/7", width: 20, height: 20, blurhash: null, isFavorited: true }} viewerId={3} returnTo="/tags/art" />);
     expect(anonymous).toContain(`d="${FAVORITE_STAR_PATH}" fill="none"`);
     expect(anonymous).toContain('href="/login?next=%2Ftags%2Fart"');
     expect(anonymous).not.toContain("aria-pressed");
@@ -261,7 +262,7 @@ describe("shared presentational components", () => {
   });
   it("renders owner delete and selection controls only for owned cards in distinct corners", () => {
     const photo = { id: 7, ownerId: 3, title: "Photo", src: "/img/7", width: 20, height: 20, blurhash: null };
-    const owner = render(<PhotoCard photo={photo} viewerId={3} returnTo="/my-photos" selectable />);
+    const owner = renderToString(<PhotoCard photo={photo} viewerId={3} returnTo="/my-photos" selectable />);
     expect(owner).toContain('data-photo-delete-form="true"');
     expect(owner).toContain('class="photo-delete-form-card"');
     expect(owner).toContain('data-photo-select="true"');
@@ -269,47 +270,47 @@ describe("shared presentational components", () => {
     expect(owner).toContain('class="favorite-action-card"');
     expect(owner).toMatch(/<a[^>]*photo-card-link[\s\S]*<\/a><form data-favorite-control/);
     expect(owner).not.toMatch(/<a[^>]*data-photo-(?:delete|select)/);
-    expect(render(<PhotoCard photo={photo} viewerId={4} selectable />)).not.toContain("data-photo-delete-form");
-    expect(render(<PhotoCard photo={photo} selectable />)).not.toContain("data-photo-select");
+    expect(renderToString(<PhotoCard photo={photo} viewerId={4} selectable />)).not.toContain("data-photo-delete-form");
+    expect(renderToString(<PhotoCard photo={photo} selectable />)).not.toContain("data-photo-select");
   });
   it("renders one labelled native delete dialog in the existing controller island", () => {
-    const html = render(<GalleryLayout>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout>content</GalleryLayout>);
     expect(html.match(/data-photo-delete-dialog="true"/g)).toHaveLength(1);
     expect(html).toContain('aria-labelledby="photo-delete-dialog-title"');
     expect(html).toContain('aria-describedby="photo-delete-dialog-message"');
     expect(html).toContain('data-photo-delete-error="true" role="alert" hidden');
   });
   it("renders one atomic polite toast above the sticky header with reduced-motion styling", () => {
-    const html = render(<GalleryLayout>content</GalleryLayout>);
+    const html = renderToString(<GalleryLayout>content</GalleryLayout>);
     expect(html.match(/data-favorite-toast="true"/g)).toHaveLength(1);
     expect(html).toContain('role="status" aria-live="polite" aria-atomic="true"');
     expect(html).toContain("z-20");
     expect(html).toMatch(/class="favorite-toast[ "]/);
   });
   it("renders tag text and applies percent encoding exactly once", () => {
-    const html = render(<TagList tags={[{ name: "acrylic" }, { name: "東京" }]} />);
+    const html = renderToString(<TagList tags={[{ name: "acrylic" }, { name: "東京" }]} />);
     expect(html).toContain("#acrylic"); expect(html).toContain('href="/tags/acrylic"');
     expect(html).toContain(`/tags/${encodeURIComponent("東京")}`); expect(html).not.toContain("%25");
   });
   it("wires Field labels, errors, and descriptions", () => {
-    const invalid = render(<Field id="email" name="email" label="Email" error="Required" />);
+    const invalid = renderToString(<Field id="email" name="email" label="Email" error="Required" />);
     expect(invalid).toContain('for="email"'); expect(invalid).toContain('id="email"');
     expect(invalid).toContain('aria-invalid="true"'); expect(invalid).toContain('aria-describedby="email-error"');
-    const valid = render(<Field id="name" name="name" label="Name" />);
+    const valid = renderToString(<Field id="name" name="name" label="Name" />);
     expect(valid).not.toContain("aria-invalid"); expect(valid).not.toContain("aria-describedby");
   });
   it("renders textarea state in the element body", () => {
-    const html = render(<Field id="notes" name="notes" label="Notes" as="textarea" value="Server value" />);
+    const html = renderToString(<Field id="notes" name="notes" label="Notes" as="textarea" value="Server value" />);
     expect(html).toMatch(/<textarea[^>]*>Server value<\/textarea>/); expect(html).not.toMatch(/<textarea[^>]*value=/);
   });
   it("defaults Button to submit and renders link-buttons without button attributes", () => {
-    const button = render(<Button>Save</Button>);
+    const button = renderToString(<Button>Save</Button>);
     expect(button).toMatch(/^<button[^>]*type="submit"/); expect(button).toContain("cursor-pointer");
-    const link = render(<Button href="/upload">Upload</Button>);
+    const link = renderToString(<Button href="/upload">Upload</Button>);
     expect(link).toMatch(/^<a href="\/upload"/); expect(link).not.toContain('type="submit"');
   });
   it("renders EmptyState title and action", () => {
-    const html = render(<EmptyState title="Nothing here" action={{ href: "/upload", label: "Upload" }} />);
+    const html = renderToString(<EmptyState title="Nothing here" action={{ href: "/upload", label: "Upload" }} />);
     expect(html).toContain("Nothing here"); expect(html).toContain('href="/upload"');
   });
 });

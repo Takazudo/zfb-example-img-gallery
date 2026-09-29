@@ -58,7 +58,7 @@ function attribute(html: string, selector: RegExp, name: string): string | undef
 }
 
 beforeEach(() => {
-  configuredGlobal.__zfb = { site: "https://gallery.example" };
+  configuredGlobal.__zfb = { ...configuredGlobal.__zfb, site: "https://gallery.example" };
 });
 
 afterEach(() => {
@@ -82,7 +82,8 @@ describe("photo detail SSR", () => {
 
     expect(html).toContain('<a href="/authors/alice"');
     expect(html).toContain("@alice</a>");
-    expect(html).toContain("**not bold**\nsecond line &lt;script>alert(1)&lt;/script>");
+    // zudo-react also escapes ">" in text.
+    expect(html).toContain("**not bold**\nsecond line &lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).not.toContain("<strong>not bold</strong>");
     expect(html).not.toContain("<br");
     expect(html).toMatch(/<p class="[^"]*whitespace-pre-wrap[^"]*">/);

@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -53,7 +53,7 @@ beforeEach(() => {
   mocks.context.request = new Request("https://foreign.example/");
   mocks.getSessionUser.mockResolvedValue(null);
   mocks.listPhotoPage.mockResolvedValue(page([], 0));
-  configuredGlobal.__zfb = { site: "https://canonical.example" };
+  configuredGlobal.__zfb = { ...configuredGlobal.__zfb, site: "https://canonical.example" };
 });
 
 afterEach(() => {
@@ -63,7 +63,7 @@ afterEach(() => {
 
 describe("top page SSR", () => {
   it("renders an empty state without a grid or pager and links signed-out visitors to registration", async () => {
-    const html = render(await TopPage());
+    const html = renderToString(await TopPage());
 
     expect(html).toContain("<h1");
     expect(html).toContain("No photos yet");
@@ -75,7 +75,7 @@ describe("top page SSR", () => {
   it("uses the signed-in upload next step for an empty gallery", async () => {
     mocks.getSessionUser.mockResolvedValue({ id: 7, username: "alice", email: "alice@example.com", avatar_key: null });
 
-    const html = render(await TopPage());
+    const html = renderToString(await TopPage());
 
     expect(html).toContain("@alice");
     expect(html).toContain('href="/upload"');
@@ -88,7 +88,7 @@ describe("top page SSR", () => {
   ])("renders %i photos as %i page(s) and exposes only the next feed link when needed", async (totalItems, totalPages, hasNext) => {
     mocks.listPhotoPage.mockResolvedValue(page([photo(1)], totalItems, 1, totalPages));
 
-    const html = render(await TopPage());
+    const html = renderToString(await TopPage());
 
     expect(html).toContain('data-testid="photo-grid"');
     expect(html.includes('data-gallery-next-link="true"')).toBe(hasNext);
@@ -111,7 +111,7 @@ describe("top page SSR", () => {
       photo(2, { thumb_key: null, width: 900, height: 1400 }),
     ], 2));
 
-    const html = render(await TopPage());
+    const html = renderToString(await TopPage());
 
     expect(html).toContain('src="/img/photos/1.600.webp"');
     expect(html).toContain('src="/img/photos/2.webp"');
@@ -131,7 +131,7 @@ describe("top page SSR", () => {
   it("maps page-one and later pager links to their canonical paths", async () => {
     mocks.listPhotoPage.mockResolvedValue(page([photo(1)], 25, 1, 2));
 
-    const html = render(await TopPage());
+    const html = renderToString(await TopPage());
 
     expect(html).toContain('href="/"');
     expect(html).toContain('href="/page/2"');
@@ -144,7 +144,7 @@ describe("dynamic top page SSR", () => {
     mocks.context.request = new Request("https://foreign.example/page/999?preview=1");
     mocks.listPhotoPage.mockResolvedValue(page([photo(73)], 73, 3, 3));
 
-    const html = render(await PhotoGridPage({ params: { page: "999" } }));
+    const html = renderToString(await PhotoGridPage({ params: { page: "999" } }));
 
     expect(html).toContain("Photo 73");
     expect(html).toContain('href="https://canonical.example/page/3"');
@@ -158,7 +158,7 @@ describe("dynamic top page SSR", () => {
     mocks.context.request = new Request(`https://foreign.example/page/${raw}`);
     mocks.listPhotoPage.mockResolvedValue(page([photo(1)], 1, 1, 1));
 
-    const html = render(await PhotoGridPage({ params: { page: raw } }));
+    const html = renderToString(await PhotoGridPage({ params: { page: raw } }));
 
     expect(html).toContain("Photo 1");
     expect(html).toContain('href="https://canonical.example/"');

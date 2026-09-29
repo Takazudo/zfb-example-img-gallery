@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
@@ -72,7 +72,7 @@ async function invoke(
   h.ctx = { env: envWith(db), request: request(path) };
   const result = await page({ params });
   if (result instanceof Response) return { status: result.status, body: await result.text() };
-  return { status: 200, body: render(result) };
+  return { status: 200, body: renderToString(result) };
 }
 
 beforeEach(() => {

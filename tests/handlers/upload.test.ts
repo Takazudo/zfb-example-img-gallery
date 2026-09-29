@@ -168,7 +168,8 @@ describe("/upload handler", () => {
     "rejects invalid tag input %j", async (tags) => {
       const response = await invoke(post({ title: "A title", tags }, file()));
       expect(response.status).toBe(400);
-      expect(await response.text()).toContain(`Tag &quot;${tags.includes(",") ? "eleven" : tags}&quot; is invalid`);
+      // zudo-react leaves quotes unescaped in text nodes, where they are inert.
+      expect(await response.text()).toContain(`Tag "${tags.includes(",") ? "eleven" : tags}" is invalid`);
       expect(mockedStorage).not.toHaveBeenCalled();
     },
   );
