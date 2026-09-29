@@ -17,7 +17,7 @@ The project names and file globs below are copied from vitest.config.ts.
 | Project | Level | Tier | File glob | What it covers |
 | --- | --- | --- | --- | --- |
 | unit | L1 | T0/T1 | tests/unit/**/*.test.ts | Pure functions and artifact scanners: domain helpers plus prerender/runtime inventory and stable-asset failure modes. |
-| ssr | L3 | T0/T1 | tests/ssr/**/*.test.tsx | preact-render-to-string over page components: markup contracts, dynamic head/runtime structure, theme/router policy, JSON-LD, and empty-state rendering. |
+| ssr | L3 | T0/T1 | tests/ssr/**/*.test.tsx | The named `renderToString` from `@takazudo/zfb/zudo-react/server` (the same renderer `lib/render.ts` uses) over page components: markup contracts, dynamic head/runtime structure, theme/router policy, JSON-LD, and empty-state rendering. |
 | handlers | L3 | T0/T1 | tests/handlers/**/*.test.ts | Route handlers against stubbed bindings (a mock R2 exposing its own store and stub D1): status codes, redirects, cache headers, cookie flags, and error paths. |
 | integration | L4 | T1 | tests/integration/**/*.test.ts | Miniflare/Workers runtime only where storage or SQL semantics are genuinely the subject: R2 put → get, the ordered favorites migration/read model, and R2-first/D1-batch photo purge behavior. |
 
@@ -53,25 +53,54 @@ an immediate normal rerun selected zero rows.
 
 ### Browser lane
 
-The `@smoke` Playwright lane runs one Chromium worker against one shared local Wrangler state. `playwright.config.ts` applies migrations and the idempotent `scripts/e2e-fixture.sql` before starting the server. The fixture creates one `e2e-fixture` author/tag and 50 lightweight rows with deterministic mixed dimensions; every `/img/**` request is intercepted with test PNG bytes, so no R2 upload is needed and repeated setup is safe.
+The `@smoke` Playwright lane runs one Chromium worker against one local Wrangler state. By default `playwright.config.ts` applies migrations and the idempotent `scripts/e2e-fixture.sql` to `.wrangler/state` and starts `wrangler dev` on port 8788 through its `webServer` block; the isolated-state recipe below replaces that with a scratch directory and explicit ports. The fixture creates one `e2e-fixture` author/tag and 50 lightweight rows with deterministic mixed dimensions; every `/img/**` request is intercepted with test PNG bytes, so no R2 upload is needed and repeated setup is safe.
 
 The browser confirmation covers the existing register → login → upload → detail/tag/social-card journey plus the complete progressive gallery contract: delayed loading, exactly 24 + 24 + a smaller final remainder, one canonical grid whose real cards are followed by exactly one observed card-sized loader, dormant-to-spinning loader state, final-open-column geometry and computed-gap checks, fade-in, terminal status, one controlled error with retry and untouched link/grid, observer construction/observation fallbacks, observer anti-cascade, deduplication against an existing card, patterned layouts and responsive widths, all Display settings ratios/widths, computed mixed-dimension Original cards, invalid/deleted storage defaults, reload and cross-tab persistence, zfb soft-navigation persistence, newly appended cards, two-batch router navigation + Back restoration with a no-reload sentinel, a JavaScript-disabled canonical link, and manual loading with IntersectionObserver unavailable. `e2e/photo-management.spec.ts` adds one serial two-user journey: a safe requested login path, four uploaded photos, count-versus-viewer membership, an authenticated Favorites collection add/remove read, thumbnail/detail favorite synchronization, identical outline/filled star geometry, appended-card add/remove controls, owner/non-owner delete presentation, single and bulk Escape/click cancellation plus confirmation, an ordinary no-JavaScript confirmation page, stale Back/forward reconciliation, exactly-one JSON mutation probes, focus restoration, polite live regions, 44px-class target and overflow checks at 375/800/1200, normal toast transition timing, and reduced-motion zero-translation/instant timing. Theme, navigation, form, auth/header, title/meta, route-announcer, and accessibility assertions remain in the existing smoke specs; signed-in header controls are asserted after `ensureAccountMenuOpen`, and `e2e/header-nav.spec.ts` carries the single `@smoke` core header case.
 
-The exact local command is:
+The exact local command is (heavy: run it in the background so the machine-wide guard can queue it):
 
 ```sh
-bash $HOME/.claude/scripts/playwright-guard.sh --wait 300 -- pnpm exec playwright test --grep @smoke
+bash $HOME/.claude/scripts/heavy-guard.sh -- pnpm exec playwright test --grep @smoke
 ```
 
-The guard owns the one server lifecycle; do not start a second unmanaged dev server. The spec intercepts outbound image requests with a 1×1 PNG by default and uses tiny generated PNGs only when it must verify intrinsic mixed dimensions. `.github/workflows/deploy.yml` runs the same lane before deployment and uploads Playwright diagnostics when the job fails or is cancelled. `scripts/smoke.mjs` provides the separate post-deploy production check.
+`heavy-guard.sh` is the shared machine-wide queue and memory gate; it replaces the retired `playwright-guard.sh`. It waits for a free slot, and exit code 75 (only with an explicit `--wait`) means contention, not a test failure. Playwright's `webServer` block owns the one server lifecycle here, so do not start a second unmanaged dev server on 8788. `pnpm build` must have run first: `playwright.config.ts` throws when `dist/_worker.js` is missing. The spec intercepts outbound image requests with a 1×1 PNG by default and uses tiny generated PNGs only when it must verify intrinsic mixed dimensions. `.github/workflows/deploy.yml` runs the same lane before deployment and uploads Playwright diagnostics when the job fails or is cancelled. `scripts/smoke.mjs` provides the separate post-deploy production check.
 
-The exact guarded command for the integrated photo-management journey is:
+The exact guarded command (same `heavy-guard.sh` form) for the integrated photo-management journey is:
 
 ```sh
-bash $HOME/.claude/scripts/playwright-guard.sh --wait 300 -- pnpm exec playwright test e2e/photo-management.spec.ts --grep @smoke
+bash $HOME/.claude/scripts/heavy-guard.sh -- pnpm exec playwright test e2e/photo-management.spec.ts --grep @smoke
 ```
 
 Do not report its browser results from a topic worker; the manager runs it after the branch is merged into the integrated base. The no-JavaScript path uses the same one-server Playwright configuration and the ordinary canonical links/forms; route handlers additionally cover the confirmation-page contract.
+
+#### Isolated-state recipe (parallel checkouts, version comparisons)
+
+The default lane shares `.wrangler/state` and port 8788, so two checkouts (or a v2 and a v3 build) cannot run at once. To run the same lane against scratch state on explicit ports:
+
+1. Build the checkout (`pnpm build`), so `dist/_worker.js` exists.
+2. Pick an absolute scratch `--persist-to` directory outside the repo (never `.wrangler/state`) and two free ports, one for the app and one for `--inspector-port`.
+3. Apply the migrations and the fixture into that directory:
+
+   ```sh
+   pnpm exec wrangler d1 migrations apply img-gallery --local --persist-to "$PERSIST" --env=""
+   pnpm exec wrangler d1 execute img-gallery --local --persist-to "$PERSIST" --env="" --file scripts/e2e-fixture.sql
+   ```
+
+4. Start the server yourself and remember its PID:
+
+   ```sh
+   pnpm exec wrangler dev --env="" --ip 127.0.0.1 --port "$PORT" --inspector-port "$INSP" --persist-to "$PERSIST"
+   ```
+
+5. Run the lane with `E2E_BASE_URL` set. That variable makes `playwright.config.ts` set `webServer` to `undefined`, so Playwright neither applies migrations nor starts a server; steps 3 and 4 are yours:
+
+   ```sh
+   E2E_BASE_URL="http://127.0.0.1:$PORT" pnpm exec playwright test --grep @smoke
+   ```
+
+6. Stop only your own `wrangler dev` (by PID and by the two ports) when done. Never pass `--remote`, never delete `.wrangler`, and never use `dev:cf:setup` for mutation tests: it writes to the shared `.wrangler/state`.
+
+Run the whole sequence under `heavy-guard.sh` in the background.
 
 ### SSR invariants
 
@@ -81,8 +110,10 @@ These are the invariants that can fail silently and belong in the build/integrat
 - dist/404.html is the only HTML file emitted by the build.
 - The client artifact inventory is exactly one generated islands entry, its reachable generated chunks/resources, and the byte-identical stable `/assets/islands.js` alias. An unrelated JavaScript artifact fails the scan.
 - `scripts/stable-assets.mjs` normalizes source-module diagnostics to portable project-relative identifiers before hashing the finalized bytes. The generated entry filename must be `islands-<first-eight-sha256-hex>.js`, and the scanner recomputes that digest from the final bytes rather than trusting a pre-normalization name.
+- zfb 3.0.0 still emits absolute source paths as the fourth argument of each `register(module, exportName, identity, sourcePath)` call in the client manifest, and a checkout under a symlink (macOS `/var` to `/private/var`) yields lexical paths that differ from the real ones. `scripts/stable-assets.mjs` accepts a path inside the project either lexically or after `realpathSync`, rewrites it to a project-relative identifier, and fails on an ambiguous, unresolvable or out-of-repo path. It also fails if any checkout prefix remains in the finalized entry.
 - Every client JavaScript asset reachable from that finalized entry is inspected for leaked absolute POSIX paths, Windows-drive paths, or `file:` source-module diagnostics. Ordinary web paths and URLs remain valid. The entry must retain `components/display-settings.tsx`, `components/infinite-gallery-controller.tsx`, and `components/theme-toggle.tsx`.
-- `dist/404.html` has the marked pre-paint bootstrap, router meta/style output, theme island marker, and one injected hashed module entry, with no stable-module duplicate or arbitrary executable script. JSON-LD remains non-executable structured data.
+- The client manifest, the 404 island markers and the Worker's SSR islands share the same identities and the same single build id. The manifest must register exactly `DisplaySettings`, `InfiniteGalleryControllerIsland` and `ThemeToggle` (zudo-react identity is `displayName ?? name`); every 404 marker must use the `zudo-react/1` protocol over `json/1` transport and name a registered identity and the manifest's build; and `_zfb_inner.mjs` must carry a matching `zudoReactBuild` and `zudoReactIslands` list. A mismatch means the runtime would refuse to mount an SSR marker.
+- `dist/404.html` has the marked pre-paint bootstrap, router meta/style output, the three island markers (display settings, gallery loader, theme toggle), the pre-hydration display-settings markup (twelve radios in three labelled fieldsets, trigger withheld until hydration), and one injected hashed module entry, with no stable-module duplicate or arbitrary executable script. JSON-LD remains non-executable structured data.
 - The SSG module reference must name the finalized reachable entry exactly; stale, dangling, or stable `/assets/islands.js` references fail. The stable alias remains byte-identical to the generated entry.
 - Dynamic `GalleryLayout` documents have the bootstrap before `/assets/app.css`, the router policy/announcer, theme island, and exactly one stable module entry. The SSG layout mode suppresses that stable tag so zfb can inject its hashed entry.
 - A navigation-header (sec-fetch-mode: navigate) request against every bare collection root in run_worker_first — /, /authors, /tags, /favorites, and /my-photos — is answered by the Worker, not by dist/404.html. This is the failure that looks fine to curl and is broken for real browser navigation.
@@ -105,10 +136,10 @@ pnpm exec vitest run --project integration
 ```
 
 The focused browser additions are in `e2e/blurhash.spec.ts`. The manager should
-run them through the repository guard (which owns the one local Wrangler server):
+run them through the machine-wide guard (Playwright's `webServer` owns the one local Wrangler server):
 
 ```sh
-bash $HOME/.claude/scripts/playwright-guard.sh --wait 300 -- pnpm exec playwright test e2e/blurhash.spec.ts --grep @smoke
+bash $HOME/.claude/scripts/heavy-guard.sh -- pnpm exec playwright test e2e/blurhash.spec.ts --grep @smoke
 ```
 
 That lane covers delayed pending-to-loaded and error reveals, nullable rows,
