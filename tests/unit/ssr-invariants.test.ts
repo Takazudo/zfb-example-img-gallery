@@ -18,12 +18,17 @@ function hash(source: string) {
   return createHash("sha256").update(source).digest("hex").slice(0, 8);
 }
 
+const BUILD = "0123456789abcdef";
+const MARKER = `data-zfb-transport="json/1" data-zfb-protocol="zudo-react/1" data-zfb-build="${BUILD}" data-props="{}"`;
+
+// zfb 3 client manifest: register(component, exportName, identity, sourcePath) + one build identity.
 function entrySource(extra = "") {
   return [
     'import "./islands-chunk-def456.js";',
-    `register(ns,"default","DisplaySettings","${PORTABLE_IDENTIFIERS[0]}");`,
-    `register(ns,"default","InfiniteGalleryController","${PORTABLE_IDENTIFIERS[1]}");`,
-    `register(ns,"default","ThemeToggle","${PORTABLE_IDENTIFIERS[2]}");`,
+    `function register(e,t,n,s){manifest[n]={identity:{component:n,build:"${BUILD}"}}}`,
+    `register(Ds,"DisplaySettings","DisplaySettings","${PORTABLE_IDENTIFIERS[0]}");`,
+    `register(Ig,"InfiniteGalleryControllerIsland","InfiniteGalleryControllerIsland","${PORTABLE_IDENTIFIERS[1]}");`,
+    `register(Tt,"ThemeToggle","ThemeToggle","${PORTABLE_IDENTIFIERS[2]}");`,
     'const webPaths = ["/assets/app.js", "https://cdn.example.test/components/external.tsx", "//cdn.example.test/runtime.js"];',
     extra,
   ].join("\n");
@@ -39,10 +44,15 @@ function valid404(entryName: string) {
 <meta name="zfb-traverse-refetch" content="true">
 <link rel="stylesheet" href="/assets/app.css">
 <script type="module" src="/assets/${entryName}"></script>
-</head><body><div data-zfb-island="ThemeToggle" data-when="load"></div><div data-zfb-island="DisplaySettings" data-when="load"><dialog aria-labelledby="display-settings-title"><h2 id="display-settings-title">Display settings</h2><fieldset><legend>Gallery layout</legend><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"></fieldset><fieldset><legend>Thumbnail ratio</legend><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"></fieldset><fieldset><legend>Thumbnail width</legend><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"></fieldset></dialog></div></body></html>`;
+</head><body><div data-zfb-island="InfiniteGalleryControllerIsland" data-when="load" ${MARKER}></div><div data-zfb-island="ThemeToggle" data-when="load" ${MARKER}></div><div data-zfb-island="DisplaySettings" data-when="load" ${MARKER}><dialog aria-labelledby="display-settings-title"><h2 id="display-settings-title">Display settings</h2><fieldset><legend>Gallery layout</legend><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"><input type="radio" name="gallery-layout"></fieldset><fieldset><legend>Thumbnail ratio</legend><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"><input type="radio" name="thumbnail-ratio"></fieldset><fieldset><legend>Thumbnail width</legend><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"><input type="radio" name="thumbnail-width"></fieldset></dialog></div></body></html>`;
+}
+
+function workerSource(build = BUILD, islands = ["DisplaySettings", "InfiniteGalleryControllerIsland", "ThemeToggle"]) {
+  return `globalThis.__zfb.zudoReactBuild = "${build}";\nglobalThis.__zfb.zudoReactIslands = ${JSON.stringify(islands)};`;
 }
 
 type FixtureOptions = {
+  workerSource?: string;
   source?: string;
   entryName?: string;
   chunkSource?: string;
@@ -60,7 +70,7 @@ function buildFixture(options: FixtureOptions = {}) {
   const generatedName = entryName ?? `islands-${hash(source)}.js`;
   writeFileSync(join(root, "404.html"), valid404(generatedName));
   writeFileSync(join(root, "_worker.js"), "worker");
-  writeFileSync(join(root, "_zfb_inner.mjs"), "worker");
+  writeFileSync(join(root, "_zfb_inner.mjs"), options.workerSource ?? workerSource());
   writeFileSync(join(assets, "islands-chunk-def456.js"), chunkSource);
   writeFileSync(join(assets, generatedName), source);
   writeFileSync(join(assets, "islands.js"), stableSource);
@@ -187,6 +197,55 @@ describe("SSR invariants", () => {
       expect(scanBuildOutput(data.root)).toContain(
         "generated islands entry references missing artifact: assets/islands-missing.js",
       );
+    } finally {
+      rmSync(data.root, { recursive: true });
+    }
+  });
+
+  it("rejects a client manifest whose island identities drift from the components", () => {
+    const data = buildFixture({ source: entrySource().replace(/"InfiniteGalleryControllerIsland",(?="components)/, '"InfiniteGallery",') });
+    try {
+      const problems = scanBuildOutput(data.root);
+      expect(problems).toContain(
+        "client manifest registers [DisplaySettings, InfiniteGallery, ThemeToggle], expected [DisplaySettings, InfiniteGalleryControllerIsland, ThemeToggle]",
+      );
+      expect(problems).toContain("404.html island InfiniteGalleryControllerIsland is not registered in the client manifest");
+    } finally {
+      rmSync(data.root, { recursive: true });
+    }
+  });
+
+  it("rejects SSR island markers from a different build or protocol than the client manifest", () => {
+    const data = buildFixture();
+    try {
+      writeFileSync(join(data.root, "404.html"), valid404(data.generatedName)
+        .replace(`data-zfb-island="ThemeToggle" data-when="load" data-zfb-transport="json/1" data-zfb-protocol="zudo-react/1" data-zfb-build="${BUILD}"`,
+          'data-zfb-island="ThemeToggle" data-when="load" data-zfb-transport="json/1" data-zfb-protocol="zudo-react/0" data-zfb-build="stale"')
+        .replace('<div data-zfb-island="DisplaySettings"', '<div data-zfb-island="DisplaySettings" data-when="load"></div><div data-zfb-island="Unknown"'));
+      const problems = scanBuildOutput(data.root);
+      expect(problems).toContain(`404.html island ThemeToggle has build stale, client manifest has ${BUILD}`);
+      expect(problems).toContain("404.html island ThemeToggle must use zudo-react/1 over json/1");
+      expect(problems).toContain("404.html island Unknown is not registered in the client manifest");
+    } finally {
+      rmSync(data.root, { recursive: true });
+    }
+  });
+
+  it("rejects a Worker whose SSR island build or identities differ from the client manifest", () => {
+    const data = buildFixture({ workerSource: workerSource("fedcba9876543210", ["DisplaySettings", "ThemeToggle"]) });
+    try {
+      const problems = scanBuildOutput(data.root);
+      expect(problems).toContain(`Worker SSR build fedcba9876543210 does not match client manifest build ${BUILD}`);
+      expect(problems).toContain("Worker SSR islands [DisplaySettings, ThemeToggle] do not match the client manifest");
+    } finally {
+      rmSync(data.root, { recursive: true });
+    }
+  });
+
+  it("rejects a client manifest with more than one build identity", () => {
+    const data = buildFixture({ source: entrySource('const other={build:"ffffffffffffffff"};') });
+    try {
+      expect(scanBuildOutput(data.root)).toContain("client manifest must carry exactly one build identity, found 2");
     } finally {
       rmSync(data.root, { recursive: true });
     }

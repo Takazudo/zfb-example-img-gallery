@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error The postbuild helper intentionally remains executable JavaScript.
-import { copyStableAssets, discoverGeneratedIslandsEntry } from "../../scripts/stable-assets.mjs";
+import { copyStableAssets, discoverGeneratedIslandsEntry, islandRegistrations } from "../../scripts/stable-assets.mjs";
 
 function hash(source: string) { return createHash("sha256").update(source).digest("hex").slice(0, 8); }
 
@@ -20,7 +20,8 @@ function fixture(entrySource?: string) {
   writeFileSync(join(assets, "islands-chunk-chunkhash.js"), "export default 1;");
   writeFileSync(join(assets, "islands-resource-helper.js"), "export default 2;");
   const absolute = join(project, "components", "theme-toggle.tsx");
-  const source = entrySource ?? `import "./islands-chunk-chunkhash.js";r(ns,"default","ThemeToggle",${JSON.stringify(absolute)});const route="/my-photos";`;
+  // zfb 3 client manifest shape: __zfb_register(component, exportName, identity, sourcePath).
+  const source = entrySource ?? `import "./islands-chunk-chunkhash.js";function r(e,t,n,s){m[n]={identity:{component:n,build:"0123456789abcdef"}}}r(Tt,"ThemeToggle","ThemeToggle",${JSON.stringify(absolute)});const route="/my-photos";`;
   writeFileSync(join(assets, "islands-entryhash.js"), source);
   writeFileSync(join(project, "dist", "index.html"), '<script src="/assets/islands-entryhash.js"></script>');
   writeFileSync(join(project, "dist", "nested", "index.html"), '<script src="../assets/islands-entryhash.js"></script>');
@@ -139,5 +140,14 @@ describe("stable generated assets", () => {
       rmSync(join(data.assets, "islands-entryhash.js"));
       expect(() => copyStableAssets(data.assets, data.project)).toThrow(/dangling generated islands reference/);
     } finally { rmSync(data.project, { recursive: true }); }
+  });
+
+  it("reads island identities from the zfb 3 client manifest registrations", () => {
+    const source = 'function r(e,t,n,s){}r(A,"DisplaySettings","DisplaySettings","components/display-settings.tsx");'
+      + 'r(B,"ThemeToggle","ThemeToggle","/abs/components/theme-toggle.tsx");const unrelated=f(x,"a","b","c");';
+    expect(islandRegistrations(source)).toEqual([
+      { exportName: "DisplaySettings", identity: "DisplaySettings", sourcePath: "components/display-settings.tsx" },
+      { exportName: "ThemeToggle", identity: "ThemeToggle", sourcePath: "/abs/components/theme-toggle.tsx" },
+    ]);
   });
 });

@@ -7,6 +7,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   discoverGeneratedIslandsEntry,
   extractRelativeReferences,
+  islandRegistrations,
 } from "./stable-assets.mjs";
 
 const PRERENDER_FALSE = /export\s+const\s+prerender\s*=\s*false\b/;
@@ -18,6 +19,11 @@ const PORTABLE_IDENTIFIERS = [
   "components/infinite-gallery-controller.tsx",
   "components/theme-toggle.tsx",
 ];
+// zudo-react island identity is `displayName ?? name`; the runtime refuses to
+// mount an SSR marker whose component or build is not in the client manifest.
+const ISLAND_IDENTITIES = ["DisplaySettings", "InfiniteGalleryControllerIsland", "ThemeToggle"];
+const ISLAND_PROTOCOL = "zudo-react/1";
+const ISLAND_TRANSPORT = "json/1";
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -258,6 +264,65 @@ function scanPortableSourcePaths(assetRel, source) {
   return problems;
 }
 
+function sameSet(actual, expected) {
+  return actual.length === expected.length && [...actual].sort().every((value, index) => value === [...expected].sort()[index]);
+}
+
+function islandMarkers(html) {
+  return [...html.matchAll(/<[a-z][^<>]*\sdata-zfb-island="([^"]*)"[^<>]*>/gi)].map((match) => ({
+    identity: match[1],
+    build: attribute(match[0], "data-zfb-build"),
+    protocol: attribute(match[0], "data-zfb-protocol"),
+    transport: attribute(match[0], "data-zfb-transport"),
+  }));
+}
+
+/**
+ * The client manifest, the SSG 404 markers and the Worker's SSR island
+ * metadata must describe the same components from the same build.
+ */
+export function scanIslandIdentities({ entrySource, html404, workerSource }) {
+  const problems = [];
+  const registered = islandRegistrations(entrySource).map(({ identity }) => identity);
+  if (!sameSet(registered, ISLAND_IDENTITIES)) {
+    problems.push(`client manifest registers [${registered.join(", ")}], expected [${ISLAND_IDENTITIES.join(", ")}]`);
+  }
+  const builds = [...new Set([...entrySource.matchAll(/\bbuild\s*:\s*"([^"]+)"/g)].map((match) => match[1]))];
+  if (builds.length !== 1) problems.push(`client manifest must carry exactly one build identity, found ${builds.length}`);
+  const [build] = builds;
+
+  if (html404 !== undefined) {
+    const markers = islandMarkers(html404);
+    if (!sameSet(markers.map(({ identity }) => identity), ISLAND_IDENTITIES)) {
+      problems.push(`404.html island markers [${markers.map(({ identity }) => identity).join(", ")}] do not match the client manifest`);
+    }
+    for (const marker of markers) {
+      if (!registered.includes(marker.identity)) problems.push(`404.html island ${marker.identity} is not registered in the client manifest`);
+      if (build && marker.build !== build) problems.push(`404.html island ${marker.identity} has build ${marker.build ?? "none"}, client manifest has ${build}`);
+      if (marker.protocol !== ISLAND_PROTOCOL || marker.transport !== ISLAND_TRANSPORT) {
+        problems.push(`404.html island ${marker.identity} must use ${ISLAND_PROTOCOL} over ${ISLAND_TRANSPORT}`);
+      }
+    }
+  }
+
+  if (workerSource !== undefined) {
+    const workerBuild = workerSource.match(/\bzudoReactBuild\s*=\s*"([^"]+)"/)?.[1];
+    let workerIslands;
+    try {
+      workerIslands = JSON.parse(workerSource.match(/\bzudoReactIslands\s*=\s*(\[[^\]]*\])/)?.[1] ?? "null");
+    } catch {
+      workerIslands = null;
+    }
+    if (!workerBuild || workerBuild !== build) {
+      problems.push(`Worker SSR build ${workerBuild ?? "none"} does not match client manifest build ${build ?? "none"}`);
+    }
+    if (!Array.isArray(workerIslands) || !sameSet(workerIslands, registered)) {
+      problems.push(`Worker SSR islands [${Array.isArray(workerIslands) ? workerIslands.join(", ") : "none"}] do not match the client manifest`);
+    }
+  }
+  return problems;
+}
+
 function scriptTags(html) {
   return [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)].map(
     (match) => ({ attrs: match[1], body: match[2] }),
@@ -317,6 +382,7 @@ function scanSsg404(html, generatedEntry) {
     ".zfb-route-announcer",
     'data-zfb-island="ThemeToggle" data-when="load"',
     'data-zfb-island="DisplaySettings" data-when="load"',
+    'data-zfb-island="InfiniteGalleryControllerIsland" data-when="load"',
     '<dialog aria-labelledby="display-settings-title"',
     '<legend',
   ]) {
@@ -381,6 +447,12 @@ export function scanBuildOutput(distDir = "dist") {
       }
 
       const entrySource = generatedBytes.toString("utf8");
+      problems.push(...scanIslandIdentities({
+        entrySource,
+        html404: htmlFiles.includes("404.html") ? readFileSync(join(distDir, "404.html"), "utf8") : undefined,
+        workerSource: files.includes("_zfb_inner.mjs") ? readFileSync(join(distDir, "_zfb_inner.mjs"), "utf8") : undefined,
+      }));
+      if (!files.includes("_zfb_inner.mjs")) problems.push("missing Worker SSR bundle _zfb_inner.mjs");
       for (const identifier of PORTABLE_IDENTIFIERS) {
         if (!entrySource.includes(identifier)) {
           problems.push(`generated islands entry is missing portable source identifier: ${identifier}`);
