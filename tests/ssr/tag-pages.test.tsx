@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
@@ -26,7 +26,7 @@ function setup(options: {
   photos?: Array<Record<string, unknown>>;
   tags?: Array<Record<string, unknown>>;
 }) {
-  configuredGlobal.__zfb = { site: "https://gallery.example" };
+  configuredGlobal.__zfb = { ...configuredGlobal.__zfb, site: "https://gallery.example" };
   const db = {
     prepare(sql: string): Statement {
       const lower = sql.toLowerCase();
@@ -53,8 +53,8 @@ function setup(options: {
 }
 
 beforeEach(() => {
+  // tests/helpers/island-build.ts has already reset __zfb to the island build identity only.
   h.ctx = null as unknown as { env: unknown; request: Request };
-  delete configuredGlobal.__zfb;
 });
 
 afterEach(() => {
@@ -91,7 +91,7 @@ describe("tag page SSR markup", () => {
     });
     const result = await TagDetailPage({ params: { tag: "東京" } });
     if (result instanceof Response) throw new Error("expected a successful SSR vnode");
-    const html = render(result);
+    const html = renderToString(result);
     expect(html).toMatch(/<h1[^>]*>#東京<\/h1>/);
     expect(html).toContain('src="/img/photos/8.jpg"');
     expect(html).toContain('width="1600"');
@@ -113,7 +113,7 @@ describe("tag page SSR markup", () => {
         { id: 2, name: "東京", photo_count: 3 },
       ],
     });
-    const html = render(await TagsPage());
+    const html = renderToString(await TagsPage());
     expect(html.match(/href="\/tags\//g)).toHaveLength(2);
     expect(html).toContain('href="/tags/safe"');
     expect(html).toContain(`/tags/${encodeURIComponent("東京")}`);
@@ -125,7 +125,7 @@ describe("tag page SSR markup", () => {
     setup({ tag: { id: 1, name: "empty" }, total: 0, photos: [] });
     const result = await TagDetailPage({ params: { tag: "empty" } });
     if (result instanceof Response) throw new Error("expected a successful SSR vnode");
-    const html = render(result);
+    const html = renderToString(result);
     expect(html).toContain("No photos tagged #empty");
     expect(html).not.toMatch(/aria-label="Pagination"/);
     expect(html).toContain('data-gallery-scope="tag:1|viewer:anonymous"');

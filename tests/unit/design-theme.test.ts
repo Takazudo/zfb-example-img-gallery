@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import config from "../../zfb.config";
 
 const globalCss = readFileSync("styles/global.css", "utf8");
 const semanticColors = [
@@ -18,16 +19,16 @@ function sourceFiles(directory: string): string[] {
 }
 
 describe("semantic theme architecture", () => {
-  it("keeps raw OKLCH values in the palette and exposes only semantic Tailwind colors", () => {
-    expect(globalCss).toContain("@theme inline {");
-    expect(globalCss).toContain("--color-*: initial;");
+  it("keeps raw OKLCH values in the palette and exposes only semantic wind colors", () => {
+    expect(globalCss).not.toMatch(/@import\s+["']tailwindcss["']|@theme\b|@apply\b|@source\b|@utility\b|@custom-variant\b|\btheme\(/);
 
     for (const role of themeRoles) {
       expect(globalCss).toContain(`--theme-${role}: var(--palette-`);
     }
-    for (const color of semanticColors) {
-      expect(globalCss).toContain(`--color-${color}: var(--theme-${color});`);
-    }
+    // wind v1 has no default palette: the only utility colours are the semantic roles.
+    expect(config.wind && config.wind.tokens?.colors).toEqual(
+      Object.fromEntries(semanticColors.map((color) => [color, `var(--theme-${color})`])),
+    );
 
     const paletteDefinitions = new Set(
       [...globalCss.matchAll(/--(?<token>palette-[\w-]+):/g)].map((match) => match.groups?.token),
@@ -42,6 +43,17 @@ describe("semantic theme architecture", () => {
       .filter((line) => line.includes("oklch("));
     expect(rawColorDeclarations.length).toBeGreaterThan(0);
     expect(rawColorDeclarations.every((line) => line.trimStart().startsWith("--palette-"))).toBe(true);
+  });
+
+  it("defines every custom property that the wind tokens and authored rules read", () => {
+    const definitions = new Set([...globalCss.matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]));
+    // Set per element by inline style in components/photo-card.tsx and placeholder-image.tsx.
+    const inlineStyleProperties = new Set(["--a", "--image-placeholder"]);
+    const tokenReferences = [...JSON.stringify(config.wind).matchAll(/var\((--[\w-]+)\)/g)].map((match) => match[1]);
+    const cssReferences = [...globalCss.matchAll(/var\((--[\w-]+)/g)].map((match) => match[1]);
+    expect(tokenReferences.length).toBeGreaterThan(0);
+    expect([...new Set([...tokenReferences, ...cssReferences])]
+      .filter((name) => !definitions.has(name) && !inlineStyleProperties.has(name))).toEqual([]);
   });
 
   it("maps OS-default, forced light, and forced dark theme selection", () => {
@@ -137,7 +149,9 @@ describe("semantic theme architecture", () => {
   });
 
   it("keeps the one loading tile and its dormant spinner in the canonical grid", () => {
-    expect(globalCss).toMatch(/@layer utilities\s*{[\s\S]*?\[data-gallery-auto-load-active="true"\] \[data-gallery-feed-next\] \{ display: none; \}[\s\S]*?}/);
+    // wind utilities are unlayered, so this override must be unlayered too to outrank `.flex`.
+    expect(globalCss).toMatch(/^\[data-gallery-auto-load-active="true"\] \[data-gallery-feed-next\] \{ display: none; \}$/m);
+    expect(globalCss).not.toContain("@layer utilities");
     expect(globalCss).toContain("[data-gallery-loading-tile]");
     expect(globalCss).toContain('[data-gallery-loading-active="true"] .gallery-loading-spinner');
     expect(globalCss).not.toContain("photo-card-skeleton");

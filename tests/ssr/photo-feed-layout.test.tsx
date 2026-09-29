@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import { PhotoFeed } from "../../components/photo-feed";
 import type { PhotoCard } from "../../lib/types";
@@ -18,7 +18,7 @@ function photo(id: number): PhotoCard {
 }
 
 function feed(offset: number, ids: number[]): string {
-  return render(<PhotoFeed
+  return renderToString(<PhotoFeed
     scope="global"
     page={{ page: Math.floor(offset / 24) + 1, pageSize: 24, totalItems: 72, totalPages: 3, offset, hasPrev: offset > 0, hasNext: offset < 48 }}
     nextHref={`/page/${Math.floor(offset / 24) + 2}`}

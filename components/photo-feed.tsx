@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { PhotoCard, type PhotoCardPhoto } from "./photo-card";
 import { PhotoGrid } from "./photo-grid";
 import { PHOTO_PAGE_SIZE } from "../lib/db/photos";
@@ -49,9 +49,9 @@ type Props = {
   nextHref: string;
   photos: PhotoRow[];
   /** Empty-state content remains server-authored inside the marked feed. */
-  empty?: ComponentChildren;
+  empty?: Child;
   /** Server-authored collection heading refreshed with offset-sensitive feeds. */
-  header?: ComponentChildren;
+  header?: Child;
   viewerId?: number | null;
   returnTo?: string;
   selectable?: boolean;

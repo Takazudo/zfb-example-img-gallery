@@ -40,10 +40,11 @@ function mutationPosts(page: Page, pathname: string) {
 }
 
 async function waitForRuntime(page: Page): Promise<void> {
-  // The layout islands hydrate after the document load event. Waiting for the
-  // hydrated theme control keeps the delegated gallery/favorite/delete
-  // controllers from racing the first interaction on a fresh navigation.
+  // The layout islands hydrate after the document load event. The theme label is
+  // identical before and after hydration, so wait for zfb's mounted marker on all
+  // three islands before the delegated gallery/favorite/delete controllers are used.
   await expect(page.getByRole("button", { name: /Switch to (dark|light) mode/ })).toBeVisible();
+  await expect(page.locator("[data-zfb-island][data-zfb-island-mounted]")).toHaveCount(3);
 }
 
 async function resetSwapProbe(page: Page): Promise<void> {

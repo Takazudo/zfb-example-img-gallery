@@ -1,11 +1,11 @@
 // Icon glyphs from Lucide (https://lucide.dev) — ISC License, © Lucide Contributors. Drawn per the Lucide 24px / 2px-stroke convention.
 
-import type { ComponentChildren, FunctionComponent } from "preact";
+import type { Child, Component } from "@takazudo/zfb/zudo-react";
 
 type IconProps = { class?: string };
-type IconComponent = FunctionComponent<IconProps>;
+type IconComponent = Component<IconProps> & { displayName?: string };
 
-function makeIcon(name: string, body: () => ComponentChildren): IconComponent {
+function makeIcon(name: string, body: () => Child): IconComponent {
   const Icon: IconComponent = ({ class: className = "size-5" }) => (
     <svg
       viewBox="0 0 24 24"
@@ -17,7 +17,6 @@ function makeIcon(name: string, body: () => ComponentChildren): IconComponent {
       stroke-linecap="round"
       stroke-linejoin="round"
       aria-hidden="true"
-      focusable="false"
       class={className}
     >
       {body()}

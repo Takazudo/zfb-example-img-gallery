@@ -1,5 +1,5 @@
 import { getCloudflareContext } from "@takazudo/zfb-adapter-cloudflare";
-import type { VNode } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { EmptyState } from "../../components/empty-state";
 import { PhotoFeed } from "../../components/photo-feed";
 import GalleryLayout, { type LayoutUser } from "../../layouts/gallery-layout";
@@ -30,7 +30,7 @@ export const MAX_FAVORITE_BODY_BYTES = 16 * 1024;
 export const prerender = false;
 
 export type FavoritesRouteParams = { page?: string };
-export type FavoritesRouteResult = VNode | Response;
+export type FavoritesRouteResult = Child | Response;
 
 /** Per-viewer identity prevents an expanded snapshot leaking between users. */
 export function favoritesFeedScope(userId: number): string {
