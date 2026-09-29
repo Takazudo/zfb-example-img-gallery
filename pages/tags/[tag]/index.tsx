@@ -1,5 +1,5 @@
 import { getCloudflareContext } from "@takazudo/zfb-adapter-cloudflare";
-import type { VNode } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { EmptyState } from "../../../components/empty-state";
 import { PhotoFeed, tagFeedScope } from "../../../components/photo-feed";
 import { getSessionUser } from "../../../lib/auth";
@@ -20,7 +20,7 @@ export const prerender = false;
 
 export type TagRouteParams = { tag?: string; page?: string };
 export type TagRouteProps = { params?: TagRouteParams };
-export type TagRouteResult = VNode | Response;
+export type TagRouteResult = Child | Response;
 
 function layoutUser(sessionUser: Awaited<ReturnType<typeof getSessionUser>>): LayoutUser | null {
   return sessionUser ? { username: sessionUser.username, avatarKey: sessionUser.avatar_key } : null;

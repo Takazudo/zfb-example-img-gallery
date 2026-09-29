@@ -1,5 +1,6 @@
 import { PlaceholderImage } from "./placeholder-image";
 import { FavoriteControl } from "./favorite-control";
+import { renderWithUnlistedAttributes, unlisted } from "../lib/unlisted-attributes";
 import {
   encodeGalleryLayoutClass,
   getGalleryLayoutRoles,
@@ -32,7 +33,7 @@ function DeleteIcon() {
 }
 
 export function PhotoCard({ photo, absoluteIndex = 0, priority = false, srcSet, sizes, viewerId = null, returnTo, selectable = false }: Props) {
-  const responsive = srcSet ? { srcSet, sizes: sizes ?? "(min-width: 48rem) 200px, 100vw" } : {};
+  const responsive = srcSet ? { srcset: srcSet, sizes: sizes ?? "(min-width: 48rem) 200px, 100vw" } : {};
   const owned = viewerId !== null && photo.ownerId === viewerId;
   const safeReturnTo = returnTo ?? `/photos/${photo.id}`;
   const roles = getGalleryLayoutRoles(absoluteIndex, photo.width, photo.height);
@@ -68,9 +69,10 @@ export function PhotoCard({ photo, absoluteIndex = 0, priority = false, srcSet, 
           </form>
         ) : null}
         {owned && selectable ? (
-          <label class="photo-select-action">
-            <input data-photo-select="true" type="checkbox" name="photo_id" value={String(photo.id)} form="photo-bulk-delete-form" aria-label={`Select ${photo.title}`} />
-          </label>
+          // Pre-rendered for the form attribute that joins the bulk-delete form (zudo-front-builder#3359).
+          <label class="photo-select-action" rawHtml={renderWithUnlistedAttributes(
+            <input data-photo-select="true" type="checkbox" name="photo_id" value={String(photo.id)} {...unlisted("form", "photo-bulk-delete-form")} aria-label={`Select ${photo.title}`} />,
+          )} />
         ) : null}
       </div>
       <h3 class="photo-card-title">

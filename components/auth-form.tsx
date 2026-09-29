@@ -21,8 +21,8 @@ function PasswordField({ mode }: { mode: Props["mode"] }) {
         name="password"
         type="password"
         required
-        minLength={8}
-        autoComplete={mode === "register" ? "new-password" : "current-password"}
+        minlength={8}
+        autocomplete={mode === "register" ? "new-password" : "current-password"}
         class="w-full rounded-md border border-line bg-surface px-hsp-sm py-vsp-xs text-body"
       />
     </div>

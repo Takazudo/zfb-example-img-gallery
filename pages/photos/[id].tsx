@@ -16,6 +16,7 @@ import GalleryLayout, { type LayoutUser } from "../../layouts/gallery-layout";
 import { PlaceholderImage } from "../../components/placeholder-image";
 import { FavoriteControl } from "../../components/favorite-control";
 import { favoriteCountLabel } from "../../lib/favorite-controller";
+import { renderWithUnlistedAttributes, unlisted } from "../../lib/unlisted-attributes";
 
 export const prerender = false;
 
@@ -124,7 +125,8 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
         class="mx-auto grid w-full max-w-[64rem] grid-cols-1 gap-vsp-lg md:grid-cols-[1fr_20rem] md:items-start md:gap-hsp-lg"
       >
         {/* min-w-0 lets this fluid grid track shrink below the image's intrinsic width. */}
-        <div data-testid="photo-detail-media" class="min-w-0">
+        {/* Pre-rendered for the LCP image's fetchpriority (zudo-front-builder#3359). */}
+        <div data-testid="photo-detail-media" class="min-w-0" rawHtml={renderWithUnlistedAttributes(
           <PlaceholderImage
             src={`/img/${photo.r2_key}`}
             alt={photo.title}
@@ -134,10 +136,10 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
             fit="contain"
             wrapperClass="w-full bg-surface-sunken"
             decoding="async"
-            fetchpriority="high"
+            {...unlisted("fetchpriority", "high")}
             class="mx-auto block h-auto max-h-[80vh] w-full bg-surface-sunken object-contain"
-          />
-        </div>
+          />,
+        )} />
 
         <div
           data-testid="photo-detail-aside"
@@ -204,7 +206,7 @@ export default async function PhotoDetailPage({ params }: Props): Promise<Respon
           )}
 
           <p class="text-micro text-ink-soft">
-            <time dateTime={publishedIso}>{publishedLabel}</time>
+            <time datetime={publishedIso}>{publishedLabel}</time>
           </p>
         </div>
       </article>

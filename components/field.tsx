@@ -9,7 +9,7 @@ export function Field({ id, name, label, as = "input", type = "text", value, req
   placeholder, autoComplete, accept, rows, maxLength }: Props) {
   const describedBy = [hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean).join(" ") || undefined;
   const common = {
-    id, name, required, placeholder, autoComplete, maxLength,
+    id, name, required, placeholder, autocomplete: autoComplete, maxlength: maxLength,
     class: `w-full rounded-md border bg-surface px-hsp-sm py-vsp-xs text-body ${error ? "border-danger" : "border-line"}`,
     "aria-invalid": error ? ("true" as const) : undefined,
     "aria-describedby": describedBy,

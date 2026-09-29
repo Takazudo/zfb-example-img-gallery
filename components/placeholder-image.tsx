@@ -1,7 +1,7 @@
-import type { JSX } from "preact";
+import type { JSX } from "@takazudo/zfb/zudo-react/jsx-runtime";
 import { createImagePlaceholder } from "../lib/image-placeholder";
 
-type Props = JSX.ImgHTMLAttributes<HTMLImageElement> & {
+type Props = Omit<JSX.IntrinsicElements["img"], "width" | "height"> & {
   blurhash: string | null;
   fit: "cover" | "contain";
   width: number;
@@ -19,7 +19,8 @@ export function PlaceholderImage({ blurhash, fit, wrapperClass = "", ...image }:
       data-image-placeholder="true"
       data-placeholder-fit={fit}
       class={`relative block ${wrapperClass}`.trim()}
-      style={`--image-placeholder:url("${placeholder.dataUri}")`}
+      // Single quotes serialize unescaped: 10 fewer bytes per card in the 512 KiB history snapshot.
+      style={`--image-placeholder:url('${placeholder.dataUri}')`}
     >
       <img {...image} data-placeholder-image="true" />
     </span>
