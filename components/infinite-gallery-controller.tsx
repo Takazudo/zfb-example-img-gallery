@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "preact/hooks";
+import { getScope, type Ref } from "@takazudo/zfb/zudo-react";
 import { FavoriteController } from "../lib/favorite-controller";
 import { gallerySnapshotStore } from "../lib/infinite-gallery";
 import { InfiniteGalleryController, refreshActiveGalleryFeed } from "../lib/infinite-gallery";
@@ -9,25 +9,32 @@ import { PhotoActionsController } from "../lib/photo-actions-controller";
 
 /** One layout island owns delegated gallery/favorite behavior and one toast. */
 export function InfiniteGalleryControllerIsland() {
-  const toastRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const messageRef = useRef<HTMLParagraphElement>(null);
-  const errorRef = useRef<HTMLParagraphElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
+  const toastRef: Ref<HTMLDivElement> = { current: null };
+  const dialogRef: Ref<HTMLDialogElement> = { current: null };
+  const messageRef: Ref<HTMLParagraphElement> = { current: null };
+  const errorRef: Ref<HTMLParagraphElement> = { current: null };
+  const confirmRef: Ref<HTMLButtonElement> = { current: null };
+  const cancelRef: Ref<HTMLButtonElement> = { current: null };
+  const scope = getScope();
+
+  scope.onActivate(() => {
+    let disposed = false;
     let controller = InfiniteGalleryController.mount();
     const images = ImagePlaceholderController.mount();
+    const refreshFeed = async () => {
+      controller?.destroy();
+      const refreshed = await refreshActiveGalleryFeed();
+      // A router swap can dispose this activation while the refresh is pending;
+      // mounting then would bind the controllers to the outgoing document.
+      if (disposed || scope.abortSignal.aborted) return refreshed;
+      controller = refreshed ? InfiniteGalleryController.mount() : null;
+      images?.reconcile();
+      return refreshed;
+    };
     const favorites = toastRef.current ? FavoriteController.mount(
       toastRef.current,
       gallerySnapshotStore,
-      async () => {
-        controller?.destroy();
-        const refreshed = await refreshActiveGalleryFeed();
-        controller = refreshed ? InfiniteGalleryController.mount() : null;
-        images?.reconcile();
-        return refreshed;
-      },
+      refreshFeed,
     ) : null;
     const actions = dialogRef.current && messageRef.current && errorRef.current && confirmRef.current && cancelRef.current
       ? PhotoActionsController.mount({
@@ -39,13 +46,7 @@ export function InfiniteGalleryControllerIsland() {
           cancel: cancelRef.current,
           fetch: globalThis.fetch.bind(globalThis),
           invalidateSnapshots: () => gallerySnapshotStore.invalidateAll(),
-          refreshFeed: async () => {
-            controller?.destroy();
-            const refreshed = await refreshActiveGalleryFeed();
-            controller = refreshed ? InfiniteGalleryController.mount() : null;
-            images?.reconcile();
-            return refreshed;
-          },
+          refreshFeed,
           navigate: (url) => location.assign(url),
           currentUrl: () => location.href,
         })
@@ -57,13 +58,14 @@ export function InfiniteGalleryControllerIsland() {
     };
     addEventListener("pageshow", onPageShow);
     return () => {
+      disposed = true;
       removeEventListener("pageshow", onPageShow);
       controller?.destroy();
       images?.destroy();
       favorites?.destroy();
       actions?.destroy();
     };
-  }, []);
+  });
 
   return <>
     <div
