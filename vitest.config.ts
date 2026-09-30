@@ -2,16 +2,9 @@ import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  // Preact JSX for the .tsx files in the `ssr` project.
-  esbuild: { jsx: "automatic", jsxImportSource: "preact" },
-  // zfb applies these aliases in production. Mirror them so the framework-
-  // neutral Island and ClientRouter packages mint Preact VNodes in SSR tests.
-  resolve: {
-    alias: {
-      "react/jsx-runtime": "preact/jsx-runtime",
-      "react/jsx-dev-runtime": "preact/jsx-dev-runtime",
-    },
-  },
+  // zudo-react JSX for the .tsx files in the `ssr` project. Island and
+  // ClientRouter import the zudo-react jsx-runtime themselves.
+  esbuild: { jsx: "automatic", jsxImportSource: "@takazudo/zfb/zudo-react" },
   ssr: {
     noExternal: ["@takazudo/zfb", "@takazudo/zfb-runtime"],
   },
@@ -32,6 +25,7 @@ export default defineConfig({
         test: {
           name: "ssr",
           environment: "node",
+          setupFiles: ["tests/helpers/island-build.ts"],
           include: ["tests/ssr/**/*.test.tsx"],
           exclude: ["e2e/**"],
         },
@@ -41,6 +35,7 @@ export default defineConfig({
         test: {
           name: "handlers",
           environment: "node",
+          setupFiles: ["tests/helpers/island-build.ts"],
           include: ["tests/handlers/**/*.test.ts"],
           exclude: ["e2e/**"],
         },

@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import { ThemeToggle } from "../../components/theme-toggle";
 
@@ -9,8 +9,8 @@ describe("ThemeToggle", () => {
   });
 
   it("renders deterministic accessible button markup", () => {
-    const first = render(<ThemeToggle />);
-    const second = render(<ThemeToggle />);
+    const first = renderToString(<ThemeToggle />);
+    const second = renderToString(<ThemeToggle />);
     expect(first).toBe(second);
     expect(first).toMatch(/^<button[^>]*type="button"/);
     expect(first).toContain('aria-label="Switch to dark mode"');
@@ -20,14 +20,14 @@ describe("ThemeToggle", () => {
   });
 
   it("renders a decorative current-color icon", () => {
-    const html = render(<ThemeToggle />);
+    const html = renderToString(<ThemeToggle />);
     expect(html).toMatch(/<svg[^>]*aria-hidden="true"/);
     expect(html).toContain('stroke="currentColor"');
     expect(html).not.toMatch(/<svg[^>]*(?:aria-label|role)=/);
   });
 
   it("renders the shared light-mode glyph and matching tooltip", () => {
-    const html = render(<ThemeToggle />);
+    const html = renderToString(<ThemeToggle />);
     expect(html).toContain('<circle cx="12" cy="12" r="4">');
     expect(html).toMatch(/<span[^>]*aria-hidden="true"[^>]*>Switch to dark mode<\/span>/);
   });

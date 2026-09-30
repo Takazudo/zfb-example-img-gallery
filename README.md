@@ -1,6 +1,6 @@
 # Stillframe
 
-Stillframe is a small, server-rendered photo gallery built with [zfb](https://github.com/Takazudo/zudo-front-builder), Preact, and Cloudflare's D1, R2, and Images bindings. It is intentionally a plain web application: forms submit to the Worker, the Worker writes the binding-backed state, and the response redirects back to a clean URL.
+Stillframe is a small, server-rendered photo gallery built with [zfb](https://github.com/Takazudo/zudo-front-builder) 3 (zudo-react and zudo-wind), and Cloudflare's D1, R2, and Images bindings. It is intentionally a plain web application: forms submit to the Worker, the Worker writes the binding-backed state, and the response redirects back to a clean URL.
 
 **Live:** [zfb-example-img-gallery.takazudomodular.com](https://zfb-example-img-gallery.takazudomodular.com). `zfb.config.ts` and the active production-only `[[routes]]` block in `wrangler.toml` share that canonical/Open Graph origin; `[env.preview]` explicitly clears the route. The permanent workers.dev URL remains available as an operational fallback; see the [Cloudflare setup runbook](docs/cloudflare-setup.md).
 
@@ -26,7 +26,9 @@ Every mutation remains a plain `<form method="post">` fallback. Favorites and ow
 
 | Concern | How |
 | --- | --- |
-| Framework | zfb + Preact, Tailwind v4 (the v4 compiler ships inside the zfb binary — there is no `tailwindcss` dependency) |
+| Framework | zfb 3.0.0 with zudo-react (`@takazudo/zfb/zudo-react`) and zudo-wind (`owned-v1` reset, explicit tokens in `zfb.config.ts`, plus an authored parity block in `styles/global.css`). There is no Tailwind and no Preact. |
+| Page rendering | Pages render through the named `renderToString` from `@takazudo/zfb/zudo-react/server` (see `lib/render.ts`) |
+| Stable assets | `pnpm build` runs `scripts/stable-assets.mjs`, which publishes the hashed CSS and islands entry under the stable aliases `/assets/app.css` and `/assets/islands.js` that SSR markup links to |
 | Rendering | **100% SSR** — every page exports `prerender = false`, except the single prerendered `pages/404.tsx` |
 | Metadata | Cloudflare D1 (`env.DB`) |
 | Image blobs | Cloudflare R2 (`env.BUCKET`), served through a Worker proxy route |
@@ -151,7 +153,15 @@ There is deliberately no `og_key` column. The card key is derived from the photo
 
 This is a standalone package. The zfb packages are ordinary npm registry dependencies with no `file:` links; the `zfb` CLI ships as prebuilt platform binaries through optional dependencies, so the package-install step is the whole setup.
 
-`@takazudo/zfb`, `@takazudo/zfb-runtime`, and `@takazudo/zfb-adapter-cloudflare` are exact-pinned and in lockstep at `2.10.1`. `wrangler` is also exact-pinned, at `4.85.0`. The package manager is pnpm `10.34.1`, and the required Node version is `>=22.12.0`. There is no `tailwindcss` dependency: Tailwind v4 is compiled inside the zfb binary.
+`@takazudo/zfb`, `@takazudo/zfb-runtime`, and `@takazudo/zfb-adapter-cloudflare` are exact-pinned and in lockstep at the validated `3.0.0`. `wrangler` is also exact-pinned, at `4.85.0`. The package manager is pnpm `10.34.1`, and the required Node version is `>=22.12.0`. There is no Preact, Tailwind, or `tailwindcss` dependency: zudo-react is the owned JSX runtime and zudo-wind compiles the utility classes inside the zfb binary.
+
+A major zfb bump (2.x to 3.x was one) is a migration, not a two-line edit: the renderer, the class grammar and the emitted asset shape all change. Use the `l-handle-zfb-update` skill (`.claude/skills/l-handle-zfb-update/SKILL.md`), which requires the parity and invariant checks listed there.
+
+Notes on the v3 shape of this app:
+
+- The three islands (`DisplaySettings`, `InfiniteGalleryControllerIsland`, `ThemeToggle`) are thin signals + `getScope()` wrappers around the framework-free controllers in `lib/`.
+- zfb 3.0.0 rejects a few standard attributes (`meta property`, `popover*`, `input form`, `img fetchpriority`; [zfb#3359](https://github.com/Takazudo/zudo-front-builder/issues/3359)). `lib/unlisted-attributes.ts` renders that static markup with a placeholder spelling and restores the real name, and the primary menu (which contains an island) is a `<site-popover>` custom element. Remove both when the upstream issue is fixed.
+- `zfb build` emits absolute source paths when it registers islands, so `scripts/stable-assets.mjs` normalizes them to project-relative identifiers before hashing; `scripts/assert-ssr-invariants.mjs` then checks the result (see [TESTING.md](TESTING.md)).
 
 The checked-in upload path keeps `sharp` Node-only: it is used by the operator backfill script, never imported by the Worker bundle. The `blurhash` package is shared by the Worker encoder and the Node backfill encoder.
 
@@ -289,11 +299,11 @@ The browser-driven `@smoke` lane is part of the T1 CI gate. Its strategy and age
 The integrated photo-management browser check is the serial command below; it is intentionally run only by the manager after all feature branches are merged:
 
 ```sh
-bash $HOME/.claude/scripts/playwright-guard.sh --wait 300 -- pnpm exec playwright test e2e/photo-management.spec.ts --grep @smoke
+bash $HOME/.claude/scripts/heavy-guard.sh -- pnpm exec playwright test e2e/photo-management.spec.ts --grep @smoke
 ```
 
 Responsive computed-style evidence is recorded separately with the repository's `verify-styles.mjs` command at 375, 800, and 1200 pixels; see [TESTING.md](TESTING.md) for the exact guarded commands and the pending width/motion evidence policy.
 
 ## zfb upgrade procedure
 
-Use the project skill [.claude/skills/l-handle-zfb-update/SKILL.md](.claude/skills/l-handle-zfb-update/SKILL.md). As a manual fallback, bump `@takazudo/zfb`, `@takazudo/zfb-adapter-cloudflare`, and `@takazudo/zfb-runtime` to the **same** exact-pinned version, then run `pnpm build && pnpm typecheck`. If the bump crosses an adapter release, manually re-test a binding-backed SSR route such as `/`, `/photos/<id>`, and `/upload` after deployment.
+Use the project skill [.claude/skills/l-handle-zfb-update/SKILL.md](.claude/skills/l-handle-zfb-update/SKILL.md). Patch and minor bumps within 3.x follow the skill's ordinary path; a new major is a migration and the skill says so. As a manual fallback, bump `@takazudo/zfb`, `@takazudo/zfb-adapter-cloudflare`, and `@takazudo/zfb-runtime` to the **same** exact-pinned version, then run `pnpm build && pnpm typecheck`. If the bump crosses an adapter release, manually re-test a binding-backed SSR route such as `/`, `/photos/<id>`, and `/upload` after deployment.

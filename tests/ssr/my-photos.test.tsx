@@ -70,7 +70,7 @@ beforeEach(() => {
   mocks.context.request = new Request("https://foreign.example/my-photos");
   mocks.getSessionUser.mockResolvedValue(user);
   mocks.listUserPhotoPage.mockResolvedValue(page([], 0));
-  configuredGlobal.__zfb = { site: "https://canonical.example" };
+  configuredGlobal.__zfb = { ...configuredGlobal.__zfb, site: "https://canonical.example" };
 });
 
 describe("My Photos collection SSR", () => {

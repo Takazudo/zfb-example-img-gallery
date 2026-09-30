@@ -1,10 +1,10 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import { AuthForm } from "../../components/auth-form";
 
 describe("authentication form SSR contract", () => {
   it("renders the register form with frozen fields and server error markup", () => {
-    const html = render(
+    const html = renderToString(
       <AuthForm
         mode="register"
         username="alice"
@@ -29,7 +29,7 @@ describe("authentication form SSR contract", () => {
   });
 
   it("renders the login form and cross-link without a username field", () => {
-    const html = render(<AuthForm mode="login" email="alice@example.com" />);
+    const html = renderToString(<AuthForm mode="login" email="alice@example.com" />);
     expect(html).toMatch(/<form[^>]*method="post"[^>]*action="\/login"/);
     expect(html).not.toContain('name="username"');
     expect(html).toContain('name="email"');

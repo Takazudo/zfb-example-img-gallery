@@ -1,7 +1,7 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 import { Button } from "./button";
 
-type Props = { title: string; children?: ComponentChildren; action?: { href: string; label: string } };
+type Props = { title: string; children?: Child; action?: { href: string; label: string } };
 
 export function EmptyState({ title, children, action }: Props) {
   return (

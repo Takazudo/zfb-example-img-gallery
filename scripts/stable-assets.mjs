@@ -125,7 +125,8 @@ function javascriptTokens(source) {
   return tokens;
 }
 
-function fourthCallArgumentStrings(source) {
+/** Every `call(x, "a", "b", "c")` whose last three arguments are single string literals. */
+function threeStringArgumentCalls(source) {
   const tokens = javascriptTokens(source); const pairs = new Map(); const stack = [];
   for (let i = 0; i < tokens.length; i += 1) {
     if ("([{".includes(tokens[i].type)) stack.push(i);
@@ -148,9 +149,20 @@ function fourthCallArgumentStrings(source) {
     if (commas.length !== 3) continue;
     const boundaries = [open, ...commas, close];
     const args = boundaries.slice(0, -1).map((boundary, index) => tokens.slice(boundary + 1, boundaries[index + 1]));
-    if (args[0].length > 0 && args[1].length === 1 && args[1][0].type === "string" && args[2].length === 1 && args[2][0].type === "string" && args[3].length === 1 && args[3][0].type === "string") results.push(args[3][0]);
+    if (args[0].length > 0 && args[1].length === 1 && args[1][0].type === "string" && args[2].length === 1 && args[2][0].type === "string" && args[3].length === 1 && args[3][0].type === "string") results.push([args[1][0], args[2][0], args[3][0]]);
   }
   return results;
+}
+
+function fourthCallArgumentStrings(source) {
+  return threeStringArgumentCalls(source).map((strings) => strings[2]);
+}
+
+/** zfb's client manifest registers each island as `register(module, exportName, identity, sourcePath)`. */
+export function islandRegistrations(source) {
+  return threeStringArgumentCalls(source)
+    .filter(([, , path]) => !path.decodeError && SOURCE_MODULE.test(path.value))
+    .map(([exportName, identity, path]) => ({ exportName: exportName.value, identity: identity.value, sourcePath: path.value }));
 }
 
 function pathTextLooksAbsolute(value) { return value.startsWith("/") || /^[a-z]:[\\/]/i.test(value) || /^file:/i.test(value); }
@@ -171,9 +183,11 @@ function portableSourceIdentifier(value, projectRoot) {
     const segments = slashValue.split("/"); const rootName = basename(projectRoot).toLowerCase();
     segments.forEach((segment, index) => { if (segment.toLowerCase() === rootName) lexicalCandidates.push(join(projectRoot, ...segments.slice(index + 1))); });
   } else lexicalCandidates.push(value);
+  // zfb emits lexical paths, so a checkout under a symlink (macOS /var -> /private/var) is inside too.
+  const lexicalRoot = resolve(projectRoot);
   const canonicalRoot = realpathSync(projectRoot); const resolved = new Set(); let sawInside = false;
   for (const candidate of lexicalCandidates) {
-    const absolute = resolve(candidate); if (!within(canonicalRoot, absolute)) continue;
+    const absolute = resolve(candidate); if (!within(canonicalRoot, absolute) && !within(lexicalRoot, absolute)) continue;
     sawInside = true;
     if (existsSync(absolute)) { const real = realpathSync(absolute); if (within(canonicalRoot, real)) resolved.add(real); }
   }

@@ -1,15 +1,14 @@
 /*
  * Design tokens + base layer + snapshot-critical shared components.
  *
- * Most component styling stays as utilities on Preact markup. The photo-card
- * and favorite-control rules are deliberately shared here so hundreds of raw
- * SSR cards remain within the bounded history snapshot budget.
+ * Most component styling stays as zudo-wind utilities on the markup; the
+ * wind tokens in zfb.config.ts point at the custom properties authored here.
+ * The photo-card and favorite-control rules are deliberately shared here so
+ * hundreds of raw SSR cards remain within the bounded history snapshot budget.
  */
 
-@import "tailwindcss";
-
 /* Raw palette values are private implementation details. Components consume
-   only the semantic colors exposed by the @theme block below. */
+   only the semantic --theme-* roles and the design tokens below. */
 :root {
   /* SSR preference defaults. Valid persisted choices override these through
      the data attributes installed by the pre-paint bootstrap. */
@@ -169,27 +168,9 @@ html[data-theme="dark"] {
   --theme-shadow-strong: var(--palette-shadow-2);
 }
 
-@theme inline {
-  /* Reset Tailwind's default named palettes before exposing semantic roles. */
-  --color-*: initial;
-  --color-ink: var(--theme-ink);
-  --color-ink-soft: var(--theme-ink-soft);
-  --color-ink-faint: var(--theme-ink-faint);
-  --color-paper: var(--theme-paper);
-  --color-surface: var(--theme-surface);
-  --color-surface-sunken: var(--theme-surface-sunken);
-  --color-line: var(--theme-line);
-  --color-line-strong: var(--theme-line-strong);
-  --color-brand: var(--theme-brand);
-  --color-brand-strong: var(--theme-brand-strong);
-  --color-brand-soft: var(--theme-brand-soft);
-  --color-accent: var(--theme-accent);
-  --color-success: var(--theme-success);
-  --color-success-soft: var(--theme-success-soft);
-  --color-danger: var(--theme-danger);
-  --color-danger-soft: var(--theme-danger-soft);
-  --color-on-brand: var(--theme-on-brand);
-  --color-on-danger: var(--theme-on-danger);
+:root {
+  /* Design tokens. Tailwind's theme block used to emit these; the authored rules
+     below and the wind tokens in zfb.config.ts both read them. */
   /* ── Horizontal spacing axis ─────────────────────────── */
   --spacing-hsp-2xs: 0.25rem;
   --spacing-hsp-xs: 0.5rem;
@@ -206,7 +187,7 @@ html[data-theme="dark"] {
   --spacing-vsp-xl: 4rem;
   /* Fluid page gutter. Every full-width surface uses px-gutter so the
      header, the grid and the footer share one side inset. */
-  --spacing-gutter: clamp(1rem, 0.5rem + 2vw, 4rem);
+  --gallery-gutter: clamp(1rem, 0.5rem + 2vw, 4rem);
   /* ── Type scale ────────────────────────────────── */
   --text-display: 2.25rem;
   --text-display--line-height: 1.1;
@@ -238,6 +219,39 @@ html[data-theme="dark"] {
 }
 
 @layer base {
+  /* owned-v1 is not Tailwind preflight (zudo-front-builder#3382). Only the
+     deltas a computed-style diff against the 2.15.0 build measured on elements
+     this app renders are restored here. */
+  html {
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+  }
+  button { appearance: button; }
+  input,
+  textarea { background-color: transparent; }
+  /* The upload and avatar file inputs: owned-v1 leaves the native button chrome. */
+  ::file-selector-button {
+    box-sizing: border-box;
+    margin: 0;
+    margin-inline-end: 4px;
+    padding: 0;
+    border: 0 solid;
+    border-radius: 0;
+    background-color: transparent;
+    font: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    opacity: 1;
+    appearance: button;
+  }
+  ::placeholder { opacity: 1; }
+  @supports (not (-webkit-appearance: -apple-pay-button)) or (contain-intrinsic-size: 1px) {
+    ::placeholder { color: color-mix(in oklab, currentcolor 50%, transparent); }
+  }
+  hr { color: inherit; }
+
   body {
     font-family: var(--font-sans);
     font-size: var(--text-body);
@@ -254,11 +268,9 @@ html[data-theme="dark"] {
   }
 }
 
-@layer utilities {
-  /* This state must share the utilities layer with the nav's `flex` class so
-     its higher specificity can hide the progressive-enhancement fallback. */
-  [data-gallery-auto-load-active="true"] [data-gallery-feed-next] { display: none; }
-}
+/* Unlayered like the wind utilities, so this state's higher specificity hides
+   the nav's `flex` progressive-enhancement fallback. */
+[data-gallery-auto-load-active="true"] [data-gallery-feed-next] { display: none; }
 
 @layer components {
   [data-gallery-feed="true"] { container-type: inline-size; }
@@ -551,7 +563,83 @@ html[data-theme="dark"] {
   @media (prefers-reduced-motion: reduce) {
     .favorite-action { transform: none; }
   }
+
+  /* Header state and motion rules below are authored rather than attribute,
+     arbitrary-selector or motion variants so one spelling works in both CSS
+     engines. Each class owns the resting value of every property its states
+     change; utilities outrank this layer, so none may set those resting values. */
+  .nav-link { color: var(--theme-ink-soft); }
+  :is(.nav-link, .menu-row, .register-link)[aria-current="page"] {
+    background-color: var(--theme-surface-sunken);
+  }
+  .nav-link[aria-current="page"] { color: var(--theme-ink); }
+  .menu-row[aria-current="page"] { font-weight: 600; }
+
+  .display-settings-icon { color: var(--theme-ink-soft); }
+  @media (width >= 48rem) {
+    .display-settings-icon { color: inherit; }
+  }
+
+  /* Deliberately not gated on (hover: hover): a tap reveals it too. Focus and
+     active reveals stay on the group-focus-visible/group-active utilities. */
+  .tooltip {
+    opacity: 0;
+    transition-property: opacity;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+    transition-delay: 200ms;
+  }
+  .group:hover .tooltip { opacity: 1; }
+
+  .favorite-toast {
+    opacity: 0;
+    translate: -50% -0.5rem;
+    transition-property: opacity, translate;
+    transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    transition-duration: 200ms;
+  }
+  .favorite-toast[data-visible="true"] {
+    opacity: 1;
+    translate: -50% 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .favorite-toast {
+      translate: -50% 0;
+      transition-property: opacity;
+    }
+  }
 }
+
+/* Tailwind generated these; zudo-wind 3.0.0 treats them as ordinary classes and
+   emits nothing, so they carry the v2 declarations. Wind appends its unlayered
+   utilities after this file, so the responsive overrides double their class to
+   outrank `.flex` and `.sr-only` as the later v2 utilities did. */
+.backdrop-blur {
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+@media (hover: hover) {
+  .hover\:brightness-90:hover { filter: brightness(90%); }
+}
+@media (width >= 48rem) {
+  .md\:contents.md\:contents { display: contents; }
+  .md\:not-sr-only.md\:not-sr-only {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: normal;
+  }
+}
+
+/* Layout-neutral host for markup pre-rendered through rawHtml (zudo-front-builder#3359). */
+.markup-host { display: contents; }
+/* The primary menu's custom element stands in for the v2 <div>, which the UA gives bidi isolation. */
+site-popover { unicode-bidi: isolate; }
 
 @media (prefers-reduced-motion: reduce) {
   *,

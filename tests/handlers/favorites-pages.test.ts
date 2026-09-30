@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../lib/env";
 
@@ -74,7 +74,7 @@ async function invoke(
   h.context = { env: { DB: {} } as Env, request: request(path, init) };
   const result = await route();
   if (result instanceof Response) return result;
-  return render(result as never);
+  return renderToString(result as never);
 }
 
 beforeEach(() => {

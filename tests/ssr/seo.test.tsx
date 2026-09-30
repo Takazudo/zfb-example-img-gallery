@@ -1,4 +1,4 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { OG_GENERATION } from "../../lib/og";
 import { buildPhotoSeo } from "../../lib/seo";
@@ -10,14 +10,17 @@ afterEach(() => {
   delete configuredGlobal.__zfb;
 });
 
-function renderPhotoHead(): string {
-  configuredGlobal.__zfb = { site: "https://gallery.example" };
+function renderPhotoHead(
+  title = "A <quiet> lake",
+  description: string | null = "Blue water at dawn.",
+): string {
+  configuredGlobal.__zfb = { ...configuredGlobal.__zfb, site: "https://gallery.example" };
   const seo = buildPhotoSeo({
     request: new Request("https://foreign.example/photos/42?preview=1"),
     photo: {
       id: "42",
-      title: "A <quiet> lake",
-      description: "Blue water at dawn.",
+      title,
+      description,
       r2_key: "photos/42.jpg",
       thumb_key: "thumbs/42.jpg",
       width: 2400,
@@ -28,7 +31,7 @@ function renderPhotoHead(): string {
     authorUsername: "alice",
     tags: ["lake", "dawn"],
   });
-  return render(<GalleryLayout seo={seo}>Photo</GalleryLayout>);
+  return renderToString(<GalleryLayout seo={seo}>Photo</GalleryLayout>);
 }
 
 describe("SEO head", () => {
@@ -70,5 +73,20 @@ describe("SEO head", () => {
       name: "@alice",
       url: "https://gallery.example/authors/alice",
     });
+  });
+
+  it("keeps </script> in photo metadata inside one parseable JSON-LD script", () => {
+    const hostile = "Lake</script><script>alert(1)</script><!--";
+    const html = renderPhotoHead(hostile, `Caption ${hostile}`);
+    const scripts = html.match(/<script\b[^>]*>/g) ?? [];
+    expect(scripts.filter((tag) => tag.includes("application/ld+json"))).toHaveLength(1);
+    expect(scripts.some((tag) => tag === "<script>")).toBe(false);
+    expect(html).not.toContain("<script>alert(1)");
+    const body = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1];
+    expect(body).toBeDefined();
+    expect(body).not.toMatch(/<\/script|<!--/i);
+    const data = JSON.parse(body!);
+    expect(data.name).toBe(hostile);
+    expect(data.description).toBe(`Caption ${hostile}`);
   });
 });

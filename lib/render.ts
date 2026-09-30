@@ -1,9 +1,9 @@
-import type { VNode } from "preact";
-import { render } from "preact-render-to-string";
+import type { Child } from "@takazudo/zfb/zudo-react";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 
-/** Render a Preact tree to a full HTML-document `Response`. */
-export function htmlResponse(node: VNode, status = 200): Response {
-  const body = `<!DOCTYPE html>${render(node)}`;
+/** Render a zudo-react tree to a full HTML-document `Response` (the renderer emits no doctype). */
+export function htmlResponse(node: Child, status = 200): Response {
+  const body = `<!DOCTYPE html>${renderToString(node)}`;
   return new Response(body, {
     status,
     headers: { "content-type": "text/html; charset=utf-8" },

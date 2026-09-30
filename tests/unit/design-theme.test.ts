@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import config from "../../zfb.config";
 
 const globalCss = readFileSync("styles/global.css", "utf8");
 const semanticColors = [
@@ -18,16 +19,16 @@ function sourceFiles(directory: string): string[] {
 }
 
 describe("semantic theme architecture", () => {
-  it("keeps raw OKLCH values in the palette and exposes only semantic Tailwind colors", () => {
-    expect(globalCss).toContain("@theme inline {");
-    expect(globalCss).toContain("--color-*: initial;");
+  it("keeps raw OKLCH values in the palette and exposes only semantic wind colors", () => {
+    expect(globalCss).not.toMatch(/@import\s+["']tailwindcss["']|@theme\b|@apply\b|@source\b|@utility\b|@custom-variant\b|\btheme\(/);
 
     for (const role of themeRoles) {
       expect(globalCss).toContain(`--theme-${role}: var(--palette-`);
     }
-    for (const color of semanticColors) {
-      expect(globalCss).toContain(`--color-${color}: var(--theme-${color});`);
-    }
+    // wind v1 has no default palette: the only utility colours are the semantic roles.
+    expect(config.wind && config.wind.tokens?.colors).toEqual(
+      Object.fromEntries(semanticColors.map((color) => [color, `var(--theme-${color})`])),
+    );
 
     const paletteDefinitions = new Set(
       [...globalCss.matchAll(/--(?<token>palette-[\w-]+):/g)].map((match) => match.groups?.token),
@@ -42,6 +43,17 @@ describe("semantic theme architecture", () => {
       .filter((line) => line.includes("oklch("));
     expect(rawColorDeclarations.length).toBeGreaterThan(0);
     expect(rawColorDeclarations.every((line) => line.trimStart().startsWith("--palette-"))).toBe(true);
+  });
+
+  it("defines every custom property that the wind tokens and authored rules read", () => {
+    const definitions = new Set([...globalCss.matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]));
+    // Set per element by inline style in components/photo-card.tsx and placeholder-image.tsx.
+    const inlineStyleProperties = new Set(["--a", "--image-placeholder"]);
+    const tokenReferences = [...JSON.stringify(config.wind).matchAll(/var\((--[\w-]+)\)/g)].map((match) => match[1]);
+    const cssReferences = [...globalCss.matchAll(/var\((--[\w-]+)/g)].map((match) => match[1]);
+    expect(tokenReferences.length).toBeGreaterThan(0);
+    expect([...new Set([...tokenReferences, ...cssReferences])]
+      .filter((name) => !definitions.has(name) && !inlineStyleProperties.has(name))).toEqual([]);
   });
 
   it("maps OS-default, forced light, and forced dark theme selection", () => {
@@ -66,6 +78,29 @@ describe("semantic theme architecture", () => {
     expect(globalCss).toContain("::view-transition-group(root)");
     expect(globalCss).toContain("::view-transition-old(root)");
     expect(globalCss).toContain("::view-transition-new(root)");
+  });
+
+  it("restores the text-like file-selector button that owned-v1 leaves native", () => {
+    const rule = globalCss.match(/@layer base\s*{[\s\S]*?::file-selector-button\s*{(?<body>[^}]*)}/)?.groups?.body ?? "";
+    expect(rule).toMatch(/border:\s*0 solid/);
+    expect(rule).toMatch(/background-color:\s*transparent/);
+    expect(rule).toMatch(/font:\s*inherit/);
+    expect(rule).toMatch(/color:\s*inherit/);
+    expect(rule).toMatch(/margin-inline-end:\s*4px/);
+  });
+
+  it("keeps header state and toast motion in authored rules instead of v3-rejected variants", () => {
+    expect(globalCss).toMatch(/\.nav-link\[aria-current="page"\]\s*{[^}]*color:\s*var\(--theme-ink\)/s);
+    expect(globalCss).toMatch(/\.menu-row\[aria-current="page"\]\s*{[^}]*font-weight:\s*600/s);
+    expect(globalCss).toMatch(/\.group:hover \.tooltip\s*{\s*opacity:\s*1/);
+    expect(globalCss).toMatch(/\.tooltip\s*{[^}]*transition-delay:\s*200ms/s);
+    expect(globalCss).toMatch(/\.favorite-toast\[data-visible="true"\]\s*{[^}]*opacity:\s*1/s);
+    expect(globalCss).toMatch(/@media \(prefers-reduced-motion:\s*reduce\)\s*{\s*\.favorite-toast\s*{[^}]*translate:\s*-50% 0;[^}]*transition-property:\s*opacity;/s);
+    const source = ["components", "layouts", "pages"]
+      .flatMap((directory) => sourceFiles(directory))
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+    expect(source).not.toMatch(/(?:aria|data)-\[|motion-(?:reduce|safe):|\[\.group:|\b-?(?:left|translate-x)-1\/2\b/);
   });
 
   it("rejects default palettes, raw colors, and palette references in Preact markup", () => {
@@ -123,7 +158,9 @@ describe("semantic theme architecture", () => {
   });
 
   it("keeps the one loading tile and its dormant spinner in the canonical grid", () => {
-    expect(globalCss).toMatch(/@layer utilities\s*{[\s\S]*?\[data-gallery-auto-load-active="true"\] \[data-gallery-feed-next\] \{ display: none; \}[\s\S]*?}/);
+    // wind utilities are unlayered, so this override must be unlayered too to outrank `.flex`.
+    expect(globalCss).toMatch(/^\[data-gallery-auto-load-active="true"\] \[data-gallery-feed-next\] \{ display: none; \}$/m);
+    expect(globalCss).not.toContain("@layer utilities");
     expect(globalCss).toContain("[data-gallery-loading-tile]");
     expect(globalCss).toContain('[data-gallery-loading-active="true"] .gallery-loading-spinner');
     expect(globalCss).not.toContain("photo-card-skeleton");

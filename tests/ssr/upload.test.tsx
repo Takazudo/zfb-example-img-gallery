@@ -1,10 +1,10 @@
-import { render } from "preact-render-to-string";
+import { renderToString } from "@takazudo/zfb/zudo-react/server";
 import { describe, expect, it } from "vitest";
 import { Field } from "../../components/field";
 
 describe("upload form field SSR contract", () => {
   it("keeps textarea values in the body and never emits file values", () => {
-    const html = render(
+    const html = renderToString(
       <>
         <Field id="photo" name="photo" label="Photo" type="file" required accept="image/jpeg,image/png,image/webp" />
         <Field id="title" name="title" label="Title" value="A title" required maxLength={120} />

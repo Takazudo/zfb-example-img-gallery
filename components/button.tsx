@@ -1,9 +1,9 @@
-import type { ComponentChildren } from "preact";
+import type { Child } from "@takazudo/zfb/zudo-react";
 
 type Props = {
   variant?: "primary" | "secondary" | "ghost" | "danger"; size?: "sm" | "md";
   type?: "submit" | "button"; href?: string; disabled?: boolean; class?: string;
-  children: ComponentChildren;
+  children: Child;
 };
 const variants = {
   primary: "bg-brand text-on-brand hover:bg-brand-strong",

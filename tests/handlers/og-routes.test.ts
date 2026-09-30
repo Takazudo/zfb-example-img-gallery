@@ -146,7 +146,7 @@ async function invokeOg(
 }
 
 beforeEach(() => {
-  configuredGlobal.__zfb = { site: "https://gallery.example" };
+  configuredGlobal.__zfb = { ...configuredGlobal.__zfb, site: "https://gallery.example" };
 });
 
 afterEach(() => {

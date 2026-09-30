@@ -85,7 +85,7 @@ function renderPage({
         <form
           method="post"
           action="/upload"
-          encType="multipart/form-data"
+          enctype="multipart/form-data"
           class="flex flex-col gap-vsp-md rounded-lg border border-line bg-surface p-hsp-lg shadow-card"
         >
           {error ? (
