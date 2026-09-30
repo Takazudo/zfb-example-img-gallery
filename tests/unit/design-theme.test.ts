@@ -80,6 +80,15 @@ describe("semantic theme architecture", () => {
     expect(globalCss).toContain("::view-transition-new(root)");
   });
 
+  it("restores the text-like file-selector button that owned-v1 leaves native", () => {
+    const rule = globalCss.match(/@layer base\s*{[\s\S]*?::file-selector-button\s*{(?<body>[^}]*)}/)?.groups?.body ?? "";
+    expect(rule).toMatch(/border:\s*0 solid/);
+    expect(rule).toMatch(/background-color:\s*transparent/);
+    expect(rule).toMatch(/font:\s*inherit/);
+    expect(rule).toMatch(/color:\s*inherit/);
+    expect(rule).toMatch(/margin-inline-end:\s*4px/);
+  });
+
   it("keeps header state and toast motion in authored rules instead of v3-rejected variants", () => {
     expect(globalCss).toMatch(/\.nav-link\[aria-current="page"\]\s*{[^}]*color:\s*var\(--theme-ink\)/s);
     expect(globalCss).toMatch(/\.menu-row\[aria-current="page"\]\s*{[^}]*font-weight:\s*600/s);

@@ -229,6 +229,23 @@ html[data-theme="dark"] {
   button { appearance: button; }
   input,
   textarea { background-color: transparent; }
+  /* The upload and avatar file inputs: owned-v1 leaves the native button chrome. */
+  ::file-selector-button {
+    box-sizing: border-box;
+    margin: 0;
+    margin-inline-end: 4px;
+    padding: 0;
+    border: 0 solid;
+    border-radius: 0;
+    background-color: transparent;
+    font: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    opacity: 1;
+    appearance: button;
+  }
   ::placeholder { opacity: 1; }
   @supports (not (-webkit-appearance: -apple-pay-button)) or (contain-intrinsic-size: 1px) {
     ::placeholder { color: color-mix(in oklab, currentcolor 50%, transparent); }
@@ -621,6 +638,8 @@ html[data-theme="dark"] {
 
 /* Layout-neutral host for markup pre-rendered through rawHtml (zudo-front-builder#3359). */
 .markup-host { display: contents; }
+/* The primary menu's custom element stands in for the v2 <div>, which the UA gives bidi isolation. */
+site-popover { unicode-bidi: isolate; }
 
 @media (prefers-reduced-motion: reduce) {
   *,
