@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error The postbuild helper intentionally remains executable JavaScript.
 import { copyStableAssets, discoverGeneratedIslandsEntry, islandRegistrations } from "../../scripts/stable-assets.mjs";
@@ -19,9 +19,8 @@ function fixture(entrySource?: string) {
   writeFileSync(join(assets, "styles-csshash.css"), "body{}");
   writeFileSync(join(assets, "islands-chunk-chunkhash.js"), "export default 1;");
   writeFileSync(join(assets, "islands-resource-helper.js"), "export default 2;");
-  const absolute = join(project, "components", "theme-toggle.tsx");
   // zfb 3 client manifest shape: __zfb_register(component, exportName, identity, sourcePath).
-  const source = entrySource ?? `import "./islands-chunk-chunkhash.js";function r(e,t,n,s){m[n]={identity:{component:n,build:"0123456789abcdef"}}}r(Tt,"ThemeToggle","ThemeToggle",${JSON.stringify(absolute)});const route="/my-photos";`;
+  const source = entrySource ?? `import "./islands-chunk-chunkhash.js";function r(e,t,n,s){m[n]={identity:{component:n,build:"0123456789abcdef"}}}r(Tt,"ThemeToggle","ThemeToggle","components/theme-toggle.tsx");const route="/my-photos";`;
   writeFileSync(join(assets, "islands-entryhash.js"), source);
   writeFileSync(join(project, "dist", "index.html"), '<script src="/assets/islands-entryhash.js"></script>');
   writeFileSync(join(project, "dist", "nested", "index.html"), '<script src="../assets/islands-entryhash.js"></script>');
@@ -29,21 +28,12 @@ function fixture(entrySource?: string) {
 }
 
 describe("stable generated assets", () => {
-  it("normalizes path formats, preserves unrelated strings/imports, rehashes, and updates every HTML", () => {
+  it("preserves portable source labels and bytes while rehashing every HTML reference", () => {
     const data = fixture();
     try {
-      const posix = join(data.project, "components", "theme-toggle.tsx");
-      const gallery = join(data.project, "components", "gallery.tsx");
-      const windows = `C:${gallery.replaceAll("/", "\\")}`;
-      const slashWindows = `D:${posix}`;
-      const file = new URL(`file://${gallery}`).href;
-      const source = `import "./islands-chunk-chunkhash.js";const rx=/(a,b)/;const template=\`({not syntax})\`;a(n,"x","A",${JSON.stringify(posix)});b(n,"x","B",${JSON.stringify(windows)});c(n,"x","C",${JSON.stringify(slashWindows)});d(n,"x","D",${JSON.stringify(file)});const route="/my-photos";`;
-      writeFileSync(join(data.assets, "islands-entryhash.js"), source);
       const result = copyStableAssets(data.assets, data.project);
-      const expected = source.replace(JSON.stringify(posix), '"components/theme-toggle.tsx"').replace(JSON.stringify(windows), '"components/gallery.tsx"').replace(JSON.stringify(slashWindows), '"components/theme-toggle.tsx"').replace(JSON.stringify(file), '"components/gallery.tsx"');
-      expect(result.islandsEntry).toBe(`islands-${hash(expected)}.js`);
-      expect(readFileSync(join(data.assets, result.islandsEntry), "utf8")).toBe(expected);
-      expect(expected).toContain('const route="/my-photos"');
+      expect(result.islandsEntry).toBe(`islands-${hash(data.source)}.js`);
+      expect(readFileSync(join(data.assets, result.islandsEntry), "utf8")).toBe(data.source);
       expect(readFileSync(join(data.project, "dist", "index.html"), "utf8")).toContain(result.islandsEntry);
       expect(readFileSync(join(data.project, "dist", "nested", "index.html"), "utf8")).toContain(result.islandsEntry);
       expect(readFileSync(join(data.assets, "islands.js"))).toEqual(readFileSync(join(data.assets, result.islandsEntry)));
@@ -67,7 +57,7 @@ describe("stable generated assets", () => {
   it("accepts a matching target and preserves conflicting files without mutation", () => {
     const matching = fixture();
     try {
-      const normalized = matching.source.replace(JSON.stringify(join(matching.project, "components", "theme-toggle.tsx")), '"components/theme-toggle.tsx"');
+      const normalized = matching.source;
       const target = `islands-${hash(normalized)}.js`;
       writeFileSync(join(matching.assets, target), normalized);
       expect(copyStableAssets(matching.assets, matching.project).islandsEntry).toBe(target);
@@ -78,7 +68,7 @@ describe("stable generated assets", () => {
     try {
       const oldPath = join(conflict.assets, "islands-entryhash.js");
       const oldBytes = readFileSync(oldPath);
-      const normalized = conflict.source.replace(JSON.stringify(join(conflict.project, "components", "theme-toggle.tsx")), '"components/theme-toggle.tsx"');
+      const normalized = conflict.source;
       const target = `islands-${hash(normalized)}.js`;
       writeFileSync(join(conflict.assets, target), "conflict");
       expect(() => copyStableAssets(conflict.assets, conflict.project)).toThrow(/already exists with different bytes/);
@@ -88,31 +78,13 @@ describe("stable generated assets", () => {
     } finally { rmSync(conflict.project, { recursive: true }); }
   });
 
-  it.each([
-    ["outside-root", (project: string) => `r(n,"x","X",${JSON.stringify(join(project, "..", "outside.tsx"))});`, /outside repository/],
-    ["missing", (project: string) => `r(n,"x","X",${JSON.stringify(join(project, "components", "missing.tsx"))});`, /unresolved/],
-    ["malformed file URL", () => 'r(n,"x","X","file:%zz/missing.tsx");', /malformed diagnostic file URL/],
-  ])("fails safely for %s diagnostic candidates", (_name, source, error) => {
-    const data = fixture();
+  it.each(["/checkout/components/theme-toggle.tsx", "C:\\checkout\\components\\theme-toggle.tsx", "file:///checkout/components/theme-toggle.tsx"])("rejects upstream absolute diagnostic regression %s before mutation", (path) => {
+    const source = `r(n,"x","X",${JSON.stringify(path)});`;
+    const data = fixture(source);
     try {
-      writeFileSync(join(data.assets, "islands-entryhash.js"), source(data.project));
-      expect(() => copyStableAssets(data.assets, data.project)).toThrow(error);
-      expect(readFileSync(join(data.assets, "islands-entryhash.js"), "utf8")).toBe(source(data.project));
-    } finally { rmSync(data.project, { recursive: true }); }
-  });
-
-  it("fails when a Windows diagnostic can resolve to multiple in-repository files", () => {
-    const data = fixture();
-    try {
-      const rootName = basename(data.project);
-      mkdirSync(join(data.project, "one", rootName), { recursive: true });
-      writeFileSync(join(data.project, "one", rootName, "two.tsx"), "one");
-      writeFileSync(join(data.project, "two.tsx"), "two");
-      const ambiguous = `C:\\prefix\\${rootName}\\one\\${rootName}\\two.tsx`;
-      const source = `r(n,"x","X",${JSON.stringify(ambiguous)});`;
-      writeFileSync(join(data.assets, "islands-entryhash.js"), source);
-      expect(() => copyStableAssets(data.assets, data.project)).toThrow(/ambiguous diagnostic source path/);
+      expect(() => copyStableAssets(data.assets, data.project)).toThrow(/absolute diagnostic source path/);
       expect(readFileSync(join(data.assets, "islands-entryhash.js"), "utf8")).toBe(source);
+      expect(readFileSync(join(data.project, "dist", "index.html"), "utf8")).toContain("islands-entryhash.js");
     } finally { rmSync(data.project, { recursive: true }); }
   });
 

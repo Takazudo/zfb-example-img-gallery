@@ -26,7 +26,7 @@ Every mutation remains a plain `<form method="post">` fallback. Favorites and ow
 
 | Concern | How |
 | --- | --- |
-| Framework | zfb 3.0.0 with zudo-react (`@takazudo/zfb/zudo-react`) and zudo-wind (`owned-v1` reset, explicit tokens in `zfb.config.ts`, plus an authored parity block in `styles/global.css`). There is no Tailwind and no Preact. |
+| Framework | zfb 3.1.0 with zudo-react (`@takazudo/zfb/zudo-react`) and zudo-wind (`owned-v1` reset, explicit tokens in `zfb.config.ts`, plus an authored parity block in `styles/global.css`). There is no Tailwind and no Preact. |
 | Page rendering | Pages render through the named `renderToString` from `@takazudo/zfb/zudo-react/server` (see `lib/render.ts`) |
 | Stable assets | `pnpm build` runs `scripts/stable-assets.mjs`, which publishes the hashed CSS and islands entry under the stable aliases `/assets/app.css` and `/assets/islands.js` that SSR markup links to |
 | Rendering | **100% SSR** — every page exports `prerender = false`, except the single prerendered `pages/404.tsx` |
@@ -66,7 +66,7 @@ run_worker_first = [
 
 ### Stable SSR assets are hard-coded on purpose
 
-zfb rewrites generated (SSG) HTML to hashed assets, but dynamic documents returned by `htmlResponse()` are created after the build. `layouts/gallery-layout.tsx` therefore links `/assets/app.css` and `/assets/islands.js`. The postbuild step `scripts/stable-assets.mjs` discovers exactly one hashed stylesheet and exactly one generated islands entry (excluding chunks/resources), normalizes source-module diagnostics to portable project-relative identifiers, hashes the finalized bytes, rewrites every emitted HTML reference to `islands-<first-eight-sha256-hex>.js`, and copies that final file to the stable names. It verifies the islands alias byte-for-byte and rejects missing relative runtime assets or a checkout prefix left in the finalized entry. The prerendered 404 suppresses the manual stable module tag because zfb injects its one finalized hashed module entry during SSG.
+zfb rewrites generated (SSG) HTML to hashed assets, but dynamic documents returned by `htmlResponse()` are created after the build. `layouts/gallery-layout.tsx` therefore links `/assets/app.css` and `/assets/islands.js`. The postbuild step `scripts/stable-assets.mjs` discovers exactly one hashed stylesheet and exactly one generated islands entry (excluding chunks/resources), requires upstream project-relative source-module identifiers, hashes the finalized bytes, rewrites every emitted HTML reference to `islands-<first-eight-sha256-hex>.js`, and copies that final file to the stable names. It verifies the islands alias byte-for-byte and rejects missing relative runtime assets or a checkout prefix left in the finalized entry. The prerendered 404 suppresses the manual stable module tag because zfb injects its one finalized hashed module entry during SSG.
 
 `node scripts/assert-ssr-invariants.mjs` enforces the same production artifact contract after the build: the finalized filename must match the SHA-256 of its final bytes, `404.html` must reference that exact reachable entry (never `/assets/islands.js`), all reachable client JavaScript must be free of absolute POSIX/Windows/`file:` source diagnostics, and the generated entry must retain the three portable component identifiers (`components/display-settings.tsx`, `components/infinite-gallery-controller.tsx`, and `components/theme-toggle.tsx`).
 
@@ -153,15 +153,15 @@ There is deliberately no `og_key` column. The card key is derived from the photo
 
 This is a standalone package. The zfb packages are ordinary npm registry dependencies with no `file:` links; the `zfb` CLI ships as prebuilt platform binaries through optional dependencies, so the package-install step is the whole setup.
 
-`@takazudo/zfb`, `@takazudo/zfb-runtime`, and `@takazudo/zfb-adapter-cloudflare` are exact-pinned and in lockstep at the validated `3.0.0`. `wrangler` is also exact-pinned, at `4.85.0`. The package manager is pnpm `10.34.1`, and the required Node version is `>=22.12.0`. There is no Preact, Tailwind, or `tailwindcss` dependency: zudo-react is the owned JSX runtime and zudo-wind compiles the utility classes inside the zfb binary.
+`@takazudo/zfb`, `@takazudo/zfb-runtime`, and `@takazudo/zfb-adapter-cloudflare` are exact-pinned and in lockstep at the validated `3.1.0`. `wrangler` is also exact-pinned, at `4.85.0`. The package manager is pnpm `10.34.1`, and the required Node version is `>=22.12.0`. There is no Preact, Tailwind, or `tailwindcss` dependency: zudo-react is the owned JSX runtime and zudo-wind compiles the utility classes inside the zfb binary.
 
 A major zfb bump (2.x to 3.x was one) is a migration, not a two-line edit: the renderer, the class grammar and the emitted asset shape all change. Use the `l-handle-zfb-update` skill (`.claude/skills/l-handle-zfb-update/SKILL.md`), which requires the parity and invariant checks listed there.
 
 Notes on the v3 shape of this app:
 
 - The three islands (`DisplaySettings`, `InfiniteGalleryControllerIsland`, `ThemeToggle`) are thin signals + `getScope()` wrappers around the framework-free controllers in `lib/`.
-- zfb 3.0.0 rejects a few standard attributes (`meta property`, `popover*`, `input form`, `img fetchpriority`; [zfb#3359](https://github.com/Takazudo/zudo-front-builder/issues/3359)). `lib/unlisted-attributes.ts` renders that static markup with a placeholder spelling and restores the real name, and the primary menu (which contains an island) is a `<site-popover>` custom element. Remove both when the upstream issue is fixed.
-- `zfb build` emits absolute source paths when it registers islands, so `scripts/stable-assets.mjs` normalizes them to project-relative identifiers before hashing; `scripts/assert-ssr-invariants.mjs` then checks the result (see [TESTING.md](TESTING.md)).
+- zfb 3.1.0 still rejects a few standard attributes (`meta property`, `popover*`, `input form`, `img fetchpriority`; [zfb#3359](https://github.com/Takazudo/zudo-front-builder/issues/3359)). `lib/unlisted-attributes.ts` renders that static markup with a placeholder spelling and restores the real name, and the primary menu (which contains an island) is a `<site-popover>` custom element. Remove both when the upstream issue is fixed.
+- zfb 3.1.0 emits portable source labels ([zfb#3388](https://github.com/Takazudo/zudo-front-builder/issues/3388)). The old path normalization workaround is removed; stable-assets and SSR invariants reject absolute diagnostics and still verify hashes, aliases and shared island identities.
 
 The checked-in upload path keeps `sharp` Node-only: it is used by the operator backfill script, never imported by the Worker bundle. The `blurhash` package is shared by the Worker encoder and the Node backfill encoder.
 
