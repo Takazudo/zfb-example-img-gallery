@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /** Finalize zfb's generated assets and create stable SSR-facing aliases. */
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const GENERATED_ISLANDS_ENTRY = /^islands-(?!chunk-|resources?-).+\.js$/;
@@ -166,49 +166,13 @@ export function islandRegistrations(source) {
 }
 
 function pathTextLooksAbsolute(value) { return value.startsWith("/") || /^[a-z]:[\\/]/i.test(value) || /^file:/i.test(value); }
-function within(root, target) {
-  const rel = relative(root, target);
-  return rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel));
-}
-
-function portableSourceIdentifier(value, projectRoot) {
-  const slashValue = value.replaceAll("\\", "/");
-  const slashRoot = projectRoot.replaceAll("\\", "/").replace(/\/$/, "");
-  const lexicalCandidates = [];
-  if (/^file:/i.test(value)) {
-    try { lexicalCandidates.push(fileURLToPath(value)); } catch { fail(`malformed diagnostic file URL ${value}`); }
-  } else if (/^[a-z]:[\\/]/i.test(value)) {
-    if (/^[a-z]:\//i.test(slashRoot) && slashValue.toLowerCase().startsWith(`${slashRoot.toLowerCase()}/`)) lexicalCandidates.push(join(projectRoot, slashValue.slice(slashRoot.length + 1)));
-    if (!/^[a-z]:\//i.test(slashRoot)) lexicalCandidates.push(slashValue.slice(2));
-    const segments = slashValue.split("/"); const rootName = basename(projectRoot).toLowerCase();
-    segments.forEach((segment, index) => { if (segment.toLowerCase() === rootName) lexicalCandidates.push(join(projectRoot, ...segments.slice(index + 1))); });
-  } else lexicalCandidates.push(value);
-  // zfb emits lexical paths, so a checkout under a symlink (macOS /var -> /private/var) is inside too.
-  const lexicalRoot = resolve(projectRoot);
-  const canonicalRoot = realpathSync(projectRoot); const resolved = new Set(); let sawInside = false;
-  for (const candidate of lexicalCandidates) {
-    const absolute = resolve(candidate); if (!within(canonicalRoot, absolute) && !within(lexicalRoot, absolute)) continue;
-    sawInside = true;
-    if (existsSync(absolute)) { const real = realpathSync(absolute); if (within(canonicalRoot, real)) resolved.add(real); }
-  }
-  if (resolved.size > 1) fail(`ambiguous diagnostic source path ${value}`);
-  if (resolved.size === 0) {
-    if (sawInside) fail(`unresolved diagnostic source path ${value}`);
-    fail(`diagnostic source path is outside repository: ${value}`);
-  }
-  return relative(canonicalRoot, [...resolved][0]).split(sep).join("/");
-}
-
-export function normalizeDiagnosticSourceIdentifiers(source, projectRoot) {
-  const replacements = [];
+function assertPortableSourceIdentifiers(source) {
   for (const token of fourthCallArgumentStrings(source)) {
     if (token.decodeError) { if (/^["'](?:file:|\/|[a-z]:)/i.test(token.raw)) throw token.decodeError; continue; }
-    if (!pathTextLooksAbsolute(token.value) || !SOURCE_MODULE.test(token.value)) continue;
-    replacements.push({ ...token, replacement: JSON.stringify(portableSourceIdentifier(token.value, projectRoot)) });
+    if (pathTextLooksAbsolute(token.value) && SOURCE_MODULE.test(token.value)) {
+      fail(`absolute diagnostic source path from zfb: ${token.value}`);
+    }
   }
-  let finalized = source;
-  for (const replacement of replacements.sort((a, b) => b.start - a.start)) finalized = finalized.slice(0, replacement.start) + replacement.replacement + finalized.slice(replacement.end);
-  return finalized;
 }
 
 function htmlFiles(root) {
@@ -234,7 +198,8 @@ export function copyStableAssets(assetsDir, projectRoot = resolve(assetsDir, "..
   const htmlPlans = htmlFiles(dirname(assetsDir)).map((path) => ({ path, before: readFileSync(path, "utf8") }));
   const { entry: oldEntry, candidates } = selectSourceEntry(assetsDir, htmlPlans);
   const oldPath = join(assetsDir, oldEntry);
-  const finalizedSource = normalizeDiagnosticSourceIdentifiers(readFileSync(oldPath, "utf8"), projectRoot);
+  const finalizedSource = readFileSync(oldPath, "utf8");
+  assertPortableSourceIdentifiers(finalizedSource);
   const finalizedBytes = Buffer.from(finalizedSource);
   const hash = createHash("sha256").update(finalizedBytes).digest("hex").slice(0, 8);
   const islandsEntry = `islands-${hash}.js`; const generatedPath = join(assetsDir, islandsEntry);
