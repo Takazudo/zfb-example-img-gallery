@@ -31,10 +31,18 @@ jobs:
 
       - name: Detect Cloudflare deployment readiness
         id: cloudflare
+        env:
+          VALIDATION_ONLY: ${{ github.event_name == 'pull_request' && github.head_ref == 'upgrade/zfb-4.3.0-validation' }}
         shell: bash
         run: |
           set -euo pipefail
           configured=true
+          # This rollout validates published packages without publishing a preview.
+          if [ "$VALIDATION_ONLY" = "true" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ZFB 4.3.0 validation only; remote migrations and deployments are disabled for this branch."
+            exit 0
+          fi
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
             configured=false
           fi
@@ -80,7 +88,7 @@ jobs:
 
       - name: Report deferred Cloudflare deployment
         if: steps.cloudflare.outputs.configured != 'true'
-        run: echo "::notice::Cloudflare deployment deferred until bootstrap IDs and repository secrets are configured; all local CI gates passed."
+        run: echo "::notice::Cloudflare deployment omitted by validation policy or missing bootstrap IDs/secrets; all local CI gates passed."
 
       # Idempotent: wrangler tracks applied migrations in `d1_migrations`.
       - name: Apply D1 migrations (remote)

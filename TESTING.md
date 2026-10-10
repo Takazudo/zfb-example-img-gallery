@@ -213,3 +213,56 @@ Automated agents working in this repository must follow these rules:
 ### Pagination boundary exercised by browser tests
 
 The deterministic fixture makes the two full-page transitions and final remainder repeatable, but it does not change the production pagination contract. Pages use offset pagination, so a concurrent insert between page requests can shift a later offset and omit one row (or produce a duplicate). The client deduplicates repeated photo IDs while appending; it cannot recover an omitted row, and cursor pagination is outside this feature.
+
+## Published ZFB 4.3.0 upgrade verification
+
+The SDK, runtime and Cloudflare adapter are exact-pinned to published 4.3.0.
+Release `v4.3.0` resolves to `689dfbfcfe4154aaccffe74d14bb5aadfef3ec6a`.
+The installed CLI reports `zfb 4.3.0`, embedded esbuild `0.25.12` (the default).
+No global dependency overrides, Wrangler/storage changes, or documentation-package updates were made.
+
+The postbuild tokenizer now separates an operator from a following regular-expression
+literal. Its three regression cases failed before the repair and pass afterwards;
+portable paths, exact island identities, byte-preserving aliases and hashes remain asserted.
+The existing authored `.backdrop-blur` rule is explicitly reserved in Wind.
+
+Local verification uses Linux x64, Node 24.19.0, pnpm 10.34.1, Wrangler 4.85.0,
+and Chromium 151.0.7922.34. Invoke the pinned package manager with
+`npm exec --yes --package pnpm@10.34.1 -- pnpm` if the host default differs.
+The optional ONNX external binary download was unreachable; local installs used
+`ONNXRUNTIME_NODE_INSTALL=skip`. Photo-description/model tooling was not tested.
+
+Commands used (heavy builds/browser runs wrapped by the shared heavy guard):
+
+```sh
+pnpm install --frozen-lockfile
+pnpm exec tsc --noEmit
+pnpm typecheck
+pnpm typecheck:e2e
+pnpm exec vitest run --project unit --project ssr --project handlers
+# Remove only generated dist, .zfb and .zfb-build before the candidate build.
+pnpm build
+pnpm exec vitest run --project integration
+node scripts/assert-ssr-invariants.mjs
+E2E_BASE_URL=http://127.0.0.1:8792 pnpm exec playwright test --grep @smoke
+```
+
+Baseline main `ce4c38d48626a06a2adf156fe5d06f9d7704b7ef` on 3.1.0 passed
+622 application tests and 35 browser smoke tests. Candidate application tests
+pass 625 cases; all 10 Worker integration cases pass. The first candidate
+browser run passed 33/35: staggered animation sampling and bottom-pinned loader
+geometry failed. Both unchanged cases then passed three focused repetitions.
+The PR records the final full-lane and exact-head CI outcomes without erasing
+that first-run failure history.
+
+Saved baseline and candidate Workers used distinct local scratch D1/R2 directories
+and ports 8791/8792. Gallery `/tags/e2e-fixture` and detail `/photos/1` content and
+computed styles matched at 375/800/1200 pixels, with mounted theme controls, no
+horizontal overflow and no page errors. Browser fixture image bytes are stubbed;
+the upload/social-card journey and Workers tests exercise local storage and Images.
+Native macOS, Windows, Linux arm64, Firefox, WebKit and Cloudflare-hosted Images
+behavior were not tested. No production/preview deployment or remote storage was used.
+
+The rollout branch `upgrade/zfb-4.3.0-validation` forces the workflow's deployment
+readiness output false while retaining every validation gate. Other branches and
+the manual bootstrap workflow keep their existing behavior.

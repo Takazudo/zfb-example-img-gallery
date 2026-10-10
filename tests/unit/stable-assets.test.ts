@@ -28,6 +28,22 @@ function fixture(entrySource?: string) {
 }
 
 describe("stable generated assets", () => {
+  it.each([
+    'const close=/[}]/;',
+    String.raw`const close=/\)/;const ratio=10/2;`,
+    String.raw`const close=/["\/]/;const nested={value:1};`,
+  ])("preserves minified regex literals while inspecting registrations: %s", (prefix) => {
+    const source = prefix + 'r(T,"ThemeToggle","ThemeToggle","components/theme-toggle.tsx");';
+    const data = fixture(source);
+    try {
+      expect(islandRegistrations(source)).toEqual([
+        { exportName: "ThemeToggle", identity: "ThemeToggle", sourcePath: "components/theme-toggle.tsx" },
+      ]);
+      const result = copyStableAssets(data.assets, data.project);
+      expect(readFileSync(join(data.assets, result.islandsEntry), "utf8")).toBe(source);
+    } finally { rmSync(data.project, { recursive: true }); }
+  });
+
   it("preserves portable source labels and bytes while rehashing every HTML reference", () => {
     const data = fixture();
     try {
