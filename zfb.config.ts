@@ -14,6 +14,7 @@ export default defineConfig({
   wind: {
     spec: 1,
     reset: "owned-v1",
+    authoredClasses: { "backdrop-blur": true },
     tokens: {
       spacingUnit: "0.25rem",
       colors: Object.fromEntries(THEME_COLOR_ROLES.map((role) => [role, `var(--theme-${role})`])),

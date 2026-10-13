@@ -213,3 +213,111 @@ Automated agents working in this repository must follow these rules:
 ### Pagination boundary exercised by browser tests
 
 The deterministic fixture makes the two full-page transitions and final remainder repeatable, but it does not change the production pagination contract. Pages use offset pagination, so a concurrent insert between page requests can shift a later offset and omit one row (or produce a duplicate). The client deduplicates repeated photo IDs while appending; it cannot recover an omitted row, and cursor pagination is outside this feature.
+
+## Published ZFB 4.3.0 upgrade verification
+
+The SDK, runtime and Cloudflare adapter are exact-pinned to published 4.3.0.
+Release `v4.3.0` resolves to `689dfbfcfe4154aaccffe74d14bb5aadfef3ec6a`.
+The installed CLI reports `zfb 4.3.0`, embedded esbuild `0.25.12` (the default).
+No global dependency overrides, Wrangler/storage changes, or documentation-package updates were made.
+
+The postbuild tokenizer now separates an operator from a following regular-expression
+literal. Its three regression cases failed before the repair and pass afterwards;
+portable paths, exact island identities, byte-preserving aliases and hashes remain asserted.
+The existing authored `.backdrop-blur` rule is explicitly reserved in Wind.
+
+Local verification uses Linux x64, Node 24.19.0, pnpm 10.34.1, Wrangler 4.85.0,
+and Chromium 151.0.7922.34. Invoke the pinned package manager with
+`npm exec --yes --package pnpm@10.34.1 -- pnpm` if the host default differs.
+The optional ONNX external binary download was unreachable; local installs used
+`ONNXRUNTIME_NODE_INSTALL=skip`. Photo-description/model tooling was not tested.
+
+Commands used (heavy builds/browser runs wrapped by the shared heavy guard):
+
+```sh
+pnpm install --frozen-lockfile
+pnpm exec tsc --noEmit
+pnpm typecheck
+pnpm typecheck:e2e
+pnpm exec vitest run --project unit --project ssr --project handlers
+# Remove only generated dist, .zfb and .zfb-build before the candidate build.
+pnpm build
+pnpm exec vitest run --project integration
+node scripts/assert-ssr-invariants.mjs
+E2E_BASE_URL=http://127.0.0.1:8792 pnpm exec playwright test --grep @smoke
+```
+
+Baseline main `ce4c38d48626a06a2adf156fe5d06f9d7704b7ef` on 3.1.0 passed
+622 application tests and 35 browser smoke tests. Candidate application tests
+pass 625 cases; all 10 Worker integration cases pass. The first candidate
+browser run passed 33/35: staggered animation sampling and bottom-pinned loader
+geometry failed. Both unchanged cases then passed three focused repetitions.
+The PR records the final full-lane and exact-head CI outcomes without erasing
+that first-run failure history.
+
+Saved baseline and candidate Workers used distinct local scratch D1/R2 directories
+and ports 8791/8792. Gallery `/tags/e2e-fixture` and detail `/photos/1` content and
+computed styles matched at 375/800/1200 pixels, with mounted theme controls, no
+horizontal overflow and no page errors. Browser fixture image bytes are stubbed;
+the upload/social-card journey and Workers tests exercise local storage and Images.
+Native macOS, Windows, Linux arm64, Firefox, WebKit and Cloudflare-hosted Images
+behavior were not tested. No production/preview deployment or remote storage was used.
+
+The rollout branch `upgrade/zfb-4.3.0-validation` forces the workflow's deployment
+readiness output false while retaining every validation gate. Other branches and
+the manual bootstrap workflow keep their existing behavior.
+
+### Published 4.4.0 follow-up
+
+The current SDK, runtime and Cloudflare adapter pins are **4.4.0**. This follows
+up the 4.3.0 verification above on the same draft PR and validation-only branch;
+the 3.1.0-to-4.3.0 evidence above is historical.
+Release `v4.4.0` resolves to `29377d1c0bfd607dea6d654557e46ff7bf536b2e`.
+The current dependency resolver scanned the single package manifest and found
+three stable exact pins, no channel/graduation warnings, and no other registry
+`@takazudo/*` dependencies. No `ZUDO_DEPS_PINS.md` or vendored Zudo artifacts
+were found. The lockfile changes only the ZFB family, including native carriers
+and slugify. The runtime's exact SDK peer is satisfied.
+
+Published tarball comparisons from installed 4.3.0 to 4.4.0 show unchanged SDK
+JavaScript and adapter code; their package metadata and the native CLI change.
+The runtime changes History-write rejection recovery and fragment Back/Forward
+restoration. The gallery already catches rejected `syncHistoryEntry` calls.
+The release's MDX ignored-attribute and YAML frontmatter changes do not require
+consumer adaptations in this TSX/D1 gallery.
+
+`e2e/router-history.spec.ts` exercises the real gallery → browser-created
+fragment → Authors → Back → Forward journey. It asserts restored gallery content,
+24 cards, forward direction, and a surviving no-reload sentinel. Against 4.3.0 it
+fails because Back leaves `Authors | Stillframe` under the gallery fragment URL,
+reproducing the already-reported [zfb#4157](https://github.com/Takazudo/zudo-front-builder/issues/4157).
+No duplicate upstream issue or package patch is needed.
+
+The local follow-up uses Linux x64, Node 24.19.0, pnpm 10.34.1 and Wrangler 4.85.0.
+The environment blocks the pinned Playwright browser download, so local browser
+runs use installed Chromium **154.0.8037.57** through a temporary config that
+only changes the executable and test/output paths. Assertions, one-worker policy,
+zero local retries, screenshots, traces and videos remain enabled. CI uses the
+ordinary pinned browser install. The same ONNX download limitation noted above
+still applies. The existing Wrangler peer warning (`workers-types` v5 versus its
+v4 peer range) is unchanged; no unrelated dependency update is included.
+
+The 4.3.0 baseline at `1704269783b4f3b9c1527e5f167221a7c18f93f1` passes
+625 application tests, TypeScript, the build and all 35 existing browser cases.
+The 4.4.0 candidate passes `pnpm exec tsc --noEmit`, `pnpm typecheck`,
+`pnpm typecheck:e2e`, all 625 application tests, a clean `pnpm build`,
+`node scripts/assert-ssr-invariants.mjs`, all 10 Worker integration cases and
+`pnpm exec wrangler deploy --dry-run --env=""`. The dry run performs no upload.
+
+The final browser/parity and exact-head CI results are recorded in PR #166.
+
+The full candidate lane passes **36/36**, without retries, using
+`E2E_BASE_URL=http://127.0.0.1:8792 pnpm exec playwright test --config test-results/local.config.ts --grep @smoke`
+with the temporary Chromium executable override described above. Isolated
+baseline/candidate fixture captures of `/tags/e2e-fixture` and `/photos/1` match
+text, geometry and every computed-style property of `.photo-card` and
+`[data-photo-detail-actions]` at 375/800/1200px. All six captures have three mounted
+islands, no horizontal overflow and no page errors. The generated CSS is
+byte-identical; islands grow from 145,644 to 147,206 bytes (gzip-9: 47,167 to
+47,764 bytes). A final frozen install and resolver check pass: all three pins
+are current. All browser/build/integration runs use the shared heavy guard.
