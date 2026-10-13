@@ -266,3 +266,58 @@ behavior were not tested. No production/preview deployment or remote storage was
 The rollout branch `upgrade/zfb-4.3.0-validation` forces the workflow's deployment
 readiness output false while retaining every validation gate. Other branches and
 the manual bootstrap workflow keep their existing behavior.
+
+### Published 4.4.0 follow-up
+
+The current SDK, runtime and Cloudflare adapter pins are **4.4.0**. This follows
+up the 4.3.0 verification above on the same draft PR and validation-only branch;
+the 3.1.0-to-4.3.0 evidence above is historical.
+Release `v4.4.0` resolves to `29377d1c0bfd607dea6d654557e46ff7bf536b2e`.
+The current dependency resolver scanned the single package manifest and found
+three stable exact pins, no channel/graduation warnings, and no other registry
+`@takazudo/*` dependencies. No `ZUDO_DEPS_PINS.md` or vendored Zudo artifacts
+were found. The lockfile changes only the ZFB family, including native carriers
+and slugify. The runtime's exact SDK peer is satisfied.
+
+Published tarball comparisons from installed 4.3.0 to 4.4.0 show unchanged SDK
+JavaScript and adapter code; their package metadata and the native CLI change.
+The runtime changes History-write rejection recovery and fragment Back/Forward
+restoration. The gallery already catches rejected `syncHistoryEntry` calls.
+The release's MDX ignored-attribute and YAML frontmatter changes do not require
+consumer adaptations in this TSX/D1 gallery.
+
+`e2e/router-history.spec.ts` exercises the real gallery → browser-created
+fragment → Authors → Back → Forward journey. It asserts restored gallery content,
+24 cards, forward direction, and a surviving no-reload sentinel. Against 4.3.0 it
+fails because Back leaves `Authors | Stillframe` under the gallery fragment URL,
+reproducing the already-reported [zfb#4157](https://github.com/Takazudo/zudo-front-builder/issues/4157).
+No duplicate upstream issue or package patch is needed.
+
+The local follow-up uses Linux x64, Node 24.19.0, pnpm 10.34.1 and Wrangler 4.85.0.
+The environment blocks the pinned Playwright browser download, so local browser
+runs use installed Chromium **154.0.8037.57** through a temporary config that
+only changes the executable and test/output paths. Assertions, one-worker policy,
+zero local retries, screenshots, traces and videos remain enabled. CI uses the
+ordinary pinned browser install. The same ONNX download limitation noted above
+still applies. The existing Wrangler peer warning (`workers-types` v5 versus its
+v4 peer range) is unchanged; no unrelated dependency update is included.
+
+The 4.3.0 baseline at `1704269783b4f3b9c1527e5f167221a7c18f93f1` passes
+625 application tests, TypeScript, the build and all 35 existing browser cases.
+The 4.4.0 candidate passes `pnpm exec tsc --noEmit`, `pnpm typecheck`,
+`pnpm typecheck:e2e`, all 625 application tests, a clean `pnpm build`,
+`node scripts/assert-ssr-invariants.mjs`, all 10 Worker integration cases and
+`pnpm exec wrangler deploy --dry-run --env=""`. The dry run performs no upload.
+
+The final browser/parity and exact-head CI results are recorded in PR #166.
+
+The full candidate lane passes **36/36**, without retries, using
+`E2E_BASE_URL=http://127.0.0.1:8792 pnpm exec playwright test --config test-results/local.config.ts --grep @smoke`
+with the temporary Chromium executable override described above. Isolated
+baseline/candidate fixture captures of `/tags/e2e-fixture` and `/photos/1` match
+text, geometry and every computed-style property of `.photo-card` and
+`[data-photo-detail-actions]` at 375/800/1200px. All six captures have three mounted
+islands, no horizontal overflow and no page errors. The generated CSS is
+byte-identical; islands grow from 145,644 to 147,206 bytes (gzip-9: 47,167 to
+47,764 bytes). A final frozen install and resolver check pass: all three pins
+are current. All browser/build/integration runs use the shared heavy guard.
