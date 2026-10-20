@@ -119,7 +119,7 @@ function javascriptTokens(source) {
       tokens.push({ type: "other", start, end: i, raw: source.slice(start, i) }); canStartRegex = false; continue;
     }
     i += 1;
-    while (i < source.length && !/\s|[()\[\]{},;'"`a-z_$\d]/i.test(source[i])) i += 1;
+    while (i < source.length && !/\s|[()\[\]{},;'"`/a-z_$\d]/i.test(source[i])) i += 1;
     tokens.push({ type: "other", start, end: i, raw: source.slice(start, i) }); canStartRegex = true;
   }
   return tokens;

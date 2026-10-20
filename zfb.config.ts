@@ -14,6 +14,8 @@ export default defineConfig({
   wind: {
     spec: 1,
     reset: "owned-v1",
+    // `backdrop-blur` is authored in styles/global.css (no wind utility exists for it).
+    authoredClasses: { "backdrop-blur": true },
     tokens: {
       spacingUnit: "0.25rem",
       colors: Object.fromEntries(THEME_COLOR_ROLES.map((role) => [role, `var(--theme-${role})`])),

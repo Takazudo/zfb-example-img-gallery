@@ -122,4 +122,13 @@ describe("stable generated assets", () => {
       { exportName: "ThemeToggle", identity: "ThemeToggle", sourcePath: "/abs/components/theme-toggle.tsx" },
     ]);
   });
+
+  it("tokenizes a regex literal that directly follows an operator", () => {
+    // zfb 4.x's zudo-react runtime ships `o=n&&/…\)?$/.exec(n)`; the `/` must start a regex, not join `&&`.
+    const source = 'let n=s,o=n&&/([^\\s()]+):(\\d+):(\\d+)\\)?$/.exec(n);'
+      + 'function r(e,t,n,s){}r(A,"Gallery","Gallery","components/gallery.tsx");';
+    expect(islandRegistrations(source)).toEqual([
+      { exportName: "Gallery", identity: "Gallery", sourcePath: "components/gallery.tsx" },
+    ]);
+  });
 });
