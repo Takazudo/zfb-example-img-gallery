@@ -13,7 +13,7 @@ argument-hint: "[target-version — omit to use latest]"
 
 # Update the pinned zfb toolchain
 
-This project keeps the three @takazudo/zfb* packages exact-pinned and in lockstep. The floor is the validated `4.5.4` (zudo-react runtime, zudo-wind styling; no Preact or Tailwind). A release can change the emitted Worker, the SSR router, the renderer, the class grammar, or the asset shape, so review upstream release notes before changing the lockfile.
+This project keeps the three @takazudo/zfb* packages exact-pinned and in lockstep. The floor is the validated `4.6.0` (zudo-react runtime, zudo-wind styling; no Preact or Tailwind). A release can change the emitted Worker, the SSR router, the renderer, the class grammar, or the asset shape, so review upstream release notes before changing the lockfile.
 
 ## Step 0 — Preconditions
 
