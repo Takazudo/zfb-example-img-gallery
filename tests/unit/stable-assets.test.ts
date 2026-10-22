@@ -123,6 +123,15 @@ describe("stable generated assets", () => {
     ]);
   });
 
+  it("reads Rolldown's backtick registrations and skips templates with substitutions", () => {
+    // zfb 4.7.0 bundles islands with Rolldown, which emits plain strings as template literals.
+    const source = "function r(e,t,n,s){}r(A,`ThemeToggle`,`ThemeToggle`,`components/theme-toggle.tsx`);"
+      + "r(B,`X`,`X`,`components/${name}.tsx`);";
+    expect(islandRegistrations(source)).toEqual([
+      { exportName: "ThemeToggle", identity: "ThemeToggle", sourcePath: "components/theme-toggle.tsx" },
+    ]);
+  });
+
   it("tokenizes a regex literal that directly follows an operator", () => {
     // zfb 4.x's zudo-react runtime ships `o=n&&/…\)?$/.exec(n)`; the `/` must start a regex, not join `&&`.
     const source = 'let n=s,o=n&&/([^\\s()]+):(\\d+):(\\d+)\\)?$/.exec(n);'

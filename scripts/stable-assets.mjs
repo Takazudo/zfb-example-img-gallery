@@ -90,7 +90,13 @@ function javascriptTokens(source) {
         if (!escaped && char === "\\") escaped = true; else escaped = false;
       }
       if (source[i - 1] !== "`") fail("unterminated JavaScript template literal in islands entry");
-      tokens.push({ type: "other", start, end: i, raw: source.slice(start, i) }); canStartRegex = false; continue;
+      const raw = source.slice(start, i);
+      // Rolldown (zfb 4.7.0's default bundler) emits plain strings as backtick
+      // literals, so a template without substitutions is read as a string.
+      if (raw.includes("${")) { tokens.push({ type: "other", start, end: i, raw }); canStartRegex = false; continue; }
+      let value; let decodeError;
+      try { value = decodeString(raw); } catch (error) { decodeError = error; }
+      tokens.push({ type: "string", start, end: i, raw, value, decodeError }); canStartRegex = false; continue;
     }
     if (source[i] === "/" && canStartRegex) {
       i += 1; let escaped = false; let inClass = false;
@@ -168,7 +174,7 @@ export function islandRegistrations(source) {
 function pathTextLooksAbsolute(value) { return value.startsWith("/") || /^[a-z]:[\\/]/i.test(value) || /^file:/i.test(value); }
 function assertPortableSourceIdentifiers(source) {
   for (const token of fourthCallArgumentStrings(source)) {
-    if (token.decodeError) { if (/^["'](?:file:|\/|[a-z]:)/i.test(token.raw)) throw token.decodeError; continue; }
+    if (token.decodeError) { if (/^["'`](?:file:|\/|[a-z]:)/i.test(token.raw)) throw token.decodeError; continue; }
     if (pathTextLooksAbsolute(token.value) && SOURCE_MODULE.test(token.value)) {
       fail(`absolute diagnostic source path from zfb: ${token.value}`);
     }

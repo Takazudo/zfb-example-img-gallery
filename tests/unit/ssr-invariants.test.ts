@@ -202,6 +202,18 @@ describe("SSR invariants", () => {
     }
   });
 
+  it("accepts a Rolldown-shaped client manifest that uses backtick literals", () => {
+    const source = entrySource().split("\n")
+      .map((line) => (/^(?:function )?register\(/.test(line) ? line.replace(/"/g, "`") : line))
+      .join("\n");
+    const data = buildFixture({ source });
+    try {
+      expect(scanBuildOutput(data.root)).toEqual([]);
+    } finally {
+      rmSync(data.root, { recursive: true });
+    }
+  });
+
   it("rejects a client manifest whose island identities drift from the components", () => {
     const data = buildFixture({ source: entrySource().replace(/"InfiniteGalleryControllerIsland",(?="components)/, '"InfiniteGallery",') });
     try {
