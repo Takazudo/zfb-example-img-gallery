@@ -287,7 +287,7 @@ export function scanIslandIdentities({ entrySource, html404, workerSource }) {
   if (!sameSet(registered, ISLAND_IDENTITIES)) {
     problems.push(`client manifest registers [${registered.join(", ")}], expected [${ISLAND_IDENTITIES.join(", ")}]`);
   }
-  const builds = [...new Set([...entrySource.matchAll(/\bbuild\s*:\s*"([^"]+)"/g)].map((match) => match[1]))];
+  const builds = [...new Set([...entrySource.matchAll(/\bbuild\s*:\s*(["'`])([^"'`]+)\1/g)].map((match) => match[2]))];
   if (builds.length !== 1) problems.push(`client manifest must carry exactly one build identity, found ${builds.length}`);
   const [build] = builds;
 
