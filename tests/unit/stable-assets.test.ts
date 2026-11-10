@@ -124,7 +124,7 @@ describe("stable generated assets", () => {
   });
 
   it("reads Rolldown's backtick registrations and skips templates with substitutions", () => {
-    // zfb 4.7.0 bundles islands with Rolldown, which emits plain strings as template literals.
+    // zfb bundles islands with Rolldown, which emits plain strings as template literals.
     const source = "function r(e,t,n,s){}r(A,`ThemeToggle`,`ThemeToggle`,`components/theme-toggle.tsx`);"
       + "r(B,`X`,`X`,`components/${name}.tsx`);";
     expect(islandRegistrations(source)).toEqual([
