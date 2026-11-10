@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.1",
-  "engines": { "node": ">=22.12.0" },
+  "engines": { "node": ">=24.0.0" },
   "scripts": {
     "predev": "rm -rf dist .zfb .zfb-build",
     "dev": "zfb dev",
@@ -21,9 +21,9 @@
     "dev:cf": "pnpm dev:cf:setup && concurrently --names 'wrangler,watch' --kill-others 'wrangler dev --port 8788 --persist-to .wrangler/state' \"chokidar 'pages/**/*.tsx' 'components/**/*.tsx' 'layouts/**/*.tsx' 'lib/**/*.ts' 'styles/**/*.css' --command 'pnpm build' --initial false --debounce 200\""
   },
   "dependencies": {
-    "@takazudo/zfb": "4.7.0",
-    "@takazudo/zfb-adapter-cloudflare": "4.7.0",
-    "@takazudo/zfb-runtime": "4.7.0",
+    "@takazudo/zfb": "6.0.1",
+    "@takazudo/zfb-adapter-cloudflare": "6.0.1",
+    "@takazudo/zfb-runtime": "6.0.1",
     "blurhash": "2.0.5",
     "fast-png": "8.0.0",
     "fflate": "0.8.3"

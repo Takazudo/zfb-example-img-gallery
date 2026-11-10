@@ -91,7 +91,7 @@ function javascriptTokens(source) {
       }
       if (source[i - 1] !== "`") fail("unterminated JavaScript template literal in islands entry");
       const raw = source.slice(start, i);
-      // Rolldown (zfb 4.7.0's default bundler) emits plain strings as backtick
+      // Rolldown (zfb's only bundler as of 6.0) emits plain strings as backtick
       // literals, so a template without substitutions is read as a string.
       if (raw.includes("${")) { tokens.push({ type: "other", start, end: i, raw }); canStartRegex = false; continue; }
       let value; let decodeError;

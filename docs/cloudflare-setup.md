@@ -1,7 +1,7 @@
 # Cloudflare setup: zero to deployed gallery
 
 This is the complete provisioning order for `Takazudo/zfb-example-img-gallery`. Run it from the
-repository root with Node.js `>=22.12.0`, pnpm `10.34.1`, and an authenticated GitHub CLI. The
+repository root with Node.js `>=24.0.0`, pnpm `10.34.1`, and an authenticated GitHub CLI. The
 deployment target is Cloudflare Workers with Static Assets; this is not a Pages deployment. The
 commands use the exact Wrangler version pinned in `package.json`, so run `pnpm install --frozen-lockfile`
 before using any command in this document.
