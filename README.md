@@ -26,7 +26,7 @@ Every mutation remains a plain `<form method="post">` fallback. Favorites and ow
 
 | Concern | How |
 | --- | --- |
-| Framework | zfb 6.0.1 with zudo-react (`@takazudo/zfb/zudo-react`) and zudo-wind (`owned-v1` reset, explicit tokens in `zfb.config.ts`, plus an authored parity block in `styles/global.css`). There is no Tailwind and no Preact. |
+| Framework | zfb 7.2.0 with zudo-react (`@takazudo/zfb/zudo-react`) and zudo-wind (`owned-v1` reset, explicit tokens in `zfb.config.ts`, plus an authored parity block in `styles/global.css`). There is no Tailwind and no Preact. |
 | Page rendering | Pages render through the named `renderToString` from `@takazudo/zfb/zudo-react/server` (see `lib/render.ts`) |
 | Stable assets | `pnpm build` runs `scripts/stable-assets.mjs`, which publishes the hashed CSS and islands entry under the stable aliases `/assets/app.css` and `/assets/islands.js` that SSR markup links to |
 | Rendering | **100% SSR** — every page exports `prerender = false`, except the single prerendered `pages/404.tsx` |
@@ -153,7 +153,7 @@ There is deliberately no `og_key` column. The card key is derived from the photo
 
 This is a standalone package. The zfb packages are ordinary npm registry dependencies with no `file:` links; the `zfb` CLI ships as prebuilt platform binaries through optional dependencies, so the package-install step is the whole setup.
 
-`@takazudo/zfb`, `@takazudo/zfb-runtime`, and `@takazudo/zfb-adapter-cloudflare` are exact-pinned and in lockstep at the validated `6.0.1`. `wrangler` is also exact-pinned, at `4.85.0`. The package manager is pnpm `10.34.1`, and the required Node version is `>=24.0.0` (zfb 5.0.0 raised `engines.node` from 22). There is no Preact, Tailwind, or `tailwindcss` dependency: zudo-react is the owned JSX runtime and zudo-wind compiles the utility classes inside the zfb binary. zfb 6 bundles only with the embedded Rolldown bundler; do not set `ZFB_BUNDLER`, `ZFB_ROLLDOWN_PROTOTYPE`, or `ZFB_ESBUILD_BIN`.
+`@takazudo/zfb`, `@takazudo/zfb-runtime`, and `@takazudo/zfb-adapter-cloudflare` are exact-pinned and in lockstep at the validated `7.2.0`. `wrangler` is also exact-pinned, at `4.85.0`. The package manager is pnpm `10.34.1`, and the required Node version is `>=24.0.0` (zfb 5.0.0 raised `engines.node` from 22). There is no Preact, Tailwind, or `tailwindcss` dependency: zudo-react is the owned JSX runtime and zudo-wind compiles the utility classes inside the zfb binary. zfb 7 bundles only with the embedded Rolldown bundler; do not set `ZFB_BUNDLER`, `ZFB_ROLLDOWN_PROTOTYPE`, or `ZFB_ESBUILD_BIN`.
 
 A major zfb bump (2.x to 3.x was one) is a migration, not a two-line edit: the renderer, the class grammar and the emitted asset shape all change. Use the `l-handle-zfb-update` skill (`.claude/skills/l-handle-zfb-update/SKILL.md`), which requires the parity and invariant checks listed there.
 
@@ -306,4 +306,4 @@ Responsive computed-style evidence is recorded separately with the repository's 
 
 ## zfb upgrade procedure
 
-Use the project skill [.claude/skills/l-handle-zfb-update/SKILL.md](.claude/skills/l-handle-zfb-update/SKILL.md). Patch and minor bumps within 3.x follow the skill's ordinary path; a new major is a migration and the skill says so. As a manual fallback, bump `@takazudo/zfb`, `@takazudo/zfb-adapter-cloudflare`, and `@takazudo/zfb-runtime` to the **same** exact-pinned version, then run `pnpm build && pnpm typecheck`. If the bump crosses an adapter release, manually re-test a binding-backed SSR route such as `/`, `/photos/<id>`, and `/upload` after deployment.
+Use the project skill [.claude/skills/l-handle-zfb-update/SKILL.md](.claude/skills/l-handle-zfb-update/SKILL.md). Patch and minor bumps within the current major follow the skill's ordinary path; a new major is a migration and the skill says so. As a manual fallback, bump `@takazudo/zfb`, `@takazudo/zfb-adapter-cloudflare`, and `@takazudo/zfb-runtime` to the **same** exact-pinned version, then run `pnpm build && pnpm typecheck`. If the bump crosses an adapter release, manually re-test a binding-backed SSR route such as `/`, `/photos/<id>`, and `/upload` after deployment.
